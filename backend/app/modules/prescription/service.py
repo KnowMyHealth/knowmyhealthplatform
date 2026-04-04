@@ -4,6 +4,7 @@ from loguru import logger
 from sqlalchemy import select, delete, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.storage import upload_webp_image
 from app.utils.image_optimization import optimize_image_to_webp
@@ -63,7 +64,11 @@ class PrescriptionService:
         prescription_id: UUID
     ) -> Prescription:
         try:
-            stmt = select(Prescription).where(Prescription.id == prescription_id)
+            stmt = (
+                select(Prescription)
+                .options(selectinload(Prescription.medicines))
+                .where(Prescription.id == prescription_id)
+            )
             result = await db.execute(stmt)
             prescription = result.scalar_one_or_none()
 
@@ -84,6 +89,7 @@ class PrescriptionService:
         try:
             stmt = (
                 select(Prescription)
+                .options(selectinload(Prescription.medicines))
                 .where(Prescription.user_id == user_id)
                 .order_by(Prescription.created_at.desc())
             )
