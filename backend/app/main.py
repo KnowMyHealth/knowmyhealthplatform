@@ -16,6 +16,7 @@ from slowapi.extension import _rate_limit_exceeded_handler
 # Import your routers
 from app.modules.user.router import router as user_router
 from app.modules.prescription.router import router as prescription_router
+from app.modules.chat.router import router as chat_router
 
 
 @asynccontextmanager
@@ -73,6 +74,7 @@ def create_application() -> FastAPI:
     # --- Routers ---
     application.include_router(user_router)
     application.include_router(prescription_router)
+    application.include_router(chat_router)
 
     return application
 
