@@ -16,9 +16,7 @@ import {
   CalendarDays, 
   Building2, 
   UserCircle2,
-  Loader2,
-  Download,
-  Image as ImageIcon
+  Loader2
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -79,6 +77,10 @@ export default function PrescriptionVaultPage() {
   
   const [history, setHistory] = useState<PrescriptionSchema[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  
+  // Specific Record Modal States
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFetchingRecord, setIsFetchingRecord] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<RecordType | null>(null);
 
   const fetchHistory = async () => {
@@ -159,24 +161,64 @@ export default function PrescriptionVaultPage() {
     }
   };
 
-  // Convert backend data structure to UI Markdown formatting dynamically
-  const mappedRecords: RecordType[] = history.map(p => {
-    const medMarkdown = p.medicines.map((m, i) => 
-      `${i + 1}. **${m.name}**\n   - *Dosage:* ${m.dosage || 'N/A'}\n   - *Timing:* ${m.frequency || 'N/A'}\n   - *Duration:* ${m.duration || 'N/A'}\n   - *Instructions:* ${m.instructions || 'N/A'}`
-    ).join('\n\n');
+  const handleViewRecord = async (id: string) => {
+    setIsModalOpen(true);
+    setIsFetchingRecord(true);
+    setSelectedRecord(null);
 
-    return {
-      id: p.id,
-      doctor: p.doctor_name || 'Unknown Doctor',
-      clinic: p.hospital_name || 'Unknown Clinic',
-      date: p.prescription_date 
-        ? new Date(p.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) 
-        : new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}),
-      status: 'Verified',
-      details: `### Diagnosis\n${p.diagnosis || 'Not specified'}\n\n### Medications\n${medMarkdown || 'No medications detected.'}`,
-      imageUrl: p.image_url
-    };
-  });
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${BACKEND_URL}/prescriptions/${id}`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        const p = data.data || data;
+        
+        const medMarkdown = p.medicines && p.medicines.length > 0 
+          ? p.medicines.map((m: any, i: number) => 
+              `#### ${i + 1}. ${m.name}\n- **Dosage:** ${m.dosage || 'N/A'}\n- **Timing:** ${m.frequency || 'N/A'}\n- **Duration:** ${m.duration || 'N/A'}\n- **Instructions:** ${m.instructions || 'N/A'}`
+            ).join('\n\n---\n\n')
+          : '*No medications detected.*';
+
+        setSelectedRecord({
+          id: p.id,
+          doctor: p.doctor_name || 'Unknown Doctor',
+          clinic: p.hospital_name || 'Unknown Clinic',
+          date: p.prescription_date 
+            ? new Date(p.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) 
+            : p.created_at ? new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) : 'Unknown Date',
+          status: 'Verified',
+          details: `### Diagnosis\n${p.diagnosis ? `> ${p.diagnosis}` : '*Not specified*'}\n\n### Medications\n${medMarkdown}`,
+          imageUrl: p.image_url
+        });
+      } else {
+        console.error('Failed to fetch prescription details:', data);
+      }
+    } catch (error) {
+      console.error('Error fetching prescription details:', error);
+    } finally {
+      setIsFetchingRecord(false);
+    }
+  };
+
+  // Light mapping for the basic history cards list
+  const mappedRecords: RecordType[] = history.map(p => ({
+    id: p.id,
+    doctor: p.doctor_name || 'Unknown Doctor',
+    clinic: p.hospital_name || 'Unknown Clinic',
+    date: p.prescription_date 
+      ? new Date(p.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) 
+      : new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}),
+    status: 'Verified',
+    details: '', // details fetched later dynamically
+    imageUrl: p.image_url
+  }));
 
   return (
     <ProtectedRoute requiredRole="Patient">
@@ -471,7 +513,7 @@ export default function PrescriptionVaultPage() {
                     variants={itemVariants}
                     key={record.id}
                     className="p-6 bg-white/80 backdrop-blur-xl border border-emerald-100/60 rounded-3xl shadow-sm hover:shadow-[0_15px_35px_-10px_rgba(5,150,105,0.15)] transition-all duration-300 group flex flex-col h-full hover:-translate-y-1 cursor-pointer"
-                    onClick={() => setSelectedRecord(record)}
+                    onClick={() => handleViewRecord(record.id)}
                   >
                     <div className="flex justify-between items-start mb-6">
                       <div className="flex items-center space-x-4">
@@ -499,15 +541,10 @@ export default function PrescriptionVaultPage() {
 
                     <div className="mt-auto pt-6 border-t border-emerald-50 flex space-x-3">
                       <button 
-                        className="flex-1 px-4 py-3 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-center"
+                        onClick={(e) => { e.stopPropagation(); handleViewRecord(record.id); }}
+                        className="w-full px-4 py-3 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-center"
                       >
                         View Details
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); /* Future feature */ }}
-                        className="w-12 h-12 flex items-center justify-center text-emerald-600 bg-white border border-emerald-100 hover:bg-emerald-50 rounded-xl transition-colors hover:shadow-sm shrink-0"
-                      >
-                        <Download size={18} />
                       </button>
                     </div>
                   </motion.div>
@@ -519,59 +556,94 @@ export default function PrescriptionVaultPage() {
 
         {/* Modal for Viewing Record Details */}
         <AnimatePresence>
-          {selectedRecord && (
+          {isModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setSelectedRecord(null)}
+                onClick={() => setIsModalOpen(false)}
                 className="absolute inset-0 bg-emerald-950/60 backdrop-blur-sm"
               />
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-5xl max-h-[90vh] bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden z-10"
+                className={`relative w-full ${selectedRecord?.imageUrl && !isFetchingRecord ? 'max-w-6xl' : 'max-w-3xl'} max-h-[90vh] bg-white rounded-[2rem] shadow-2xl flex flex-col overflow-hidden z-10 transition-all duration-300`}
               >
-                <div className="flex items-center justify-between p-6 sm:p-8 border-b border-emerald-100 bg-emerald-50/50">
+                <div className="flex items-center justify-between p-6 sm:p-8 border-b border-emerald-100 bg-emerald-50/50 shrink-0">
                   <div className="flex items-center space-x-5">
                     <div className="p-4 bg-white text-emerald-600 rounded-2xl shadow-sm border border-emerald-100">
                       <FileText size={28} />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-extrabold text-emerald-950">{selectedRecord.doctor}</h2>
-                      <p className="text-emerald-900/60 font-medium mt-1">{selectedRecord.clinic} • {selectedRecord.date}</p>
+                      {isFetchingRecord ? (
+                        <div className="space-y-2">
+                          <div className="h-6 w-48 bg-emerald-200/50 animate-pulse rounded" />
+                          <div className="h-4 w-32 bg-emerald-200/50 animate-pulse rounded" />
+                        </div>
+                      ) : selectedRecord ? (
+                        <>
+                          <h2 className="text-2xl font-extrabold text-emerald-950">{selectedRecord.doctor}</h2>
+                          <p className="text-emerald-900/60 font-medium mt-1">{selectedRecord.clinic} • {selectedRecord.date}</p>
+                        </>
+                      ) : (
+                        <h2 className="text-2xl font-extrabold text-emerald-950">Error</h2>
+                      )}
                     </div>
                   </div>
                   <button 
-                    onClick={() => setSelectedRecord(null)}
+                    onClick={() => setIsModalOpen(false)}
                     className="p-2 text-emerald-900/40 hover:text-emerald-900 hover:bg-emerald-100 rounded-full transition-colors"
                   >
                     <X size={28} />
                   </button>
                 </div>
                 
-                <div className="p-6 sm:p-8 overflow-y-auto hide-scrollbar bg-white">
-                  <div className="prose prose-emerald prose-headings:text-emerald-950 prose-a:text-emerald-600 max-w-none">
-                    <Markdown>{selectedRecord.details}</Markdown>
-                  </div>
+                <div className="p-6 sm:p-8 overflow-y-auto hide-scrollbar bg-white flex-1">
+                  {isFetchingRecord ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                      <Loader2 className="animate-spin text-emerald-500" size={48} />
+                      <p className="mt-4 text-emerald-900/60 font-medium">Fetching prescription details...</p>
+                    </div>
+                  ) : selectedRecord ? (
+                    <div className={`flex flex-col ${selectedRecord.imageUrl ? 'lg:flex-row' : ''} gap-8`}>
+                      
+                      {/* Embedded Image Area */}
+                      {selectedRecord.imageUrl && (
+                        <div className="w-full lg:w-1/2 flex flex-col space-y-4">
+                          <h3 className="text-xl font-bold text-emerald-950 px-2">Original Prescription</h3>
+                          <div className="relative w-full rounded-2xl border border-emerald-100 overflow-hidden bg-emerald-50/30 flex-1 min-h-[400px] lg:min-h-[500px]">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={selectedRecord.imageUrl} 
+                              alt="Original Prescription" 
+                              className="absolute inset-0 w-full h-full object-contain p-2" 
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Markdown Details Area */}
+                      <div className={`w-full ${selectedRecord.imageUrl ? 'lg:w-1/2' : ''} flex flex-col space-y-4`}>
+                        <h3 className="text-xl font-bold text-emerald-950 px-2">Extracted Details</h3>
+                        <div className="prose prose-emerald prose-headings:text-emerald-950 prose-a:text-emerald-600 max-w-none bg-white border border-emerald-100 p-6 rounded-2xl shadow-sm">
+                          <Markdown>{selectedRecord.details}</Markdown>
+                        </div>
+                      </div>
+
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-20 text-red-500">
+                      <AlertCircle size={48} className="mb-4 opacity-50" />
+                      <p className="font-medium">Could not load prescription data.</p>
+                    </div>
+                  )}
                 </div>
                 
-                <div className="p-6 border-t border-emerald-100 bg-emerald-50/50 flex flex-wrap justify-end gap-3">
-                  {selectedRecord.imageUrl && (
-                    <a 
-                      href={selectedRecord.imageUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="px-6 py-3 bg-white text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 border border-emerald-200 transition-colors flex items-center space-x-2"
-                    >
-                      <ImageIcon size={18} />
-                      <span>View Original Image</span>
-                    </a>
-                  )}
+                <div className="p-6 border-t border-emerald-100 bg-emerald-50/50 flex justify-end shrink-0">
                   <button 
-                    onClick={() => setSelectedRecord(null)}
+                    onClick={() => setIsModalOpen(false)}
                     className="px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-md hover:shadow-lg"
                   >
                     Close
