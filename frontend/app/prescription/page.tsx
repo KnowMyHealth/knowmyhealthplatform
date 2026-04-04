@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   UploadCloud, 
@@ -17,7 +17,8 @@ import {
   Building2, 
   UserCircle2,
   Loader2,
-  Download
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -25,12 +26,13 @@ import Markdown from 'react-markdown';
 
 // --- Types ---
 type RecordType = {
-  id: number;
+  id: string;
   doctor: string;
   clinic: string;
   date: string;
   status: string;
   details: string;
+  imageUrl?: string;
 };
 
 interface PrescriptionMedicineSchema {
@@ -54,22 +56,6 @@ interface PrescriptionSchema {
   medicines: PrescriptionMedicineSchema[];
 }
 
-// --- Mock Data ---
-const previousRecords: RecordType[] = [
-  { 
-    id: 1, doctor: 'Dr. Ramesh Kumar', clinic: 'Apollo Hospitals', date: 'Oct 12, 2023', status: 'Verified',
-    details: `### Patient Details\n**Name:** John Doe\n**Age:** 45\n\n### Diagnosis\nHypertension and Mild Hyperlipidemia\n\n### Medications\n1. **Telmisartan 40mg**\n   - *Dosage:* 1 tablet daily\n   - *Timing:* Morning, after breakfast\n   - *Duration:* 30 days\n   - *Purpose:* Blood pressure control\n2. **Atorvastatin 10mg**\n   - *Dosage:* 1 tablet daily\n   - *Timing:* Night, after dinner\n   - *Duration:* 30 days\n   - *Purpose:* Cholesterol management\n\n### Doctor's Notes\nPatient advised to reduce sodium intake. Regular brisk walking for 30 mins recommended.\n\n### Precautions\nMonitor blood pressure weekly. Report any muscle aches immediately.`
-  },
-  { 
-    id: 2, doctor: 'Dr. Sarah Jenkins', clinic: 'City Care Clinic', date: 'Sep 05, 2023', status: 'Archived',
-    details: `### Patient Details\n**Name:** John Doe\n**Age:** 45\n\n### Diagnosis\nAcute Bronchitis\n\n### Medications\n1. **Amoxicillin 500mg**\n   - *Dosage:* 1 capsule thrice daily\n   - *Timing:* After meals\n   - *Duration:* 5 days\n   - *Purpose:* Antibiotic for bacterial infection\n2. **Dextromethorphan Syrup**\n   - *Dosage:* 10ml twice daily\n   - *Timing:* Morning and Night\n   - *Duration:* 5 days\n   - *Purpose:* Cough suppression\n\n### Doctor's Notes\nDrink plenty of warm fluids. Rest for the next 3 days. Avoid cold beverages.\n\n### Precautions\nComplete the full course of antibiotics even if feeling better.`
-  },
-  { 
-    id: 3, doctor: 'Dr. Amit Patel', clinic: 'Patel Ortho Center', date: 'Jul 22, 2023', status: 'Verified',
-    details: `### Patient Details\n**Name:** John Doe\n**Age:** 45\n\n### Diagnosis\nLumbar Muscle Sprain\n\n### Medications\n1. **Ibuprofen 400mg**\n   - *Dosage:* 1 tablet twice daily\n   - *Timing:* After meals\n   - *Duration:* 5 days or as needed for pain\n   - *Purpose:* Pain relief and anti-inflammatory\n2. **Thiocolchicoside 4mg**\n   - *Dosage:* 1 capsule at night\n   - *Timing:* After dinner\n   - *Duration:* 5 days\n   - *Purpose:* Muscle relaxant\n\n### Doctor's Notes\nApply ice pack to the lower back for 15 mins, 3 times a day. Avoid lifting heavy objects.\n\n### Lifestyle & Dietary Recommendations\nGentle stretching exercises after 3 days of rest. Maintain proper posture while sitting.`
-  },
-];
-
 // --- Animation Variants ---
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -90,7 +76,34 @@ export default function PrescriptionVaultPage() {
   const [analysis, setAnalysis] = useState<PrescriptionSchema | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [history, setHistory] = useState<PrescriptionSchema[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [selectedRecord, setSelectedRecord] = useState<RecordType | null>(null);
+
+  const fetchHistory = async () => {
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${BACKEND_URL}/prescriptions/`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setHistory(data.data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch prescription history", e);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const selectedFile = acceptedFiles[0];
@@ -136,6 +149,8 @@ export default function PrescriptionVaultPage() {
       }
 
       setAnalysis(responseData.data);
+      // Prepend the new prescription to the history list immediately 
+      setHistory(prev => [responseData.data, ...prev]);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred while analyzing the prescription.');
@@ -143,6 +158,25 @@ export default function PrescriptionVaultPage() {
       setIsAnalyzing(false);
     }
   };
+
+  // Convert backend data structure to UI Markdown formatting dynamically
+  const mappedRecords: RecordType[] = history.map(p => {
+    const medMarkdown = p.medicines.map((m, i) => 
+      `${i + 1}. **${m.name}**\n   - *Dosage:* ${m.dosage || 'N/A'}\n   - *Timing:* ${m.frequency || 'N/A'}\n   - *Duration:* ${m.duration || 'N/A'}\n   - *Instructions:* ${m.instructions || 'N/A'}`
+    ).join('\n\n');
+
+    return {
+      id: p.id,
+      doctor: p.doctor_name || 'Unknown Doctor',
+      clinic: p.hospital_name || 'Unknown Clinic',
+      date: p.prescription_date 
+        ? new Date(p.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) 
+        : new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}),
+      status: 'Verified',
+      details: `### Diagnosis\n${p.diagnosis || 'Not specified'}\n\n### Medications\n${medMarkdown || 'No medications detected.'}`,
+      imageUrl: p.image_url
+    };
+  });
 
   return (
     <ProtectedRoute requiredRole="Patient">
@@ -159,7 +193,6 @@ export default function PrescriptionVaultPage() {
         <div className="space-y-16">
           
           {/* Top Section: Upload & Analysis */}
-          {/* Removed max-w constraints to match the grid width below */}
           <div className="w-full space-y-8">
             
             {/* Upload Area */}
@@ -240,7 +273,6 @@ export default function PrescriptionVaultPage() {
                     </div>
                   </div>
                   
-                  {/* Fixed Action Button */}
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleAnalyze(); }}
                     className="w-full sm:w-auto px-10 py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-all hover:-translate-y-1 shadow-[0_10px_20px_-10px_rgba(16,185,129,0.6)] flex items-center justify-center space-x-2 shrink-0 group"
@@ -261,7 +293,6 @@ export default function PrescriptionVaultPage() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   className="p-12 bg-white/80 backdrop-blur-2xl border border-emerald-100 rounded-[2rem] flex flex-col items-center justify-center space-y-8 shadow-2xl min-h-[400px] relative overflow-hidden w-full"
                 >
-                  {/* Animated Background */}
                   <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50 via-white to-teal-50 opacity-50 animate-pulse" />
                   
                   <div className="relative z-10 flex flex-col items-center">
@@ -278,7 +309,6 @@ export default function PrescriptionVaultPage() {
                       Our AI is carefully analyzing your document to securely identify medicines, dosages, and doctor&apos;s instructions.
                     </p>
                     
-                    {/* Infinite Progress Bar */}
                     <div className="w-full max-w-md h-2 bg-emerald-100 rounded-full overflow-hidden relative">
                       <motion.div 
                         className="absolute top-0 bottom-0 bg-emerald-500 rounded-full w-1/2"
@@ -312,10 +342,7 @@ export default function PrescriptionVaultPage() {
 
                   {/* Wide Data Container */}
                   <div className="p-6 md:p-12">
-                    
-                    {/* Structured Extraction Rendering - 4 Columns on lg screens */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                      
                       <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center hover:bg-emerald-50 transition-colors shadow-sm">
                         <div className="flex items-center gap-3 mb-3">
                           <div className="p-2.5 bg-white rounded-xl shadow-sm text-emerald-600"><UserCircle2 size={20}/></div>
@@ -349,7 +376,6 @@ export default function PrescriptionVaultPage() {
                           {analysis.prescription_date ? new Date(analysis.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric'}) : 'Not detected'}
                         </p>
                       </div>
-
                     </div>
 
                     <h4 className="font-bold text-emerald-950 mb-6 text-2xl flex items-center gap-3">
@@ -412,69 +438,82 @@ export default function PrescriptionVaultPage() {
             </AnimatePresence>
           </div>
 
-          {/* Bottom: Previous Records */}
+          {/* Bottom: Previous Records via API */}
           <div className="pt-12 border-t border-emerald-100/50 w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-4">
               <h3 className="text-3xl font-extrabold text-emerald-950 tracking-tight">Prescription History</h3>
               <span className="px-4 py-1.5 bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 rounded-full text-sm w-fit shadow-sm">
-                {previousRecords.length} Records Found
+                {mappedRecords.length} Records Found
               </span>
             </div>
             
-            <motion.div 
-              variants={containerVariants}
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true, margin: "-100px" }}
-              className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
-              {previousRecords.map((record) => (
-                <motion.div
-                  variants={itemVariants}
-                  key={record.id}
-                  className="p-6 bg-white/80 backdrop-blur-xl border border-emerald-100/60 rounded-3xl shadow-sm hover:shadow-[0_15px_35px_-10px_rgba(5,150,105,0.15)] transition-all duration-300 group flex flex-col h-full hover:-translate-y-1 cursor-pointer"
-                  onClick={() => setSelectedRecord(record)}
-                >
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300 shadow-sm">
-                        <FileText size={24} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-emerald-950 line-clamp-1 text-lg group-hover:text-emerald-700 transition-colors">{record.doctor}</h4>
-                        <p className="text-sm text-emerald-900/60 line-clamp-1">{record.clinic}</p>
+            {isLoadingHistory ? (
+              <div className="flex justify-center items-center py-20">
+                <Loader2 className="animate-spin text-emerald-500" size={48} />
+              </div>
+            ) : mappedRecords.length === 0 ? (
+               <div className="text-center py-20">
+                 <div className="w-20 h-20 bg-white shadow-sm border border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-200">
+                    <FileText size={40} />
+                 </div>
+                 <p className="text-emerald-900/60 font-medium">Your prescription history is empty.</p>
+               </div>
+            ) : (
+              <motion.div 
+                variants={containerVariants}
+                initial="hidden"
+                whileInView="show"
+                viewport={{ once: true, margin: "-100px" }}
+                className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
+              >
+                {mappedRecords.map((record) => (
+                  <motion.div
+                    variants={itemVariants}
+                    key={record.id}
+                    className="p-6 bg-white/80 backdrop-blur-xl border border-emerald-100/60 rounded-3xl shadow-sm hover:shadow-[0_15px_35px_-10px_rgba(5,150,105,0.15)] transition-all duration-300 group flex flex-col h-full hover:-translate-y-1 cursor-pointer"
+                    onClick={() => setSelectedRecord(record)}
+                  >
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300 shadow-sm">
+                          <FileText size={24} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-emerald-950 line-clamp-1 text-lg group-hover:text-emerald-700 transition-colors">{record.doctor}</h4>
+                          <p className="text-sm text-emerald-900/60 line-clamp-1">{record.clinic}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-3 mb-8">
-                    <span className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center space-x-1.5 ${
-                      record.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
-                    }`}>
-                      {record.status === 'Verified' ? <CheckCircle size={14} /> : <Clock size={14} />}
-                      <span>{record.status}</span>
-                    </span>
-                    <span className="text-sm text-emerald-900/50 font-medium flex items-center gap-1.5">
-                      <CalendarDays size={14}/> {record.date}
-                    </span>
-                  </div>
+                    
+                    <div className="flex items-center space-x-3 mb-8">
+                      <span className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center space-x-1.5 ${
+                        record.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                      }`}>
+                        {record.status === 'Verified' ? <CheckCircle size={14} /> : <Clock size={14} />}
+                        <span>{record.status}</span>
+                      </span>
+                      <span className="text-sm text-emerald-900/50 font-medium flex items-center gap-1.5">
+                        <CalendarDays size={14}/> {record.date}
+                      </span>
+                    </div>
 
-                  <div className="mt-auto pt-6 border-t border-emerald-50 flex space-x-3">
-                    <button 
-                      className="flex-1 px-4 py-3 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-center"
-                    >
-                      View Details
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); /* Handle download logic */ }}
-                      className="w-12 h-12 flex items-center justify-center text-emerald-600 bg-white border border-emerald-100 hover:bg-emerald-50 rounded-xl transition-colors hover:shadow-sm shrink-0"
-                    >
-                      <Download size={18} />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
+                    <div className="mt-auto pt-6 border-t border-emerald-50 flex space-x-3">
+                      <button 
+                        className="flex-1 px-4 py-3 text-sm font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors text-center"
+                      >
+                        View Details
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); /* Future feature */ }}
+                        className="w-12 h-12 flex items-center justify-center text-emerald-600 bg-white border border-emerald-100 hover:bg-emerald-50 rounded-xl transition-colors hover:shadow-sm shrink-0"
+                      >
+                        <Download size={18} />
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
           </div>
         </div>
 
@@ -515,15 +554,22 @@ export default function PrescriptionVaultPage() {
                 
                 <div className="p-6 sm:p-8 overflow-y-auto hide-scrollbar bg-white">
                   <div className="prose prose-emerald prose-headings:text-emerald-950 prose-a:text-emerald-600 max-w-none">
-                    {/* Utilizing react-markdown to beautifully render the text */}
                     <Markdown>{selectedRecord.details}</Markdown>
                   </div>
                 </div>
                 
-                <div className="p-6 border-t border-emerald-100 bg-emerald-50/50 flex justify-end gap-3">
-                  <button className="px-6 py-3 bg-white text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 border border-emerald-200 transition-colors">
-                    Download PDF
-                  </button>
+                <div className="p-6 border-t border-emerald-100 bg-emerald-50/50 flex flex-wrap justify-end gap-3">
+                  {selectedRecord.imageUrl && (
+                    <a 
+                      href={selectedRecord.imageUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="px-6 py-3 bg-white text-emerald-700 font-bold rounded-xl hover:bg-emerald-100 border border-emerald-200 transition-colors flex items-center space-x-2"
+                    >
+                      <ImageIcon size={18} />
+                      <span>View Original Image</span>
+                    </a>
+                  )}
                   <button 
                     onClick={() => setSelectedRecord(null)}
                     className="px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-md hover:shadow-lg"

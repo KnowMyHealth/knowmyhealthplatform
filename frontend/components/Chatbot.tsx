@@ -2,8 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, X, Send, Bot, User, Loader2 } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import { MessageSquare, X, Send, Bot, Loader2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
 export default function Chatbot() {
@@ -32,22 +31,29 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-      const chat = ai.chats.create({
-        model: 'gemini-3.1-flash-lite-preview',
-        config: {
-          systemInstruction: 'You are a helpful, empathetic, and professional healthcare assistant for "Know My Health". You provide general health information, guide users through the platform (Diagnostics, Checkups, Prescription Vault, Complaints), and suggest they consult a real doctor for serious issues. Keep responses concise and formatted nicely with markdown.',
-        }
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('supabase_access_token');
+      
+      // Concatenate the last few messages to give the stateless backend some context
+      const contextText = messages.slice(-5).map(m => `${m.role === 'model' ? 'AI' : 'User'}: ${m.text}`).join('\n');
+      const promptWithContext = `${contextText}\nUser: ${userMessage}\nAI:`;
+
+      const response = await fetch(`${BACKEND_URL}/chat/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ prompt: promptWithContext })
       });
 
-      // Send previous history to maintain context
-      for (let i = 1; i < messages.length; i++) {
-        await chat.sendMessage({ message: messages[i].text });
-      }
+      const data = await response.json();
 
-      const response = await chat.sendMessage({ message: userMessage });
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to process chat request');
+      }
       
-      setMessages(prev => [...prev, { role: 'model', text: response.text || 'I could not process that request.' }]);
+      setMessages(prev => [...prev, { role: 'model', text: data.data.response }]);
     } catch (error) {
       console.error('Chat error:', error);
       setMessages(prev => [...prev, { role: 'model', text: 'Sorry, I encountered an error. Please try again later.' }]);
