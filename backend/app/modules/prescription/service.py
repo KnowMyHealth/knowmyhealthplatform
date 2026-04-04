@@ -171,7 +171,7 @@ class PrescriptionService:
     ):
         try:
             # 1. Optimize image
-            optimized_image = optimize_image_to_webp(file_bytes)
+            optimized_image = await optimize_image_to_webp(file_bytes)
 
             # 2. Upload image
             _, public_url = await upload_webp_image(optimized_image)
@@ -191,6 +191,8 @@ class PrescriptionService:
                 user_id=user_id,
                 data=extracted_dict
             )
+
+            await db.refresh(prescription, attribute_names=["medicines"])
 
             return prescription
 
