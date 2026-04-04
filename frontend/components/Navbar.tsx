@@ -1,3 +1,4 @@
+// ... (keep existing imports)
 'use client';
 
 import Link from 'next/link';
@@ -12,12 +13,13 @@ const navLinks = [
   { name: 'Home', href: '/' },
   { name: 'Diagnostics', href: '/diagnostics' },
   { name: 'Checkups', href: '/checkups' },
-  { name: 'Prescription Vault', href: '/prescription' },
+  { name: 'Prescription', href: '/prescription' }, // <-- Updated name here
   { name: 'Complaints', href: '/complaints' },
   { name: 'Insights & Blog', href: '/insights' },
 ];
 
 export default function Navbar() {
+// ... (rest of the file remains completely unchanged)
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
