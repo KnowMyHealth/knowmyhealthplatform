@@ -6,6 +6,7 @@ import { supabase } from './supabase';
 interface AuthContextType {
   isLoggedIn: boolean;
   userRole: string | null;
+  isLoading: boolean;
   login: (role: string) => void;
   logout: () => void;
   isAuthModalOpen: boolean;
@@ -18,24 +19,48 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
-  useEffect(() => {
-    // 1. Check for active session on load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsLoggedIn(true);
-        setUserRole(session.user.user_metadata?.role || 'Patient');
-        localStorage.setItem('supabase_access_token', session.access_token);
+  const fetchUserProfile = async (token: string) => {
+    try {
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${BACKEND_URL}/api/v1/users/me`, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data?.role;
       }
-    });
+    } catch (err) {
+      console.error('Failed to fetch user profile', err);
+    }
+    return null;
+  };
 
-    // 2. Listen for auth state changes (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setIsLoggedIn(true);
-        setUserRole(session.user.user_metadata?.role || 'Patient');
         localStorage.setItem('supabase_access_token', session.access_token);
+        const role = await fetchUserProfile(session.access_token);
+        setUserRole(role || 'PATIENT');
+        setIsLoggedIn(true);
+      }
+      setIsLoading(false);
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        localStorage.setItem('supabase_access_token', session.access_token);
+        const role = await fetchUserProfile(session.access_token);
+        setUserRole(role || 'PATIENT');
+        setIsLoggedIn(true);
       } else {
         setIsLoggedIn(false);
         setUserRole(null);
@@ -62,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const closeAuthModal = () => setIsAuthModalOpen(false);
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, userRole, login, logout, isAuthModalOpen, openAuthModal, closeAuthModal }}>
+    <AuthContext.Provider value={{ isLoggedIn, userRole, isLoading, login, logout, isAuthModalOpen, openAuthModal, closeAuthModal }}>
       {children}
     </AuthContext.Provider>
   );

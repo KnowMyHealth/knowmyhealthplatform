@@ -8,7 +8,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function CheckupsPage() {
   return (
-    <ProtectedRoute requiredRole="Patient">
+    <ProtectedRoute requiredRole="PATIENT">
       <div className="w-full max-w-7xl mx-auto px-6 py-24 min-h-[80vh] flex flex-col items-center justify-center relative">
         {/* Background decorative elements */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none" />
