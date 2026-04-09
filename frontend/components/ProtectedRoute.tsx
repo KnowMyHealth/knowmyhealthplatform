@@ -3,18 +3,23 @@
 import { useAuth } from '@/lib/AuthContext';
 import { ReactNode, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Lock } from 'lucide-react';
+import { Lock, Loader2 } from 'lucide-react';
 
 export default function ProtectedRoute({ children, requiredRole }: { children: ReactNode, requiredRole?: string }) {
-  const { isLoggedIn, userRole, openAuthModal } = useAuth();
+  const { isLoggedIn, userRole, openAuthModal, isLoading } = useAuth();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
-  if (!mounted) return null;
+  if (!mounted || isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="animate-spin text-emerald-600" size={48} />
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (

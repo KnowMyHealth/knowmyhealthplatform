@@ -41,15 +41,15 @@ export default function Home() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      if (userRole === 'Admin') {
+      if (userRole === 'ADMIN') {
         router.push('/admin');
-      } else if (userRole === 'Partner') {
+      } else if (userRole === 'PARTNER') {
         router.push('/partner');
       }
     }
   }, [isLoggedIn, userRole, router]);
 
-  if (isLoggedIn && (userRole === 'Admin' || userRole === 'Partner')) {
+  if (isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER')) {
     return null; // Don't render the landing page while redirecting
   }
 

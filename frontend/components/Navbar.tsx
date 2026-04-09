@@ -1,4 +1,3 @@
-// ... (keep existing imports)
 'use client';
 
 import Link from 'next/link';
@@ -13,13 +12,12 @@ const navLinks = [
   { name: 'Home', href: '/' },
   { name: 'Diagnostics', href: '/diagnostics' },
   { name: 'Checkups', href: '/checkups' },
-  { name: 'Prescription', href: '/prescription' }, // <-- Updated name here
+  { name: 'Prescription', href: '/prescription' },
   { name: 'Complaints', href: '/complaints' },
   { name: 'Insights & Blog', href: '/insights' },
 ];
 
 export default function Navbar() {
-// ... (rest of the file remains completely unchanged)
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -49,7 +47,7 @@ export default function Navbar() {
 
             {/* Desktop Nav */}
             <nav className="hidden lg:flex items-center space-x-1">
-              {(!isLoggedIn || userRole === 'Patient') && navLinks.map((link) => {
+              {(!isLoggedIn || userRole === 'PATIENT') && navLinks.map((link) => {
                 const isActive = pathname === link.href;
                 return (
                   <Link
@@ -75,17 +73,17 @@ export default function Navbar() {
               <div className="hidden sm:block relative">
                 {isLoggedIn ? (
                   <div className="flex items-center space-x-3">
-                    {userRole === 'Admin' && (
+                    {userRole === 'ADMIN' && (
                       <Link href="/admin" className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md hover:shadow-lg inline-block">
                         Admin Portal
                       </Link>
                     )}
-                    {userRole === 'Partner' && (
+                    {userRole === 'PARTNER' && (
                       <Link href="/partner" className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md hover:shadow-lg inline-block">
                         Partner Portal
                       </Link>
                     )}
-                    {userRole === 'Patient' && (
+                    {userRole === 'PATIENT' && (
                       <Link href="/consultations" className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md hover:shadow-lg inline-block">
                         Consultations
                       </Link>
@@ -152,7 +150,7 @@ export default function Navbar() {
                 className="lg:hidden mt-2 p-4 bg-white/90 backdrop-blur-xl border border-white/50 rounded-3xl shadow-xl"
               >
                 <nav className="flex flex-col space-y-2">
-                  {(!isLoggedIn || userRole === 'Patient') && navLinks.map((link) => (
+                  {(!isLoggedIn || userRole === 'PATIENT') && navLinks.map((link) => (
                     <Link
                       key={link.name}
                       href={link.href}
@@ -168,17 +166,17 @@ export default function Navbar() {
                   <div className="pt-4 mt-2 border-t border-emerald-100/50">
                     {isLoggedIn ? (
                       <div className="flex flex-col space-y-2">
-                        {userRole === 'Admin' && (
+                        {userRole === 'ADMIN' && (
                           <Link href="/admin" onClick={() => setIsOpen(false)} className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center">
                             Admin Portal
                           </Link>
                         )}
-                        {userRole === 'Partner' && (
+                        {userRole === 'PARTNER' && (
                           <Link href="/partner" onClick={() => setIsOpen(false)} className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center">
                             Partner Portal
                           </Link>
                         )}
-                        {userRole === 'Patient' && (
+                        {userRole === 'PATIENT' && (
                           <Link href="/consultations" onClick={() => setIsOpen(false)} className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center">
                             Consultations
                           </Link>

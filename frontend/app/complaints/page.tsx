@@ -29,7 +29,7 @@ export default function ComplaintsPage() {
   });
 
   return (
-    <ProtectedRoute requiredRole="Patient">
+    <ProtectedRoute requiredRole="PATIENT">
       <div className="w-full max-w-7xl mx-auto px-6 py-12">
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-emerald-950 mb-4">Symptom Checker</h1>

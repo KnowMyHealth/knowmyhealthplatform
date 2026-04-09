@@ -87,9 +87,10 @@ export default function PrescriptionVaultPage() {
     try {
       const token = localStorage.getItem('supabase_access_token');
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const res = await fetch(`${BACKEND_URL}/prescriptions/`, {
+      const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/`, {
         headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'ngrok-skip-browser-warning': 'true'
         }
       });
       const data = await res.json();
@@ -136,10 +137,11 @@ export default function PrescriptionVaultPage() {
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
       const token = localStorage.getItem('supabase_access_token'); 
 
-      const response = await fetch(`${BACKEND_URL}/prescriptions/ocr`, {
+      const response = await fetch(`${BACKEND_URL}/api/v1/prescriptions/ocr`, {
         method: 'POST',
         headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'ngrok-skip-browser-warning': 'true'
         },
         body: formData
       });
@@ -169,9 +171,10 @@ export default function PrescriptionVaultPage() {
     try {
       const token = localStorage.getItem('supabase_access_token');
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const res = await fetch(`${BACKEND_URL}/prescriptions/${id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/${id}`, {
         headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'ngrok-skip-browser-warning': 'true'
         }
       });
       
@@ -221,7 +224,7 @@ export default function PrescriptionVaultPage() {
   }));
 
   return (
-    <ProtectedRoute requiredRole="Patient">
+    <ProtectedRoute requiredRole="PATIENT">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         
         {/* Page Header */}

@@ -38,7 +38,7 @@ export default function Chatbot() {
       const contextText = messages.slice(-5).map(m => `${m.role === 'model' ? 'AI' : 'User'}: ${m.text}`).join('\n');
       const promptWithContext = `${contextText}\nUser: ${userMessage}\nAI:`;
 
-      const response = await fetch(`${BACKEND_URL}/chat/`, {
+      const response = await fetch(`${BACKEND_URL}/api/v1/chat/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

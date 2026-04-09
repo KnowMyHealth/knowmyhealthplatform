@@ -131,7 +131,7 @@ export default function DiagnosticsPage() {
   };
 
   return (
-    <ProtectedRoute requiredRole="Patient">
+    <ProtectedRoute requiredRole="PATIENT">
       <div className="w-full min-h-screen bg-emerald-50/30 pb-24">
         {/* Hero Banner */}
         <div className="bg-emerald-950 pt-32 pb-20 px-6 relative overflow-hidden">

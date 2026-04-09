@@ -55,7 +55,7 @@ export default function ConsultationsPage() {
   };
 
   return (
-    <ProtectedRoute requiredRole="Patient">
+    <ProtectedRoute requiredRole="PATIENT">
       <div className="min-h-screen bg-gray-50/50 pb-24">
         {/* Hero Search Section */}
         <div className="bg-emerald-900 pt-16 pb-32 px-6 relative overflow-hidden">
