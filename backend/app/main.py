@@ -17,7 +17,7 @@ from slowapi.extension import _rate_limit_exceeded_handler
 from app.modules.user.router import router as user_router
 from app.modules.prescription.router import router as prescription_router
 from app.modules.chat.router import router as chat_router
-
+from app.modules.doctor.router import router as doctor_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -72,9 +72,10 @@ def create_application() -> FastAPI:
     add_exception_handlers(application)
 
     # --- Routers ---
-    application.include_router(user_router)
-    application.include_router(prescription_router)
-    application.include_router(chat_router)
+    application.include_router(user_router, prefix=settings.API_VERSION)
+    application.include_router(prescription_router, prefix=settings.API_VERSION)
+    application.include_router(chat_router, prefix=settings.API_VERSION)
+    application.include_router(doctor_router, prefix=settings.API_VERSION)
 
     return application
 

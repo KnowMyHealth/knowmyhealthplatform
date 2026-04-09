@@ -5,7 +5,8 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 class Role(str, enum.Enum):
-    USER = "USER"
+    PATIENT = "PATIENT"
+    DOCTOR = "DOCTOR"
     ADMIN = "ADMIN"
     PARTNER = "PARTNER"
 
@@ -16,7 +17,7 @@ class Role(str, enum.Enum):
 class UserSchema(BaseModel):
     id: UUID
     email: EmailStr
-    role: Role = Field(default=Role.USER)
+    role: Role = Field(default=Role.PATIENT)
     is_active: bool = True
     created_at: datetime
     updated_at: datetime

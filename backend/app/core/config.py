@@ -13,7 +13,8 @@ class Settings(BaseSettings):
     DATABASE_URL: SecretStr
     SUPABASE_JWKS_URL: str
     PUBLIC_SUPABASE_URL: str
-    SUPABASE_SECRET_KEY: str
+    SUPABASE_PUBLISHABLE_KEY: SecretStr
+    SUPABASE_SECRET_KEY: SecretStr
 
     GOOGLE_API_KEY: SecretStr
 

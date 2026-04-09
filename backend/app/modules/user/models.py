@@ -3,9 +3,13 @@ from datetime import datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy import String, Boolean, ForeignKey, Integer, Table, Column, Enum, func, Numeric
+from typing import TYPE_CHECKING
 
 from app.db.base import Base
 from .schemas import Role
+
+if TYPE_CHECKING:
+    from app.modules.doctor.models import Doctor 
 
 auth_users_table = Table(
     "users",
@@ -32,7 +36,7 @@ class User(Base):
     role: Mapped[Role] = mapped_column(
         Enum(Role), 
         nullable=False, 
-        default=Role.USER
+        default=Role.PATIENT
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, 
@@ -49,6 +53,12 @@ class User(Base):
         nullable=False,
         server_default=func.now(), 
         onupdate=func.now() 
+    )
+    doctor_profile: Mapped["Doctor"] = relationship(
+        "Doctor", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan"
     )
     def __repr__(self):
         return (

@@ -1,6 +1,6 @@
 from uuid import UUID
 from loguru import logger
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,12 @@ from app.modules.user.exceptions import (
 class UsersService:
     def __init__(self):
         pass
+
+    async def get_user_by_id(self, db: AsyncSession, user_id: UUID) -> User | None:
+        """Fetches a user from the database by their UUID."""
+        stmt = select(User).where(User.id == user_id)
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
     
     async def update_user_role(
         self,

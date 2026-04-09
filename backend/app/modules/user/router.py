@@ -1,12 +1,15 @@
 from uuid import UUID
 from loguru import logger
 from fastapi import APIRouter, Depends, status, Body, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+from app.db.deps import get_db
+from app.modules.user.exceptions import UserNotFoundError
 from app.utils.api_response import ApiResponse
 from app.utils.api_error import ForbiddenError
 from app.core.security import get_current_user
@@ -55,3 +58,22 @@ async def update_user_role(
         data=validated_user,
         message="User role updated successfully."
     )
+
+
+@router.get("/me")
+async def get_my_profile(
+    auth_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: UsersService = Depends(get_users_service)
+):
+    logger.debug("--> Called GET /users/me route")
+    # Manually extract and convert
+    user_id = UUID(str(auth_user.id))
+    
+    # Manually fetch from DB
+    user = await service.get_user_by_id(db, user_id)
+    
+    if not user:
+        raise UserNotFoundError()
+
+    return ApiResponse.success(data=UserSchema.model_validate(user))

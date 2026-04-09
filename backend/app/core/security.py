@@ -5,11 +5,13 @@ from jwt import PyJWKClient
 from loguru import logger
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionFactory
 from app.core.config import settings
 from app.db.all_models import *
+from app.modules.user.schemas import Role
 
 class AuthenticatedUser:
     def __init__(self, id: str, email: str = None):
@@ -79,49 +81,48 @@ async def get_user_id_for_rate_limiting(request: Request) -> str:
         logger.debug(f"Rate limit fallback to IP due to: {e}")
         return f"ip:{ip}"
 
-async def require_eligible_premium_user(
-    current_user = Depends(get_current_user)
-) -> User:
-    try:
-        user_uuid = uuid.UUID(str(current_user.id))
-        
-        # Open connection, fetch user, and close connection IMMEDIATELY
-        async with AsyncSessionFactory() as db:
-            user = await db.get(User, user_uuid)
 
-    except ValueError:
-        logger.warning(f"Token contained invalid UUID: {current_user.id}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid User ID format in credentials"
-        )
-    except Exception as e:
-        logger.error(f"Database error fetching user: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal Server Error"
-        )
-        
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="User profile not found"
-        )
-    if user.is_active == False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive or banned"
-        )
-    if user.tier == "free":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This requires a paid subscription"
-        )
-    if user.credits <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Insufficient credits"
-        )
-        
-    return user
+class RequireRole:
+    """
+    Dependency to check if the current authenticated user has one of the required roles.
+    Usage: current_user: User = Depends(RequireRole([Role.ADMIN, Role.DOCTOR]))
+    """
+    def __init__(self, allowed_roles: List[Role]):
+        self.allowed_roles = allowed_roles
 
+    async def __call__(self, current_user: AuthenticatedUser = Depends(get_current_user)) -> User:
+        try:
+            user_uuid = uuid.UUID(str(current_user.id))
+            
+            # Fetch user from DB to get the most up-to-date role
+            async with AsyncSessionFactory() as db:
+                user = await db.get(User, user_uuid)
+                
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, 
+                    detail="User profile not found"
+                )
+            
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail="Account is inactive or banned"
+                )
+
+            if user.role not in self.allowed_roles:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail=f"Access denied. Required roles: {[r.value for r in self.allowed_roles]}"
+                )
+                
+            return user
+            
+        except HTTPException:
+            raise # Re-raise HTTP exceptions so FastAPI handles them correctly
+        except Exception as e:
+            logger.error(f"Database error verifying user role: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Internal Server Error"
+            )

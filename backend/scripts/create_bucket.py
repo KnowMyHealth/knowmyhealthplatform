@@ -12,7 +12,7 @@ async def create_buckets():
     buckets = await client.storage.list_buckets()
     existing_buckets = [bucket.name for bucket in buckets]
 
-    required_buckets = ["image_assets", "video_assets", "deploy_artifacts"]
+    required_buckets = ["image_assets", "video_assets", "pdf_assets"]
 
     for bucket_name in required_buckets:
         if bucket_name not in existing_buckets:
