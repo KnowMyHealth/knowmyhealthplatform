@@ -742,4 +742,4 @@ export default function ComplaintsPage() {
       </div>
     </ProtectedRoute>
   );
-}
+}   
