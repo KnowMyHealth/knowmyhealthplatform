@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   UploadCloud, 
@@ -16,7 +17,9 @@ import {
   CalendarDays, 
   Building2, 
   UserCircle2,
-  Loader2
+  Loader2,
+  ShoppingCart,
+  Microscope
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -42,6 +45,15 @@ interface PrescriptionMedicineSchema {
   instructions?: string;
 }
 
+interface RecommendedTest {
+  id: string;
+  lab_test: {
+    id: string;
+    name: string;
+    organization: string;
+  };
+}
+
 interface PrescriptionSchema {
   id: string;
   user_id: string;
@@ -52,6 +64,7 @@ interface PrescriptionSchema {
   prescription_date?: string;
   created_at: string;
   medicines: PrescriptionMedicineSchema[];
+  recommendations?: RecommendedTest[];
 }
 
 // --- Animation Variants ---
@@ -64,11 +77,13 @@ const containerVariants = {
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 15 },
+  hidden: { opacity: 0, y: 10 },
   show: { opacity: 1, y: 0 }
 };
 
 export default function PrescriptionVaultPage() {
+  const router = useRouter();
+  
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<PrescriptionSchema | null>(null);
@@ -181,13 +196,17 @@ export default function PrescriptionVaultPage() {
       const data = await res.json();
       
       if (res.ok) {
-        const p = data.data || data;
+        const p = data.data;
         
         const medMarkdown = p.medicines && p.medicines.length > 0 
           ? p.medicines.map((m: any, i: number) => 
               `#### ${i + 1}. ${m.name}\n- **Dosage:** ${m.dosage || 'N/A'}\n- **Timing:** ${m.frequency || 'N/A'}\n- **Duration:** ${m.duration || 'N/A'}\n- **Instructions:** ${m.instructions || 'N/A'}`
             ).join('\n\n---\n\n')
           : '*No medications detected.*';
+          
+        const recMarkdown = p.recommendations && p.recommendations.length > 0
+          ? p.recommendations.map((r: any) => `- **${r.lab_test.name}** (at ${r.lab_test.organization})`).join('\n')
+          : '*No recommended tests.*';
 
         setSelectedRecord({
           id: p.id,
@@ -197,7 +216,7 @@ export default function PrescriptionVaultPage() {
             ? new Date(p.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) 
             : p.created_at ? new Date(p.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) : 'Unknown Date',
           status: 'Verified',
-          details: `### Diagnosis\n${p.diagnosis ? `> ${p.diagnosis}` : '*Not specified*'}\n\n### Medications\n${medMarkdown}`,
+          details: `### Diagnosis\n${p.diagnosis ? `> ${p.diagnosis}` : '*Not specified*'}\n\n### Medications\n${medMarkdown}\n\n### AI Recommended Tests\n${recMarkdown}`,
           imageUrl: p.image_url
         });
       } else {
@@ -208,6 +227,13 @@ export default function PrescriptionVaultPage() {
     } finally {
       setIsFetchingRecord(false);
     }
+  };
+
+  const handleBookRecommendations = () => {
+    if (!analysis || !analysis.recommendations || analysis.recommendations.length === 0) return;
+    const testIds = analysis.recommendations.map(r => r.lab_test.id).join(',');
+    // Route to diagnostics with the query param indicating these should be added to the cart
+    router.push(`/diagnostics?autoAdd=${testIds}`);
   };
 
   // Light mapping for the basic history cards list
@@ -351,7 +377,7 @@ export default function PrescriptionVaultPage() {
                     
                     <h3 className="text-3xl font-extrabold text-emerald-950 mb-3 tracking-tight">Extracting Insights</h3>
                     <p className="text-emerald-900/60 max-w-md mx-auto text-center text-base leading-relaxed mb-8">
-                      Our AI is carefully analyzing your document to securely identify medicines, dosages, and doctor&apos;s instructions.
+                      Our AI is carefully analyzing your document to securely identify medicines, diagnoses, and doctor&apos;s instructions.
                     </p>
                     
                     <div className="w-full max-w-md h-2 bg-emerald-100 rounded-full overflow-hidden relative">
@@ -388,95 +414,119 @@ export default function PrescriptionVaultPage() {
                   {/* Wide Data Container */}
                   <div className="p-6 md:p-12">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center hover:bg-emerald-50 transition-colors shadow-sm">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2.5 bg-white rounded-xl shadow-sm text-emerald-600"><UserCircle2 size={20}/></div>
+                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center shadow-sm">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-white rounded-lg shadow-sm text-emerald-600"><UserCircle2 size={16}/></div>
                           <span className="text-emerald-900/60 text-xs font-bold uppercase tracking-wider">Doctor Name</span>
                         </div>
-                        <p className="font-bold text-emerald-950 text-xl leading-tight">{analysis.doctor_name || 'Not detected'}</p>
+                        <p className="font-bold text-emerald-950 text-lg leading-tight truncate">{analysis.doctor_name || 'Not detected'}</p>
                       </div>
                       
-                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center hover:bg-emerald-50 transition-colors shadow-sm">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2.5 bg-white rounded-xl shadow-sm text-emerald-600"><Building2 size={20}/></div>
+                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center shadow-sm">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-white rounded-lg shadow-sm text-emerald-600"><Building2 size={16}/></div>
                           <span className="text-emerald-900/60 text-xs font-bold uppercase tracking-wider">Clinic / Hospital</span>
                         </div>
-                        <p className="font-bold text-emerald-950 text-xl leading-tight">{analysis.hospital_name || 'Not detected'}</p>
+                        <p className="font-bold text-emerald-950 text-lg leading-tight truncate">{analysis.hospital_name || 'Not detected'}</p>
                       </div>
 
-                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center hover:bg-emerald-50 transition-colors shadow-sm">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2.5 bg-white rounded-xl shadow-sm text-emerald-600"><Activity size={20}/></div>
+                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center shadow-sm">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-white rounded-lg shadow-sm text-emerald-600"><Activity size={16}/></div>
                           <span className="text-emerald-900/60 text-xs font-bold uppercase tracking-wider">Diagnosis</span>
                         </div>
-                        <p className="font-bold text-emerald-950 text-xl leading-tight">{analysis.diagnosis || 'Not detected'}</p>
+                        <p className="font-bold text-emerald-950 text-lg leading-tight truncate">{analysis.diagnosis || 'Not detected'}</p>
                       </div>
 
-                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center hover:bg-emerald-50 transition-colors shadow-sm">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="p-2.5 bg-white rounded-xl shadow-sm text-emerald-600"><CalendarDays size={20}/></div>
+                      <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center shadow-sm">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-white rounded-lg shadow-sm text-emerald-600"><CalendarDays size={16}/></div>
                           <span className="text-emerald-900/60 text-xs font-bold uppercase tracking-wider">Date</span>
                         </div>
-                        <p className="font-bold text-emerald-950 text-xl leading-tight">
+                        <p className="font-bold text-emerald-950 text-lg leading-tight truncate">
                           {analysis.prescription_date ? new Date(analysis.prescription_date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric'}) : 'Not detected'}
                         </p>
                       </div>
                     </div>
 
-                    <h4 className="font-bold text-emerald-950 mb-6 text-2xl flex items-center gap-3">
-                      <div className="p-2 bg-emerald-100 rounded-xl">
-                        <Pill className="text-emerald-600" size={24}/>
-                      </div>
+                    <h4 className="font-bold text-emerald-950 mb-6 text-xl flex items-center gap-2">
+                      <div className="p-1.5 bg-emerald-100 rounded-lg"><Pill className="text-emerald-600" size={20}/></div>
                       Prescribed Medicines
                     </h4>
                     
+                    {/* COMPACT MEDICINES LIST */}
                     {analysis.medicines && analysis.medicines.length > 0 ? (
-                      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {analysis.medicines.map((med, idx) => (
-                          <motion.div variants={itemVariants} key={idx} className="p-6 border border-emerald-100 rounded-[1.5rem] bg-white shadow-[0_4px_15px_-5px_rgba(0,0,0,0.05)] flex flex-col justify-between hover:shadow-[0_8px_20px_-5px_rgba(5,150,105,0.1)] transition-all group h-full">
-                            <div className="flex items-start gap-4 mb-4">
-                              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 mt-1">
-                                <span className="font-bold text-lg">{idx + 1}</span>
-                              </div>
-                              <div className="flex-1">
-                                <h5 className="font-bold text-emerald-950 text-xl group-hover:text-emerald-700 transition-colors mb-3">{med.name}</h5>
-                                <div className="flex flex-wrap gap-2">
-                                  {med.dosage && (
-                                    <span className="bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-wide px-3 py-1.5 rounded-lg border border-blue-100/50">
-                                      Dosage: {med.dosage}
-                                    </span>
-                                  )}
-                                  {med.frequency && (
-                                    <span className="bg-purple-50 text-purple-700 text-xs font-bold uppercase tracking-wide px-3 py-1.5 rounded-lg border border-purple-100/50">
-                                      Freq: {med.frequency}
-                                    </span>
-                                  )}
-                                  {med.duration && (
-                                    <span className="bg-orange-50 text-orange-700 text-xs font-bold uppercase tracking-wide px-3 py-1.5 rounded-lg border border-orange-100/50">
-                                      Time: {med.duration}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                          <motion.div variants={itemVariants} key={idx} className="p-4 border border-emerald-100 rounded-2xl bg-white shadow-sm hover:shadow-md transition-shadow flex items-start gap-4">
+                            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 font-bold text-sm">
+                              {idx + 1}
                             </div>
-                            
-                            {med.instructions && (
-                              <div className="w-full bg-slate-50 p-4 rounded-xl border border-slate-100 mt-auto">
-                                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1.5">Instructions</span>
-                                <p className="text-sm font-medium text-slate-700 leading-relaxed">{med.instructions}</p>
+                            <div className="flex-1 min-w-0">
+                              <h5 className="font-bold text-emerald-950 text-base truncate mb-1.5">{med.name}</h5>
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {med.dosage && <span className="bg-blue-50 text-blue-700 text-[10px] font-bold uppercase px-2 py-1 rounded-md border border-blue-100/50">Dosage: {med.dosage}</span>}
+                                {med.frequency && <span className="bg-purple-50 text-purple-700 text-[10px] font-bold uppercase px-2 py-1 rounded-md border border-purple-100/50">Freq: {med.frequency}</span>}
+                                {med.duration && <span className="bg-orange-50 text-orange-700 text-[10px] font-bold uppercase px-2 py-1 rounded-md border border-orange-100/50">Time: {med.duration}</span>}
                               </div>
-                            )}
+                              {med.instructions && (
+                                <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100 mt-2">
+                                  {med.instructions}
+                                </p>
+                              )}
+                            </div>
                           </motion.div>
                         ))}
                       </motion.div>
                     ) : (
-                      <div className="p-12 bg-slate-50 border border-slate-100 rounded-3xl text-center">
-                        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300 shadow-sm">
-                          <Pill size={40} />
-                        </div>
-                        <p className="text-slate-500 text-lg font-medium">No specific medicines were detected in this prescription.</p>
+                      <div className="p-8 bg-slate-50 border border-slate-100 rounded-2xl text-center">
+                        <Pill size={32} className="mx-auto mb-3 text-slate-300" />
+                        <p className="text-slate-500 font-medium">No specific medicines were detected in this prescription.</p>
                       </div>
                     )}
+
+                    {/* HIGHLIGHTED AI RECOMMENDED TESTS */}
+                    {analysis.recommendations && analysis.recommendations.length > 0 && (
+                      <motion.div variants={containerVariants} initial="hidden" animate="show" className="mt-12 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200/60 rounded-[2rem] p-8 sm:p-10 shadow-sm relative overflow-hidden">
+                        <div className="absolute -right-10 -top-10 w-48 h-48 bg-amber-400/20 blur-3xl rounded-full pointer-events-none" />
+                        
+                        <div className="relative z-10">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="p-3 bg-amber-500 text-white rounded-xl shadow-sm"><Microscope size={24}/></div>
+                            <h4 className="font-extrabold text-amber-950 text-2xl tracking-tight">Recommended Lab Tests</h4>
+                          </div>
+                          
+                          <p className="text-amber-900/80 mb-8 font-medium max-w-2xl leading-relaxed">
+                            Based on your diagnosis and prescribed medications, our AI recommends these follow-up tests to monitor your health.
+                          </p>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+                            {analysis.recommendations.map((rec, idx) => (
+                              <motion.div variants={itemVariants} key={idx} className="p-5 bg-white rounded-2xl border border-amber-100 shadow-sm flex items-center justify-between">
+                                <div>
+                                  <h5 className="font-bold text-amber-950 text-lg mb-1">{rec.lab_test.name}</h5>
+                                  <p className="text-xs font-medium text-amber-700/60 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Building2 size={12} /> {rec.lab_test.organization}
+                                  </p>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                  <CheckCircle size={20} />
+                                </div>
+                              </motion.div>
+                            ))}
+                          </div>
+
+                          <button 
+                            onClick={handleBookRecommendations}
+                            className="w-full sm:w-auto px-10 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg shadow-amber-500/30 transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5"
+                          >
+                            <ShoppingCart size={20} />
+                            <span>Add Recommendations to Cart & Book</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
                   </div>
                 </motion.div>
               )}
