@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: SecretStr
 
     GOOGLE_API_KEY: SecretStr
+    GROQ_API_KEY: SecretStr
+
+    PEXELS_API_KEY: SecretStr
+
+    RESEND_API_KEY: SecretStr
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), "../../.env"),

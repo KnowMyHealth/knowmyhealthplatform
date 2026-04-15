@@ -1,4 +1,7 @@
+import asyncio
 import uuid
+import string
+import secrets
 from uuid import UUID
 from loguru import logger
 from sqlalchemy import update, select, func
@@ -18,6 +21,7 @@ from app.db.all_models import Doctor, User
 from app.modules.user.schemas import Role
 from app.core.supabase import supabase_admin    
 from app.core.storage import upload_pdf_document
+from app.core.email import send_doctor_invite_email, send_doctor_welcome_email
 
 class DoctorsService:
     def __init__(self):
@@ -115,23 +119,27 @@ class DoctorsService:
         doctor_id: UUID
     ) -> Doctor:
         """
-        Approves a doctor, creates their account in Supabase (bypassing email limits),
-        updates their role to DOCTOR, and links the profile.
+        Approves a doctor, creates their account in Supabase,
+        links the profile, and sends a welcome email with credentials.
         """
-        # 1. Fetch the pending application
         doctor = await self.get_doctor_by_id(db, doctor_id)
         
         if doctor.status == DoctorStatus.APPROVED:
             raise DoctorUpdateError("Doctor is already approved.")
 
         new_supabase_uid = None
+        
+        # 1. Generate a secure temporary password (12 chars: Letters, Digits, Punctuation)
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
 
         try:
             try:
+                # 2. Create User in Supabase Auth
                 auth_response = supabase_admin.auth.admin.create_user({
                     "email": doctor.email,
-                    "password": "Password123!", # In production, generate a random one
-                    "email_confirm": True,       # This is the "Magic" line that skips the email
+                    "password": temp_password, 
+                    "email_confirm": True,       
                     "user_metadata": {"role": Role.DOCTOR.value}
                 })
                 
@@ -139,7 +147,7 @@ class DoctorsService:
                     raise Exception("Supabase Auth failed to return a user object.")
 
                 new_supabase_uid = uuid.UUID(auth_response.user.id)
-                logger.info(f"Supabase Auth user created (Confirmed): {new_supabase_uid}")
+                logger.info(f"Supabase Auth user created: {new_supabase_uid}")
 
             except Exception as e:
                 error_detail = str(e)
@@ -147,6 +155,7 @@ class DoctorsService:
                 raise DoctorUpdateError(f"Supabase User Creation Failed: {error_detail}")
 
             try:
+                # 3. Update Database (Role & Linking)
                 user_update_stmt = (
                     update(User)
                     .where(User.id == new_supabase_uid)
@@ -160,7 +169,20 @@ class DoctorsService:
                 await db.commit()
                 await db.refresh(doctor)
                 
-                logger.info(f"Successfully approved doctor {doctor_id} and linked to user {new_supabase_uid}")
+                logger.info(f"Successfully approved doctor {doctor_id}")
+
+                # 4. Send the Welcome Email (Runs synchronously but wrapped safely)
+                # We use asyncio.to_thread because the Resend SDK is synchronous
+                doctor_name = f"{doctor.first_name} {doctor.last_name}"
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        send_doctor_welcome_email, 
+                        to_email=doctor.email, 
+                        doctor_name=doctor_name, 
+                        temp_password=temp_password
+                    )
+                )
+
                 return doctor
 
             except SQLAlchemyError as db_err:
@@ -169,7 +191,6 @@ class DoctorsService:
                 
                 # Rollback: Delete the Supabase user if our local DB failed
                 if new_supabase_uid:
-                    logger.warning(f"Deleting Supabase user {new_supabase_uid} due to local DB failure")
                     supabase_admin.auth.admin.delete_user(str(new_supabase_uid))
                 
                 raise DoctorUpdateError("Database failed to link profile. Supabase account was rolled back.")
@@ -209,3 +230,5 @@ class DoctorsService:
             await db.rollback()
             logger.error(f"Database error updating status for doctor {doctor_id}: {e}")
             raise DoctorUpdateError("A database error occurred while updating the status.")
+        
+        
