@@ -10,6 +10,7 @@ from .schemas import Role
 
 if TYPE_CHECKING:
     from app.modules.doctor.models import Doctor 
+    from app.modules.patient.models import Patient
 
 auth_users_table = Table(
     "users",
@@ -58,6 +59,12 @@ class User(Base):
         "Doctor", 
         back_populates="user", 
         uselist=False, 
+        cascade="all, delete-orphan"
+    )
+    patient_profile: Mapped["Patient"] = relationship(
+        "Patient",
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan"
     )
     def __repr__(self):

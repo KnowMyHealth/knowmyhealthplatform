@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     RESEND_API_KEY: SecretStr
 
+    AGORA_APP_ID: SecretStr
+    AGORA_APP_CERTIFICATE: SecretStr
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), "../../.env"),
         env_file_encoding="utf-8",

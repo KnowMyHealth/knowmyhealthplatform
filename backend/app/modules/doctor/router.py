@@ -27,7 +27,6 @@ from app.utils.pagination import PaginationParams
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
 
 
-
 # -------------------------------------------------------------------------
 # PUBLIC: SUBMIT DOCTOR APPLICATION
 # -------------------------------------------------------------------------
@@ -49,7 +48,6 @@ async def apply_for_doctor(
 
     pdf_bytes = await license_file.read()
 
-    # Now this call matches the updated service signature
     doctor = await service.create_doctor(
         db=db,
         user_id=None, 
@@ -63,25 +61,82 @@ async def apply_for_doctor(
     )
 
 
+# -------------------------------------------------------------------------
+# PUBLIC / PATIENTS: LIST APPROVED DOCTORS
+# ** MUST BE ABOVE /{doctor_id} **
+# -------------------------------------------------------------------------
+@router.get(
+    "/approved",
+    summary="List Approved Doctors",
+    description="Returns a paginated list of all approved doctors available for consultation. Used by patients to browse doctors."
+)
+@limiter.limit("30/minute")
+async def list_approved_doctors(
+    request: Request,
+    params: PaginationParams = Depends(),
+    current_user = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    logger.debug("--> Calling /approved route to list approved doctors")
+    items, total = await service.list_doctors(db, params, status=DoctorStatus.APPROVED)
+    validated_items = [DoctorSchema.model_validate(i) for i in items]
+    print(validated_items)
+    return ApiResponse.paginated(
+        items=validated_items,
+        total_items=total,
+        params=params,
+        message="Approved doctors retrieved successfully."
+    )
+
+
+#--------------------------------------------------------------------------
+# ADMIN: LIST DOCTORS WITH FILTERS
+#--------------------------------------------------------------------------
+@router.get(
+    "",
+    summary="List Doctor Applications (Admin)",
+    description="Returns a paginated list of all doctor applications. Use ?status=pending to filter."
+)
+@limiter.limit("30/minute")
+async def list_doctor_applications(
+    request: Request,
+    params: PaginationParams = Depends(),
+    status: DoctorStatus | None = None,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    items, total = await service.list_doctors(db, params, status)
+    validated_items = [DoctorSchema.model_validate(i) for i in items]
+
+    return ApiResponse.paginated(
+        items=validated_items,
+        total_items=total,
+        params=params,
+        message="Doctors retrieved successfully."
+    )
+
+
+# -------------------------------------------------------------------------
+# ADMIN/PUBLIC: GET DOCTOR DETAILS (Dynamic Route)
+# -------------------------------------------------------------------------
 @router.get(
     "/{doctor_id}",
-    summary="Get Doctor Details (Admin)",
+    summary="Get Doctor Details",
     description="Returns full profile details for a specific doctor, including license documents."
 )
 @limiter.limit("60/minute")
 async def get_doctor_details(
     request: Request,
     doctor_id: UUID,
-    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    current_user = Depends(get_current_user), # Changed to allow patients to view a doctor's profile
     db: AsyncSession = Depends(get_db),
     service: DoctorsService = Depends(get_doctors_service)
 ):
-    logger.debug(f"--> Admin {current_user.id} viewing details for doctor {doctor_id}")
+    logger.debug(f"--> User {current_user.id} viewing details for doctor {doctor_id}")
 
-    # Fetch doctor using the service
     doctor = await service.get_doctor_by_id(db, doctor_id)
-
-    # Use the full DoctorSchema so the admin can see license_url
     validated_data = DoctorSchema.model_validate(doctor)
 
     return ApiResponse.success(
@@ -103,13 +158,11 @@ async def update_doctor_status(
     request: Request,
     doctor_id: UUID,
     payload: DoctorStatusUpdateRequest = Body(...),
-    # CHANGED: Use RequireRole so we actually have access to the role in DB
     current_user: User = Depends(RequireRole([Role.ADMIN])), 
     db: AsyncSession = Depends(get_db),
     service: DoctorsService = Depends(get_doctors_service)
 ):
     logger.debug(f"--> Called PATCH /doctors/{doctor_id}/status route")
-
 
     updated_doctor = await service.update_doctor_status(
         db=db,
@@ -122,37 +175,6 @@ async def update_doctor_status(
         message="Doctor status updated successfully."
     )
 
-
-#--------------------------------------------------------------------------
-# ADMIN: LIST DOCTORS WITH FILTERS
-#--------------------------------------------------------------------------
-@router.get(
-    "",
-    summary="List Doctor Applications (Admin)",
-    description="Returns a paginated list of all doctor applications. Use ?status=pending to filter."
-)
-@limiter.limit("30/minute")
-async def list_doctor_applications(
-    request: Request,
-    params: PaginationParams = Depends(), # Parses ?page and ?limit
-    status: DoctorStatus | None = None,   # Optional ?status=pending filter
-    current_user: User = Depends(RequireRole([Role.ADMIN])),
-    db: AsyncSession = Depends(get_db),
-    service: DoctorsService = Depends(get_doctors_service)
-):
-    # Fetch data and total count from service
-    items, total = await service.list_doctors(db, params, status)
-
-    # Convert SQLAlchemy models to Pydantic schemas
-    validated_items = [DoctorSchema.model_validate(i) for i in items]
-
-    # Use the utility to return the consistent paginated JSON envelope
-    return ApiResponse.paginated(
-        items=validated_items,
-        total_items=total,
-        params=params,
-        message="Doctors retrieved successfully."
-    )
 
 # -------------------------------------------------------------------------
 # ADMIN: APPROVE DOCTOR & CREATE USER ACCOUNT
@@ -169,7 +191,6 @@ async def approve_doctor_application(
     db: AsyncSession = Depends(get_db),
     service: DoctorsService = Depends(get_doctors_service)
 ):
-    
     updated_doctor = await service.approve_doctor_and_create_user(
         db=db,
         doctor_id=doctor_id
@@ -181,3 +202,4 @@ async def approve_doctor_application(
         data=validated_doctor,
         message="Doctor approved and user account created."
     )
+

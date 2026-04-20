@@ -72,6 +72,11 @@ class Doctor(Base):
         String(255), 
         nullable=True
     )
+    video_consultation_enabled: Mapped[bool] = mapped_column(
+        Boolean, 
+        default=False, 
+        nullable=False
+    )
     consultation_fee: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), 
         nullable=False,

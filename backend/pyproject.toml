@@ -20,4 +20,5 @@ dependencies = [
     "google-genai>=1.70.0",
     "pexels-api>=1.0.1",
     "resend>=2.27.0",
+    "agora-token-builder>=1.0.0",
 ]
