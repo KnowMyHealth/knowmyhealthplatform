@@ -45,8 +45,10 @@ def setup_logging():
     )
 
     for logger_name in logging.root.manager.loggerDict:
-        if logger_name.startswith("uvicorn."):
-             logging.getLogger(logger_name).handlers = []
+        if logger_name.startswith("uvicorn") or logger_name.startswith("fastapi"):
+            logger_obj = logging.getLogger(logger_name)
+            logger_obj.handlers = []
+            logger_obj.propagate = True
     
     logging.basicConfig(handlers=[InterceptHandler()], level=logging.INFO, force=True)
     

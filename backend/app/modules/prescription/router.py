@@ -32,9 +32,9 @@ async def ocr_prescription(
     service: PrescriptionService = Depends(get_prescription_service)
 ):
     logger.debug("--> POST /prescriptions/ocr")
-
     file_bytes = await file.read()
 
+    # Returns the fully loaded Prescription object (including saved recommendations)
     prescription = await service.ocr_prescription(
         db=db,
         user_id=UUID(str(current_user.id)),

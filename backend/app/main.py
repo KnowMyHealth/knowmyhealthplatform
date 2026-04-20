@@ -18,6 +18,10 @@ from app.modules.user.router import router as user_router
 from app.modules.prescription.router import router as prescription_router
 from app.modules.chat.router import router as chat_router
 from app.modules.doctor.router import router as doctor_router
+from app.modules.labtest.router import router as labtest_router
+from app.modules.blog.router import router as blog_router
+from app.modules.coupon.router import router as coupon_router
+from app.modules.symptom_checker.router import router as symptom_checker_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -76,6 +80,10 @@ def create_application() -> FastAPI:
     application.include_router(prescription_router, prefix=settings.API_VERSION)
     application.include_router(chat_router, prefix=settings.API_VERSION)
     application.include_router(doctor_router, prefix=settings.API_VERSION)
+    application.include_router(labtest_router, prefix=settings.API_VERSION)
+    application.include_router(blog_router, prefix=settings.API_VERSION)
+    application.include_router(coupon_router, prefix=settings.API_VERSION)
+    application.include_router(symptom_checker_router, prefix=settings.API_VERSION)
 
     return application
 
