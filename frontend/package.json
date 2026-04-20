@@ -13,6 +13,7 @@
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "@uiw/react-md-editor": "^4.1.0",
+    "agora-rtc-sdk-ng": "^4.24.3",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",
     "next": "16.2.2",

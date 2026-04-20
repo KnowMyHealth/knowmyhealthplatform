@@ -1,33 +1,32 @@
-// frontend/app/doctor/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, Users, Calendar, Wallet, 
   Settings, Menu, X, Video, Clock, TrendingUp, 
   LogOut, Star, FileText, Search, 
-  ChevronRight, Phone,
-  Sparkles, CheckCircle2, ShieldCheck, Stethoscope
+  ChevronRight, Phone, MessageSquare, Mic, MicOff, VideoOff,
+  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
-import Image from 'next/image';
 
-// --- MOCK DATA ---
+interface Consultation {
+  id: string;
+  patient_user_id: string;
+  doctor_id: string;
+  scheduled_at: string;
+  status: string;
+  channel_name: string;
+}
+
 const stats = [
   { title: 'Total Patients', value: '1,248', trend: '+12%', isUp: true },
   { title: "Today's Consults", value: '14', trend: '+2', isUp: true },
   { title: 'Monthly Earnings', value: '₹1,45,000', trend: '+8.5%', isUp: true },
   { title: 'Patient Rating', value: '4.9/5', trend: 'Top 5%', isUp: true },
-];
-
-const upcomingAppointments = [
-  { id: 1, patient: 'Sarah Jenkins', time: '10:00 AM', type: 'Video Consult', status: 'Next', image: 'https://picsum.photos/seed/p1/200/200', condition: 'Routine Follow-up' },
-  { id: 2, patient: 'Michael Chen', time: '11:30 AM', type: 'In-Clinic', status: 'Upcoming', image: 'https://picsum.photos/seed/p2/200/200', condition: 'Migraine Assessment' },
-  { id: 3, patient: 'Emma Davis', time: '02:15 PM', type: 'Video Consult', status: 'Upcoming', image: 'https://picsum.photos/seed/p3/200/200', condition: 'Post-op Review' },
-  { id: 4, patient: 'James Wilson', time: '04:00 PM', type: 'Video Consult', status: 'Upcoming', image: 'https://picsum.photos/seed/p4/200/200', condition: 'Lab Results Discussion' },
 ];
 
 const recentPatients = [
@@ -59,30 +58,258 @@ const monthlyData = [
   { month: 'Dec', value: 50 },
 ];
 
+// --- AGORA REAL VIDEO CALL COMPONENTS ---
+const RemoteVideo = ({ user }: { user: any }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (user.videoTrack && ref.current) {
+      user.videoTrack.play(ref.current);
+    }
+  }, [user.videoTrack]);
+  return <div ref={ref} className="w-full h-full object-cover" />;
+};
+
+function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraInfo: any, onEndCall: () => void, participantName: string }) {
+  const localVideoRef = useRef<HTMLDivElement>(null);
+  const [AgoraRTC, setAgoraRTC] = useState<any>(null);
+  const [client, setClient] = useState<any>(null);
+  const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState<any>(null);
+  const [remoteUsers, setRemoteUsers] = useState<any[]>([]);
+  
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
+
+  useEffect(() => {
+    import('agora-rtc-sdk-ng').then((mod) => {
+      setAgoraRTC(mod.default);
+      setClient(mod.default.createClient({ mode: "rtc", codec: "vp8" }));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!client || !AgoraRTC) return;
+    
+    let audioTrack: any = null;
+    let videoTrack: any = null;
+
+    const initAgora = async () => {
+      try {
+        client.on("user-published", async (user: any, mediaType: any) => {
+          await client.subscribe(user, mediaType);
+          if (mediaType === "video") {
+            setRemoteUsers(prev => [...prev, user]);
+          }
+          if (mediaType === "audio") {
+            user.audioTrack?.play();
+          }
+        });
+
+        client.on("user-unpublished", (user: any, mediaType: any) => {
+          if (mediaType === "video") {
+            setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+          }
+        });
+
+        client.on("user-left", (user: any) => {
+          setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+        });
+
+        const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID || "96b6fdb94ffb4ab9ac1fe7c7d358ee71";
+        
+        await client.join(appId, agoraInfo.channel_name, agoraInfo.token, agoraInfo.uid);
+        
+        const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+        audioTrack = tracks[0];
+        videoTrack = tracks[1];
+        
+        setLocalAudioTrack(audioTrack);
+        setLocalVideoTrack(videoTrack);
+        
+        await client.publish([audioTrack, videoTrack]);
+        setIsConnecting(false);
+      } catch (err) {
+        console.error("Agora Error:", err);
+        setIsConnecting(false);
+      }
+    };
+
+    initAgora();
+
+    return () => {
+      if (audioTrack) { audioTrack.stop(); audioTrack.close(); }
+      if (videoTrack) { videoTrack.stop(); videoTrack.close(); }
+      client.leave();
+    };
+  }, [client, AgoraRTC, agoraInfo]);
+
+  useEffect(() => {
+    if (localVideoTrack && localVideoRef.current && !isVideoOff) {
+      localVideoTrack.play(localVideoRef.current);
+    }
+  }, [localVideoTrack, isVideoOff]);
+
+  const toggleAudio = () => {
+    if (localAudioTrack) {
+      localAudioTrack.setMuted(!isMuted);
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localVideoTrack) {
+      localVideoTrack.setMuted(!isVideoOff);
+      setIsVideoOff(!isVideoOff);
+    }
+  };
+
+  return (
+    <div className="flex-1 relative bg-gray-950">
+      {/* Main Video (Patient) */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        {isConnecting ? (
+          <div className="flex flex-col items-center justify-center text-emerald-500">
+            <Loader2 size={48} className="animate-spin mb-4" />
+            <p className="text-white font-medium">Connecting to secure server...</p>
+          </div>
+        ) : remoteUsers.length > 0 ? (
+          <RemoteVideo user={remoteUsers[0]} />
+        ) : (
+          <div className="flex flex-col items-center justify-center">
+            <div className="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center text-gray-500 mb-4">
+              <Users size={40} />
+            </div>
+            <p className="text-gray-400 font-medium">Waiting for {participantName} to join...</p>
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-transparent pointer-events-none" />
+      </div>
+      
+      {/* Self Video (Doctor) */}
+      <div className="absolute top-6 right-6 w-32 h-48 md:w-48 md:h-64 bg-gray-800 rounded-2xl overflow-hidden border-2 border-gray-700 shadow-2xl flex items-center justify-center">
+        {isVideoOff ? (
+          <VideoOff size={32} className="text-gray-500" />
+        ) : (
+          <div ref={localVideoRef} className="w-full h-full object-cover bg-black" />
+        )}
+      </div>
+
+      {/* Info Overlay */}
+      <div className="absolute top-6 left-6 bg-gray-900/60 backdrop-blur-md px-4 py-2 rounded-xl flex items-center gap-3 border border-gray-700">
+        <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+        <span className="text-white font-medium">{participantName} Consultation</span>
+      </div>
+
+      {/* Controls */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 bg-gray-900/80 backdrop-blur-xl px-8 py-4 rounded-full border border-gray-700 shadow-2xl">
+        <button 
+          onClick={toggleAudio}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
+        >
+          {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
+        </button>
+        <button 
+          onClick={toggleVideo}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
+        >
+          {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
+        </button>
+        <button className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-white hover:bg-gray-700 transition-colors">
+          <MessageSquare size={20} />
+        </button>
+        <button 
+          onClick={onEndCall}
+          className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/30"
+        >
+          <Phone size={24} className="rotate-[135deg]" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DoctorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [doctorName, setDoctorName] = useState<string | null>(null); 
   const { logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const [appointments, setAppointments] = useState<Consultation[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
+  const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
+  const [isVideoCallActive, setIsVideoCallActive] = useState(false);
+  const [agoraInfo, setAgoraInfo] = useState<any>(null);
+  const [currentPatientName, setCurrentPatientName] = useState<string>('Patient');
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
   useEffect(() => {
     fetchDoctorDetails();
+    fetchAppointments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const fetchAppointments = async () => {
+    setIsLoadingAppointments(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setAppointments(json.data || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch appointments", error);
+    } finally {
+      setIsLoadingAppointments(false);
+    }
+  };
+
+  const handleJoinCall = async (consultationId: string, patientName: string) => {
+    setIsJoiningId(consultationId);
+    setCurrentPatientName(patientName);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/join`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session?.access_token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      const json = await res.json();
+      
+      if (res.ok && json.success) {
+        setAgoraInfo(json.data); 
+        setIsVideoCallActive(true);
+      } else {
+        alert(json.message || "Failed to join consultation");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error joining video call");
+    } finally {
+      setIsJoiningId(null);
+    }
+  };
+
   const fetchDoctorDetails = async () => {
     let fetchedName = '';
-
-    // 1. Try to get name from local Supabase session immediately
     const { data: { user } } = await supabase.auth.getUser();
     if (user && user.user_metadata) {
       fetchedName = user.user_metadata.full_name || user.user_metadata.name || '';
     }
 
-    // 2. Fetch from backend to ensure we have the most accurate role data
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       try {
@@ -95,7 +322,6 @@ export default function DoctorDashboard() {
         if (res.ok) {
           const data = await res.json();
           const userData = data.data;
-          
           if (userData) {
             fetchedName = userData.full_name || 
                           (userData.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : '') || 
@@ -106,8 +332,6 @@ export default function DoctorDashboard() {
         console.error("Failed to fetch doctor details from backend", error);
       }
     }
-
-    // Set fallback to "Doctor" if no name is available, so it doesn't get stuck on Loading
     setDoctorName(fetchedName || 'Doctor');
   };
 
@@ -148,13 +372,18 @@ export default function DoctorDashboard() {
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">
               Welcome back, {formatDoctorName(doctorName, true)}
             </h2>
-            <p className="text-emerald-100/80 text-lg">You have <strong className="text-white">6 appointments</strong> remaining today. Your next patient is waiting in the virtual lobby.</p>
+            <p className="text-emerald-100/80 text-lg">You have <strong className="text-white">{appointments.length} appointments</strong> scheduled. Check your agenda below.</p>
           </div>
           
-          <button className="px-6 py-4 bg-white text-emerald-950 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-[0_10px_20px_-10px_rgba(255,255,255,0.3)] hover:-translate-y-1 flex items-center gap-2 whitespace-nowrap">
-            <Video size={20} className="text-emerald-600" />
-            <span>Join Next Consult</span>
-          </button>
+          {appointments.length > 0 && (
+            <button 
+              onClick={() => handleJoinCall(appointments[0].id, `Patient ${appointments[0].patient_user_id.substring(0,6)}`)}
+              className="px-6 py-4 bg-white text-emerald-950 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-[0_10px_20px_-10px_rgba(255,255,255,0.3)] hover:-translate-y-1 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Video size={20} className="text-emerald-600" />
+              <span>Join Next Consult</span>
+            </button>
+          )}
         </div>
       </motion.div>
 
@@ -175,7 +404,7 @@ export default function DoctorDashboard() {
         ))}
       </div>
 
-      {/* Today's Appointments (Line by Line) */}
+      {/* Today's Appointments */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-xl font-extrabold text-slate-900">Today&apos;s Schedule</h3>
@@ -185,43 +414,50 @@ export default function DoctorDashboard() {
         </div>
         
         <div className="flex flex-col space-y-4">
-          {upcomingAppointments.map((apt) => (
-            <div key={apt.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border transition-all ${apt.status === 'Next' ? 'bg-emerald-50/50 border-emerald-200 shadow-sm' : 'bg-white border-slate-100 hover:border-emerald-100 hover:shadow-sm'}`}>
-              <div className="flex items-center gap-4 mb-4 sm:mb-0">
-                <div className="relative w-14 h-14 rounded-2xl overflow-hidden shrink-0">
-                  <Image src={apt.image} alt={apt.patient} fill className="object-cover" />
-                  {apt.status === 'Next' && <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl" />}
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900">{apt.patient}</h4>
-                  <p className="text-sm text-slate-500 font-medium">{apt.condition}</p>
-                  <div className="flex items-center gap-3 mt-1 sm:hidden">
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1"><Clock size={12}/> {apt.time}</span>
-                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{apt.type}</span>
+          {isLoadingAppointments ? (
+             <div className="py-10 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
+          ) : appointments.length === 0 ? (
+             <div className="py-10 text-center text-slate-500 font-medium">No appointments scheduled today.</div>
+          ) : appointments.map((apt, index) => {
+            const isNext = index === 0;
+            const timeStr = new Date(apt.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const patientLabel = `Patient ${apt.patient_user_id.substring(0, 6)}`;
+
+            return (
+              <div key={apt.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border transition-all ${isNext ? 'bg-emerald-50/50 border-emerald-200 shadow-sm' : 'bg-white border-slate-100 hover:border-emerald-100 hover:shadow-sm'}`}>
+                <div className="flex items-center gap-4 mb-4 sm:mb-0">
+                  <div className="relative w-14 h-14 bg-slate-100 text-slate-500 rounded-2xl flex items-center justify-center font-bold shrink-0">
+                    {getInitials(patientLabel)}
+                    {isNext && <div className="absolute inset-0 border-2 border-emerald-500 rounded-2xl" />}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900">{patientLabel}</h4>
+                    <p className="text-sm text-slate-500 font-medium">{apt.status}</p>
+                    <div className="flex items-center gap-3 mt-1 sm:hidden">
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1"><Clock size={12}/> {timeStr}</span>
+                      <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">Video Consult</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              
-              <div className="hidden sm:flex flex-1 flex-col items-center justify-center px-4">
-                <span className="text-sm font-bold text-slate-900 flex items-center gap-1.5"><Clock size={14} className="text-emerald-500"/> {apt.time}</span>
-                <span className="text-xs font-bold text-slate-500">{apt.type}</span>
-              </div>
+                
+                <div className="hidden sm:flex flex-1 flex-col items-center justify-center px-4">
+                  <span className="text-sm font-bold text-slate-900 flex items-center gap-1.5"><Clock size={14} className="text-emerald-500"/> {timeStr}</span>
+                  <span className="text-xs font-bold text-slate-500">Video Consult</span>
+                </div>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
-                {apt.type === 'Video Consult' ? (
-                  <button className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${apt.status === 'Next' ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700 animate-pulse' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
-                    <Video size={18} />
+                <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                  <button 
+                    onClick={() => handleJoinCall(apt.id, patientLabel)}
+                    disabled={isJoiningId === apt.id}
+                    className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${isNext ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                  >
+                    {isJoiningId === apt.id ? <Loader2 size={18} className="animate-spin" /> : <Video size={18} />}
                     <span>Join Call</span>
                   </button>
-                ) : (
-                  <button className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200">
-                    <Stethoscope size={18} />
-                    <span>Check-in</span>
-                  </button>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </motion.div>
     </div>
@@ -250,43 +486,54 @@ export default function DoctorDashboard() {
         </div>
       </div>
 
-      {/* Calendar/List View Mockup */}
       <div className="p-6 sm:p-8">
         <div className="space-y-6">
-          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Wednesday, Oct 25 (Today)</h3>
+          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Upcoming Consultations</h3>
           <div className="grid gap-4">
-            {upcomingAppointments.map((apt) => (
-              <div key={apt.id} className="flex flex-col sm:flex-row sm:items-center gap-6 p-4 rounded-2xl border border-slate-100 hover:shadow-md transition-all group">
-                <div className="flex items-center gap-4 w-full sm:w-64 shrink-0">
-                  <div className="w-12 h-12 bg-slate-100 rounded-full font-bold text-slate-600 flex items-center justify-center shrink-0">
-                    {getInitials(apt.patient)}
+            {isLoadingAppointments ? (
+              <div className="py-10 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
+            ) : appointments.length === 0 ? (
+              <div className="py-10 text-center text-slate-500 font-medium">No upcoming consultations found.</div>
+            ) : appointments.map((apt) => {
+              const timeStr = new Date(apt.scheduled_at).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+              const patientLabel = `Patient ${apt.patient_user_id.substring(0, 6)}`;
+              
+              return (
+                <div key={apt.id} className="flex flex-col sm:flex-row sm:items-center gap-6 p-4 rounded-2xl border border-slate-100 hover:shadow-md transition-all group">
+                  <div className="flex items-center gap-4 w-full sm:w-64 shrink-0">
+                    <div className="w-12 h-12 bg-slate-100 rounded-full font-bold text-slate-600 flex items-center justify-center shrink-0">
+                      {getInitials(patientLabel)}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{patientLabel}</h4>
+                      <p className="text-xs font-medium text-slate-500">{apt.status}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{apt.patient}</h4>
-                    <p className="text-xs font-medium text-slate-500">{apt.condition}</p>
-                  </div>
-                </div>
 
-                <div className="flex-1 flex items-center gap-8">
-                  <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <Clock size={16} className="text-emerald-500" /> {apt.time}
+                  <div className="flex-1 flex items-center gap-8">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <Clock size={16} className="text-emerald-500" /> {timeStr}
+                    </div>
+                    <div className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <Video size={16} className="text-blue-500" /> Video Consult
+                    </div>
                   </div>
-                  <div className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-700">
-                    {apt.type === 'Video Consult' ? <Video size={16} className="text-blue-500" /> : <Users size={16} className="text-amber-500" />}
-                    {apt.type}
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button className="px-4 py-2 bg-emerald-50 text-emerald-700 text-sm font-bold rounded-lg hover:bg-emerald-100 transition-colors">
-                    {apt.type === 'Video Consult' ? 'Join Call' : 'Start Visit'}
-                  </button>
-                  <button className="px-3 py-2 bg-slate-50 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
-                    Reschedule
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button 
+                      onClick={() => handleJoinCall(apt.id, patientLabel)}
+                      disabled={isJoiningId === apt.id}
+                      className="px-4 py-2 bg-emerald-50 text-emerald-700 text-sm font-bold rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isJoiningId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />} Join
+                    </button>
+                    <button className="px-3 py-2 bg-slate-50 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
+                      Reschedule
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>
@@ -295,7 +542,7 @@ export default function DoctorDashboard() {
 
   const renderPatients = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] overflow-hidden">
-      <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900">Patient Directory</h2>
           <p className="text-sm text-slate-500 mt-1">Access patient records, history, and active prescriptions.</p>
@@ -356,8 +603,6 @@ export default function DoctorDashboard() {
     <div className="space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] p-6 sm:p-8">
         <h2 className="text-xl font-extrabold text-slate-900 mb-6">Revenue & Analytics</h2>
-        
-        {/* Improved Chart Area with Months */}
         <div className="h-72 bg-slate-50 rounded-2xl border border-slate-100 flex items-end justify-between px-4 pb-4 pt-12 relative overflow-hidden group">
           <div className="absolute top-4 left-6 text-slate-400 font-bold text-sm">Monthly Earnings Overview</div>
           {monthlyData.map((data, i) => (
@@ -591,6 +836,26 @@ export default function DoctorDashboard() {
               </AnimatePresence>
             </div>
           </main>
+
+          {/* Video Call Interface */}
+          <AnimatePresence>
+            {isVideoCallActive && agoraInfo && (
+              <div className="fixed inset-0 z-[200] flex flex-col">
+                <motion.div 
+                  initial={{ opacity: 0, y: 50 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 50 }}
+                  className="flex-1 relative flex flex-col"
+                >
+                  <VideoCallInterface 
+                    agoraInfo={agoraInfo} 
+                    onEndCall={() => setIsVideoCallActive(false)}
+                    participantName={currentPatientName}
+                  />
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
         </div>
       </div>
