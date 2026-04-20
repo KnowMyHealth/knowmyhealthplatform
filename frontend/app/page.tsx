@@ -39,17 +39,20 @@ export default function Home() {
   const { isLoggedIn, userRole } = useAuth();
   const router = useRouter();
 
+  // Redirect users dynamically based on their role
   useEffect(() => {
     if (isLoggedIn) {
       if (userRole === 'ADMIN') {
         router.push('/admin');
       } else if (userRole === 'PARTNER') {
         router.push('/partner');
+      } else if (userRole === 'DOCTOR') {
+        router.push('/doctor'); // Redirect to doctor portal
       }
     }
   }, [isLoggedIn, userRole, router]);
 
-  if (isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER')) {
+  if (isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR')) {
     return null; // Don't render the landing page while redirecting
   }
 
@@ -155,7 +158,6 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 auto-rows-[250px]">
-            {/* Large Feature 1 */}
             <motion.div
               whileHover={{ scale: 1.02, rotateX: 2, rotateY: -2 }}
               className="md:col-span-2 lg:col-span-2 row-span-2 p-8 bg-gradient-to-br from-emerald-900 to-teal-950 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(2,44,34,0.5)] relative overflow-hidden group [transform-style:preserve-3d] [perspective:1000px]"
@@ -172,7 +174,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Feature 2 */}
             <motion.div
               className="md:col-span-1 lg:col-span-2 row-span-1 p-8 bg-white/40 backdrop-blur-xl border border-white/40 rounded-[2.5rem] shadow-sm flex items-center gap-6 relative overflow-hidden"
             >
@@ -188,7 +189,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Feature 3 */}
             <motion.div
               whileHover={{ scale: 1.03, y: -5 }}
               className="md:col-span-1 lg:col-span-1 row-span-1 p-8 bg-emerald-50/80 backdrop-blur-xl border border-emerald-100/50 rounded-[2.5rem] shadow-[0_10px_30px_-15px_rgba(5,150,105,0.1)] flex flex-col justify-between group"
@@ -202,7 +202,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Feature 4 */}
             <motion.div
               whileHover={{ scale: 1.03, y: -5 }}
               className="md:col-span-1 lg:col-span-1 row-span-1 p-8 bg-teal-50/80 backdrop-blur-xl border border-teal-100/50 rounded-[2.5rem] shadow-[0_10px_30px_-15px_rgba(5,150,105,0.1)] flex flex-col justify-between group"
@@ -216,7 +215,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Feature 5 */}
             <motion.div
               whileHover={{ scale: 1.03, y: -5 }}
               className="md:col-span-1 lg:col-span-2 row-span-1 p-8 bg-white/70 backdrop-blur-xl border border-white/80 rounded-[2.5rem] shadow-[0_10px_30px_-15px_rgba(5,150,105,0.1)] flex items-center gap-6 group"
@@ -230,7 +228,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Feature 6 */}
             <motion.div
               whileHover={{ scale: 1.03, y: -5 }}
               className="md:col-span-2 lg:col-span-2 row-span-1 p-8 bg-emerald-900/5 backdrop-blur-xl border border-emerald-900/10 rounded-[2.5rem] shadow-[0_10px_30px_-15px_rgba(5,150,105,0.1)] flex items-center justify-between group overflow-hidden relative"

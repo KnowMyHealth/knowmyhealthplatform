@@ -52,7 +52,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [docFormData, setDocFormData] = useState({
     first_name: '', last_name: '', email: '', contact: '', 
     specialization: '', license_id: '', years_of_experience: '', 
-    education: '', consultation_fee: '', bio: ''
+    education: '', consultation_fee: '', bio: '', video_consultation_enabled: false
   });
   const [docErrors, setDocErrors] = useState<Record<string, string>>({});
 
@@ -72,7 +72,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setDocFormData({
         first_name: '', last_name: '', email: '', contact: '', 
         specialization: '', license_id: '', years_of_experience: '', 
-        education: '', consultation_fee: '', bio: ''
+        education: '', consultation_fee: '', bio: '', video_consultation_enabled: false
       });
       setDocErrors({});
     }
@@ -227,7 +227,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         let role = 'PATIENT';
         if (res.ok) {
           const profileData = await res.json();
-          role = profileData.data?.role || 'PATIENT';
+          // Ensure exact strict casing match for redirection
+          role = String(profileData.data?.role || 'PATIENT').toUpperCase();
         }
         
         login(role);
@@ -237,6 +238,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         if (role === 'ADMIN') router.push('/admin');
         else if (role === 'PARTNER') router.push('/partner');
         else if (role === 'DOCTOR') router.push('/doctor');
+
       } else if (!isSignIn) {
         setAuthSuccess('Success! Please check your email to verify your account.'); 
         setFormData({ name: '', email: '', password: '' });
@@ -280,6 +282,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (docFormData.years_of_experience) payload.append('years_of_experience', docFormData.years_of_experience);
       if (docFormData.consultation_fee) payload.append('consultation_fee', docFormData.consultation_fee);
       if (docFormData.bio) payload.append('bio', docFormData.bio);
+      payload.append('video_consultation_enabled', String(docFormData.video_consultation_enabled));
 
       const response = await fetch(`${BACKEND_URL}/api/v1/doctors/apply`, {
         method: 'POST',
@@ -614,12 +617,29 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                                 <div>
                                   <label className="block text-xs font-bold text-emerald-950 mb-2 uppercase tracking-wide">Consult Fee</label>
                                   <div className="relative flex items-center">
-                                    <span className="absolute left-4 text-emerald-600/50 font-black text-lg">$</span>
+                                    <span className="absolute left-4 text-emerald-600/50 font-black text-lg">₹</span>
                                     <input type="number" min="0" value={docFormData.consultation_fee} onChange={e => setDocFormData({...docFormData, consultation_fee: e.target.value})} className={`w-full pl-9 pr-4 py-4 bg-gray-50/50 hover:bg-gray-50 border rounded-2xl outline-none font-medium text-gray-900 transition-all ${docErrors.consultation_fee ? 'border-red-300 ring-4 ring-red-500/10' : 'border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:bg-white'}`} placeholder="150" />
                                   </div>
                                   {docErrors.consultation_fee && <p className="text-xs text-red-500 mt-1.5 font-medium">{docErrors.consultation_fee}</p>}
                                 </div>
                               </div>
+                            </div>
+                            
+                            {/* Video Consultation Toggle */}
+                            <div className="col-span-1 sm:col-span-2 mt-2 bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between">
+                              <div>
+                                <h4 className="text-sm font-bold text-emerald-950">Enable Video Consultations</h4>
+                                <p className="text-xs text-emerald-900/60 mt-0.5">Allow patients to book online video appointments with you.</p>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                  type="checkbox" 
+                                  className="sr-only peer" 
+                                  checked={docFormData.video_consultation_enabled}
+                                  onChange={(e) => setDocFormData({...docFormData, video_consultation_enabled: e.target.checked})}
+                                />
+                                <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
+                              </label>
                             </div>
                           </motion.div>
                         )}
