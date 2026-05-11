@@ -1,3 +1,4 @@
+// frontend/app/doctor/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,8 +7,8 @@ import {
   LayoutDashboard, Users, Calendar, Wallet, 
   Settings, Menu, X, Video, Clock, TrendingUp, 
   LogOut, Star, FileText, Search, 
-  ChevronRight, Phone, MessageSquare, Mic, MicOff, VideoOff,
-  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2
+  ChevronRight, Phone, MessageSquare, Mic, MicOff, VideoOff, XCircle,
+  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2, AlertCircle, Save
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -20,6 +21,13 @@ interface Consultation {
   scheduled_at: string;
   status: string;
   channel_name: string;
+}
+
+interface DayAvailability {
+  day_of_week: number;
+  active: boolean;
+  start_time: string;
+  end_time: string;
 }
 
 const stats = [
@@ -58,6 +66,8 @@ const monthlyData = [
   { month: 'Dec', value: 50 },
 ];
 
+const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 // --- AGORA REAL VIDEO CALL COMPONENTS ---
 const RemoteVideo = ({ user }: { user: any }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +79,17 @@ const RemoteVideo = ({ user }: { user: any }) => {
   return <div ref={ref} className="w-full h-full object-cover" />;
 };
 
-function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraInfo: any, onEndCall: () => void, participantName: string }) {
+function VideoCallInterface({ 
+  agoraInfo, 
+  consultationId, 
+  onEndCall, 
+  participantName 
+}: { 
+  agoraInfo: any, 
+  consultationId: string, 
+  onEndCall: (id: string) => void, 
+  participantName: string 
+}) {
   const localVideoRef = useRef<HTMLDivElement>(null);
   const [AgoraRTC, setAgoraRTC] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
@@ -80,6 +100,7 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   useEffect(() => {
     import('agora-rtc-sdk-ng').then((mod) => {
@@ -96,38 +117,46 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
 
     const initAgora = async () => {
       try {
+        client.on("user-joined", () => {
+          setRemoteUsers(Array.from(client.remoteUsers));
+        });
+
         client.on("user-published", async (user: any, mediaType: any) => {
           await client.subscribe(user, mediaType);
-          if (mediaType === "video") {
-            setRemoteUsers(prev => [...prev, user]);
-          }
+          setRemoteUsers(Array.from(client.remoteUsers));
           if (mediaType === "audio") {
             user.audioTrack?.play();
           }
         });
 
-        client.on("user-unpublished", (user: any, mediaType: any) => {
-          if (mediaType === "video") {
-            setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
-          }
+        client.on("user-unpublished", () => {
+          setRemoteUsers(Array.from(client.remoteUsers));
         });
 
-        client.on("user-left", (user: any) => {
-          setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+        client.on("user-left", () => {
+          setRemoteUsers(Array.from(client.remoteUsers));
         });
 
         const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID || "96b6fdb94ffb4ab9ac1fe7c7d358ee71";
         
         await client.join(appId, agoraInfo.channel_name, agoraInfo.token, agoraInfo.uid);
         
-        const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-        audioTrack = tracks[0];
-        videoTrack = tracks[1];
-        
-        setLocalAudioTrack(audioTrack);
-        setLocalVideoTrack(videoTrack);
-        
-        await client.publish([audioTrack, videoTrack]);
+        try {
+          const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+          audioTrack = tracks[0];
+          videoTrack = tracks[1];
+          
+          setLocalAudioTrack(audioTrack);
+          setLocalVideoTrack(videoTrack);
+          
+          await client.publish([audioTrack, videoTrack]);
+        } catch (mediaErr: any) {
+          console.error("Media Error:", mediaErr);
+          setPermissionError("Camera/Microphone access denied by browser.");
+          setIsVideoOff(true);
+          setIsMuted(true);
+        }
+
         setIsConnecting(false);
       } catch (err) {
         console.error("Agora Error:", err);
@@ -145,12 +174,16 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
   }, [client, AgoraRTC, agoraInfo]);
 
   useEffect(() => {
-    if (localVideoTrack && localVideoRef.current && !isVideoOff) {
+    if (localVideoTrack && localVideoRef.current && !isVideoOff && !permissionError) {
       localVideoTrack.play(localVideoRef.current);
     }
-  }, [localVideoTrack, isVideoOff]);
+  }, [localVideoTrack, isVideoOff, permissionError]);
 
   const toggleAudio = () => {
+    if (permissionError) {
+      alert("Please allow microphone access in your browser settings to unmute.");
+      return;
+    }
     if (localAudioTrack) {
       localAudioTrack.setMuted(!isMuted);
       setIsMuted(!isMuted);
@@ -158,6 +191,10 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
   };
 
   const toggleVideo = () => {
+    if (permissionError) {
+      alert("Please allow camera access in your browser settings to turn on video.");
+      return;
+    }
     if (localVideoTrack) {
       localVideoTrack.setMuted(!isVideoOff);
       setIsVideoOff(!isVideoOff);
@@ -166,17 +203,25 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
 
   return (
     <div className="flex-1 relative bg-gray-950">
-      {/* Main Video (Patient) */}
       <div className="absolute inset-0 flex items-center justify-center">
         {isConnecting ? (
-          <div className="flex flex-col items-center justify-center text-emerald-500">
+          <div className="flex flex-col items-center justify-center text-emerald-500 z-10 relative">
             <Loader2 size={48} className="animate-spin mb-4" />
             <p className="text-white font-medium">Connecting to secure server...</p>
           </div>
         ) : remoteUsers.length > 0 ? (
-          <RemoteVideo user={remoteUsers[0]} />
+          remoteUsers[0].hasVideo ? (
+            <RemoteVideo user={remoteUsers[0]} />
+          ) : (
+            <div className="flex flex-col items-center justify-center z-10 relative">
+              <div className="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center text-gray-500 mb-4">
+                <VideoOff size={40} />
+              </div>
+              <p className="text-gray-400 font-medium">{participantName}&apos;s camera is off</p>
+            </div>
+          )
         ) : (
-          <div className="flex flex-col items-center justify-center">
+          <div className="flex flex-col items-center justify-center z-10 relative">
             <div className="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center text-gray-500 mb-4">
               <Users size={40} />
             </div>
@@ -186,23 +231,25 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
         <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-transparent pointer-events-none" />
       </div>
       
-      {/* Self Video (Doctor) */}
-      <div className="absolute top-6 right-6 w-32 h-48 md:w-48 md:h-64 bg-gray-800 rounded-2xl overflow-hidden border-2 border-gray-700 shadow-2xl flex items-center justify-center">
-        {isVideoOff ? (
+      <div className="absolute top-6 right-6 w-32 h-48 md:w-48 md:h-64 bg-gray-800 rounded-2xl overflow-hidden border-2 border-gray-700 shadow-2xl flex items-center justify-center z-20">
+        {permissionError ? (
+          <div className="flex flex-col items-center justify-center p-4 text-center">
+            <AlertCircle size={28} className="text-red-500 mb-2" />
+            <p className="text-xs text-red-400 font-medium">Access Denied</p>
+          </div>
+        ) : isVideoOff ? (
           <VideoOff size={32} className="text-gray-500" />
         ) : (
           <div ref={localVideoRef} className="w-full h-full object-cover bg-black" />
         )}
       </div>
 
-      {/* Info Overlay */}
-      <div className="absolute top-6 left-6 bg-gray-900/60 backdrop-blur-md px-4 py-2 rounded-xl flex items-center gap-3 border border-gray-700">
+      <div className="absolute top-6 left-6 bg-gray-900/60 backdrop-blur-md px-4 py-2 rounded-xl flex items-center gap-3 border border-gray-700 z-20">
         <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
         <span className="text-white font-medium">{participantName} Consultation</span>
       </div>
 
-      {/* Controls */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 bg-gray-900/80 backdrop-blur-xl px-8 py-4 rounded-full border border-gray-700 shadow-2xl">
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 bg-gray-900/80 backdrop-blur-xl px-8 py-4 rounded-full border border-gray-700 shadow-2xl z-30">
         <button 
           onClick={toggleAudio}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
@@ -219,7 +266,7 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
           <MessageSquare size={20} />
         </button>
         <button 
-          onClick={onEndCall}
+          onClick={() => onEndCall(consultationId)}
           className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/30"
         >
           <Phone size={24} className="rotate-[135deg]" />
@@ -239,17 +286,232 @@ export default function DoctorDashboard() {
   const [appointments, setAppointments] = useState<Consultation[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [agoraInfo, setAgoraInfo] = useState<any>(null);
   const [currentPatientName, setCurrentPatientName] = useState<string>('Patient');
 
+  // Availability States
+  const [availability, setAvailability] = useState<DayAvailability[]>(
+    Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, start_time: '09:00', end_time: '17:00' }))
+  );
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false);
+  const [availabilityMsg, setAvailabilityMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
+
+  // Profile Settings States
+  const [profileForm, setProfileForm] = useState({
+    first_name: '',
+    last_name: '',
+    consultation_fee: 1500,
+    bio: '',
+    video_consultation_enabled: true
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
+
+  // Real-time tracker for join buttons
+  const [now, setNow] = useState(new Date());
+
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
   useEffect(() => {
-    fetchDoctorDetails();
+    // Update the 'now' state every 30 seconds to refresh join buttons dynamically
+    const interval = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getJoinStatus = (scheduledAt: string) => {
+    const sTime = new Date(scheduledAt).getTime();
+    const cTime = now.getTime();
+    const startWindow = sTime - (5 * 60 * 1000); // 5 mins before
+    const endWindow = sTime + (15 * 60 * 1000); // 15 mins after
+
+    if (cTime < startWindow) {
+      const diffMins = Math.ceil((startWindow - cTime) / 60000);
+      if (diffMins > 60) {
+        const h = Math.floor(diffMins / 60);
+        const m = diffMins % 60;
+        return { canJoin: false, label: `Join in ${h}h ${m}m` };
+      }
+      return { canJoin: false, label: `Join in ${diffMins}m` };
+    }
+    
+    if (cTime > endWindow) {
+      return { canJoin: false, label: 'Expired' };
+    }
+    
+    return { canJoin: true, label: 'Join Call' };
+  };
+
+  useEffect(() => {
+    fetchDoctorProfile();
     fetchAppointments();
+    fetchAvailability();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchDoctorProfile = async () => {
+    let fetchedFirstName = '';
+    let fetchedLastName = '';
+    
+    // Fallback: Get name from Supabase user session
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.user_metadata) {
+      const parts = (user.user_metadata.full_name || user.user_metadata.name || '').split(' ');
+      fetchedFirstName = parts[0] || '';
+      fetchedLastName = parts.slice(1).join(' ') || '';
+    }
+
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      if (!token) return;
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const docData = json.data;
+        if (docData) {
+          setProfileForm({
+            first_name: docData.first_name || fetchedFirstName,
+            last_name: docData.last_name || fetchedLastName,
+            consultation_fee: docData.consultation_fee || 1500,
+            bio: docData.bio || '',
+            video_consultation_enabled: docData.video_consultation_enabled ?? true
+          });
+          setDoctorName(`${docData.first_name || fetchedFirstName} ${docData.last_name || fetchedLastName}`.trim() || 'Doctor');
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch doctor profile from backend", error);
+    }
+    
+    // If backend fetch fails, populate what we can from user auth session
+    setProfileForm(prev => ({ ...prev, first_name: fetchedFirstName, last_name: fetchedLastName }));
+    setDoctorName(`${fetchedFirstName} ${fetchedLastName}`.trim() || 'Doctor');
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    setProfileMsg(null);
+
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      const payload = {
+        first_name: profileForm.first_name,
+        last_name: profileForm.last_name,
+        consultation_fee: Number(profileForm.consultation_fee),
+        bio: profileForm.bio,
+        video_consultation_enabled: profileForm.video_consultation_enabled
+      };
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        setProfileMsg({ type: 'success', text: 'Profile updated successfully!' });
+        // Update top right header name seamlessly
+        setDoctorName(`${json.data.first_name} ${json.data.last_name}`);
+      } else {
+        const error = await res.json();
+        setProfileMsg({ type: 'error', text: error.message || 'Failed to update profile.' });
+      }
+    } catch (error) {
+      setProfileMsg({ type: 'error', text: 'Network error occurred.' });
+    } finally {
+      setIsSavingProfile(false);
+      setTimeout(() => setProfileMsg(null), 3000);
+    }
+  };
+
+  const fetchAvailability = async () => {
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      if (!token) return;
+      
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me/availability`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setAvailability(prev => prev.map(day => {
+            const found = json.data.find((d: any) => d.day_of_week === day.day_of_week);
+            if (found) {
+              return { 
+                ...day, 
+                active: true, 
+                start_time: found.start_time.slice(0, 5), // Converts "09:00:00" to "09:00" for input component
+                end_time: found.end_time.slice(0, 5) 
+              };
+            }
+            return day;
+          }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch availability", e);
+    }
+  };
+
+  const handleSaveAvailability = async () => {
+    setIsSavingAvailability(true);
+    setAvailabilityMsg(null);
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      
+      // Formatting payload correctly as specified
+      const payload = {
+        schedule: availability
+          .filter(d => d.active)
+          .map(d => ({
+            day_of_week: d.day_of_week,
+            start_time: `${d.start_time}:00`, // Format back to HH:MM:SS
+            end_time: `${d.end_time}:00`
+          }))
+      };
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me/availability`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setAvailabilityMsg({ type: 'success', text: 'Schedule saved successfully!' });
+      } else {
+        const error = await res.json();
+        setAvailabilityMsg({ type: 'error', text: error.message || 'Failed to save schedule.' });
+      }
+    } catch (e) {
+      setAvailabilityMsg({ type: 'error', text: 'Network error occurred.' });
+    } finally {
+      setIsSavingAvailability(false);
+      setTimeout(() => setAvailabilityMsg(null), 3000);
+    }
+  };
 
   const fetchAppointments = async () => {
     setIsLoadingAppointments(true);
@@ -274,6 +536,31 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleUpdateStatus = (consultationId: string, newStatus: string) => {
+    const token = localStorage.getItem('supabase_access_token');
+    if (!token) return;
+    
+    // Fire and forget using keepalive so it hits the backend even if unmounted instantly
+    fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/status`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
+      },
+      body: JSON.stringify({ status: newStatus }),
+      keepalive: true
+    }).then(res => {
+      if (res.ok) {
+        fetchAppointments(); 
+      } else {
+        res.json().then(err => console.error('Failed to update status', err));
+      }
+    }).catch(e => {
+      console.error('Network error updating status:', e);
+    });
+  };
+
   const handleJoinCall = async (consultationId: string, patientName: string) => {
     setIsJoiningId(consultationId);
     setCurrentPatientName(patientName);
@@ -291,6 +578,7 @@ export default function DoctorDashboard() {
       
       if (res.ok && json.success) {
         setAgoraInfo(json.data); 
+        setActiveCallId(consultationId);
         setIsVideoCallActive(true);
       } else {
         alert(json.message || "Failed to join consultation");
@@ -301,38 +589,6 @@ export default function DoctorDashboard() {
     } finally {
       setIsJoiningId(null);
     }
-  };
-
-  const fetchDoctorDetails = async () => {
-    let fetchedName = '';
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user && user.user_metadata) {
-      fetchedName = user.user_metadata.full_name || user.user_metadata.name || '';
-    }
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/v1/users/me`, {
-          headers: { 
-            Authorization: `Bearer ${session.access_token}`,
-            'ngrok-skip-browser-warning': 'true'
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const userData = data.data;
-          if (userData) {
-            fetchedName = userData.full_name || 
-                          (userData.first_name ? `${userData.first_name} ${userData.last_name || ''}`.trim() : '') || 
-                          fetchedName;
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch doctor details from backend", error);
-      }
-    }
-    setDoctorName(fetchedName || 'Doctor');
   };
 
   const getInitials = (name: string | null) => {
@@ -354,7 +610,6 @@ export default function DoctorDashboard() {
   // --- TAB RENDERERS ---
   const renderDashboard = () => (
     <div className="space-y-8">
-      {/* Welcome Banner */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -372,22 +627,32 @@ export default function DoctorDashboard() {
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">
               Welcome back, {formatDoctorName(doctorName, true)}
             </h2>
-            <p className="text-emerald-100/80 text-lg">You have <strong className="text-white">{appointments.length} appointments</strong> scheduled. Check your agenda below.</p>
+            <p className="text-emerald-100/80 text-lg">You have <strong className="text-white">{appointments.filter(a => a.status === 'SCHEDULED').length} scheduled appointments</strong> requiring attention.</p>
           </div>
           
-          {appointments.length > 0 && (
-            <button 
-              onClick={() => handleJoinCall(appointments[0].id, `Patient ${appointments[0].patient_user_id.substring(0,6)}`)}
-              className="px-6 py-4 bg-white text-emerald-950 rounded-2xl font-bold hover:bg-emerald-50 transition-all shadow-[0_10px_20px_-10px_rgba(255,255,255,0.3)] hover:-translate-y-1 flex items-center gap-2 whitespace-nowrap"
-            >
-              <Video size={20} className="text-emerald-600" />
-              <span>Join Next Consult</span>
-            </button>
-          )}
+          {appointments.filter(a => a.status === 'SCHEDULED').length > 0 && (() => {
+            const nextApt = appointments.find(a => a.status === 'SCHEDULED');
+            if(!nextApt) return null;
+            const { canJoin, label } = getJoinStatus(nextApt.scheduled_at);
+            
+            return (
+              <button 
+                onClick={() => handleJoinCall(nextApt.id, `Patient ${nextApt.patient_user_id.substring(0,6)}`)}
+                disabled={!canJoin}
+                className={`px-6 py-4 rounded-2xl font-bold transition-all shadow-[0_10px_20px_-10px_rgba(255,255,255,0.3)] hover:-translate-y-1 flex items-center gap-2 whitespace-nowrap ${
+                  canJoin 
+                    ? 'bg-white text-emerald-950 hover:bg-emerald-50 cursor-pointer' 
+                    : 'bg-white/20 text-white/50 cursor-not-allowed'
+                }`}
+              >
+                <Video size={20} className={canJoin ? "text-emerald-600" : "text-white/50"} />
+                <span>{canJoin ? "Join Next Consult" : label}</span>
+              </button>
+            )
+          })()}
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] relative overflow-hidden group">
@@ -404,7 +669,6 @@ export default function DoctorDashboard() {
         ))}
       </div>
 
-      {/* Today's Appointments */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between mb-8">
           <h3 className="text-xl font-extrabold text-slate-900">Today&apos;s Schedule</h3>
@@ -419,9 +683,11 @@ export default function DoctorDashboard() {
           ) : appointments.length === 0 ? (
              <div className="py-10 text-center text-slate-500 font-medium">No appointments scheduled today.</div>
           ) : appointments.map((apt, index) => {
-            const isNext = index === 0;
+            const isNext = index === 0 && apt.status === 'SCHEDULED';
             const timeStr = new Date(apt.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const patientLabel = `Patient ${apt.patient_user_id.substring(0, 6)}`;
+            
+            const { canJoin, label } = getJoinStatus(apt.scheduled_at);
 
             return (
               <div key={apt.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-2xl border transition-all ${isNext ? 'bg-emerald-50/50 border-emerald-200 shadow-sm' : 'bg-white border-slate-100 hover:border-emerald-100 hover:shadow-sm'}`}>
@@ -432,7 +698,7 @@ export default function DoctorDashboard() {
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-900">{patientLabel}</h4>
-                    <p className="text-sm text-slate-500 font-medium">{apt.status}</p>
+                    <p className={`text-sm font-medium ${apt.status === 'COMPLETED' ? 'text-emerald-600' : apt.status === 'CANCELLED' ? 'text-red-500' : 'text-slate-500'}`}>{apt.status}</p>
                     <div className="flex items-center gap-3 mt-1 sm:hidden">
                       <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1"><Clock size={12}/> {timeStr}</span>
                       <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">Video Consult</span>
@@ -446,14 +712,30 @@ export default function DoctorDashboard() {
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
-                  <button 
-                    onClick={() => handleJoinCall(apt.id, patientLabel)}
-                    disabled={isJoiningId === apt.id}
-                    className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${isNext ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                  >
-                    {isJoiningId === apt.id ? <Loader2 size={18} className="animate-spin" /> : <Video size={18} />}
-                    <span>Join Call</span>
-                  </button>
+                  {apt.status === 'SCHEDULED' && (
+                    <button 
+                      onClick={() => handleJoinCall(apt.id, patientLabel)}
+                      disabled={isJoiningId === apt.id || !canJoin}
+                      className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+                        isNext 
+                          ? (canJoin ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200') 
+                          : (canJoin ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 cursor-not-allowed')
+                      }`}
+                    >
+                      {isJoiningId === apt.id ? <Loader2 size={18} className="animate-spin" /> : <Video size={18} />}
+                      <span>{label}</span>
+                    </button>
+                  )}
+                  {apt.status === 'COMPLETED' && (
+                    <span className="px-6 py-2.5 bg-emerald-50 text-emerald-700 font-bold rounded-xl flex items-center gap-2">
+                      <CheckCircle2 size={18} /> Completed
+                    </span>
+                  )}
+                  {apt.status === 'CANCELLED' && (
+                    <span className="px-6 py-2.5 bg-red-50 text-red-600 font-bold rounded-xl flex items-center gap-2">
+                      <XCircle size={18} /> Cancelled
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -488,15 +770,16 @@ export default function DoctorDashboard() {
 
       <div className="p-6 sm:p-8">
         <div className="space-y-6">
-          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Upcoming Consultations</h3>
+          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">All Consultations</h3>
           <div className="grid gap-4">
             {isLoadingAppointments ? (
               <div className="py-10 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
             ) : appointments.length === 0 ? (
-              <div className="py-10 text-center text-slate-500 font-medium">No upcoming consultations found.</div>
+              <div className="py-10 text-center text-slate-500 font-medium">No consultations found.</div>
             ) : appointments.map((apt) => {
               const timeStr = new Date(apt.scheduled_at).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
               const patientLabel = `Patient ${apt.patient_user_id.substring(0, 6)}`;
+              const { canJoin, label } = getJoinStatus(apt.scheduled_at);
               
               return (
                 <div key={apt.id} className="flex flex-col sm:flex-row sm:items-center gap-6 p-4 rounded-2xl border border-slate-100 hover:shadow-md transition-all group">
@@ -506,7 +789,7 @@ export default function DoctorDashboard() {
                     </div>
                     <div>
                       <h4 className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{patientLabel}</h4>
-                      <p className="text-xs font-medium text-slate-500">{apt.status}</p>
+                      <p className={`text-xs font-bold uppercase tracking-wider ${apt.status === 'COMPLETED' ? 'text-emerald-600' : apt.status === 'CANCELLED' ? 'text-red-500' : 'text-blue-500'}`}>{apt.status}</p>
                     </div>
                   </div>
 
@@ -520,16 +803,20 @@ export default function DoctorDashboard() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <button 
-                      onClick={() => handleJoinCall(apt.id, patientLabel)}
-                      disabled={isJoiningId === apt.id}
-                      className="px-4 py-2 bg-emerald-50 text-emerald-700 text-sm font-bold rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isJoiningId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <Video size={14} />} Join
-                    </button>
-                    <button className="px-3 py-2 bg-slate-50 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-100 border border-slate-200 transition-colors">
-                      Reschedule
-                    </button>
+                    {apt.status === 'SCHEDULED' && (
+                      <button 
+                        onClick={() => handleJoinCall(apt.id, patientLabel)}
+                        disabled={isJoiningId === apt.id || !canJoin}
+                        className={`px-6 py-2.5 text-sm font-bold rounded-xl transition-colors flex items-center gap-2 ${
+                          canJoin 
+                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' 
+                            : 'bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed'
+                        }`}
+                      >
+                        {isJoiningId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Video size={16} />} 
+                        {label}
+                      </button>
+                    )}
                   </div>
                 </div>
               )
@@ -680,36 +967,136 @@ export default function DoctorDashboard() {
   const renderSettings = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] p-6 sm:p-8 max-w-3xl mx-auto">
       <div className="flex items-center gap-4 mb-8 border-b border-slate-100 pb-6">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl font-bold">
+        <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-2xl font-bold shrink-0">
           {getInitials(doctorName)}
         </div>
         <div>
           <h2 className="text-xl font-extrabold text-slate-900">Profile Settings</h2>
-          <p className="text-sm text-slate-500">Update your public profile and availability.</p>
+          <p className="text-sm text-slate-500">Update your public profile and weekly availability.</p>
         </div>
       </div>
 
-      <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-        <div className="grid sm:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Display Name</label>
-            <input type="text" defaultValue={formatDoctorName(doctorName)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900" />
+      <div className="space-y-10">
+        {/* Weekly Availability Section */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-900">Weekly Availability</h3>
+            {availabilityMsg && (
+              <span className={`text-sm font-bold px-3 py-1 rounded-full ${availabilityMsg.type === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                {availabilityMsg.text}
+              </span>
+            )}
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Consultation Fee (₹)</label>
-            <input type="number" defaultValue="1500" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900" />
+          
+          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 space-y-4">
+            {availability.map((day, index) => (
+              <div key={day.day_of_week} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-b border-slate-200 last:border-0 last:pb-0">
+                <label className="flex items-center gap-3 w-40 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={day.active} 
+                    onChange={(e) => {
+                      const newAvail = [...availability];
+                      newAvail[index].active = e.target.checked;
+                      setAvailability(newAvail);
+                    }}
+                    className="w-5 h-5 accent-emerald-600 rounded" 
+                  />
+                  <span className={`font-semibold ${day.active ? 'text-slate-900' : 'text-slate-400'}`}>
+                    {DAYS_OF_WEEK[day.day_of_week]}
+                  </span>
+                </label>
+                
+                <div className="flex items-center gap-3 flex-1">
+                  <input 
+                    type="time" 
+                    value={day.start_time}
+                    disabled={!day.active}
+                    onChange={(e) => {
+                      const newAvail = [...availability];
+                      newAvail[index].start_time = e.target.value;
+                      setAvailability(newAvail);
+                    }}
+                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm disabled:opacity-50 disabled:bg-slate-100 outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-slate-400 text-sm font-medium">to</span>
+                  <input 
+                    type="time" 
+                    value={day.end_time}
+                    disabled={!day.active}
+                    onChange={(e) => {
+                      const newAvail = [...availability];
+                      newAvail[index].end_time = e.target.value;
+                      setAvailability(newAvail);
+                    }}
+                    className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm disabled:opacity-50 disabled:bg-slate-100 outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-        
-        <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Professional Bio</label>
-          <textarea rows={4} defaultValue="Experienced specialist with over 10 years of practice..." className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900 resize-none" />
-        </div>
 
-        <button type="submit" className="px-8 py-4 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20">
-          Save Changes
-        </button>
-      </form>
+          <div className="mt-4 flex justify-end">
+            <button 
+              onClick={handleSaveAvailability}
+              disabled={isSavingAvailability}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-md flex items-center gap-2 disabled:opacity-70"
+            >
+              {isSavingAvailability ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              Save Schedule
+            </button>
+          </div>
+        </section>
+        
+        <hr className="border-slate-100" />
+
+        {/* Basic Settings */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-slate-900">General Profile</h3>
+            {profileMsg && (
+              <span className={`text-sm font-bold px-3 py-1 rounded-full ${profileMsg.type === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                {profileMsg.text}
+              </span>
+            )}
+          </div>
+          
+          <form className="space-y-6" onSubmit={handleSaveProfile}>
+            <div className="grid sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">First Name</label>
+                <input type="text" value={profileForm.first_name} onChange={e => setProfileForm({...profileForm, first_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900" required />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Last Name</label>
+                <input type="text" value={profileForm.last_name} onChange={e => setProfileForm({...profileForm, last_name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900" required />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Consultation Fee (₹)</label>
+                <input type="number" min="0" value={profileForm.consultation_fee} onChange={e => setProfileForm({...profileForm, consultation_fee: Number(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900" required />
+              </div>
+              <div className="flex items-center pt-8">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={profileForm.video_consultation_enabled} onChange={e => setProfileForm({...profileForm, video_consultation_enabled: e.target.checked})} className="w-5 h-5 accent-emerald-600 rounded" />
+                  <span className="text-sm font-bold text-slate-700">Enable Video Consultations</span>
+                </label>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Professional Bio</label>
+              <textarea rows={4} value={profileForm.bio} onChange={e => setProfileForm({...profileForm, bio: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900 resize-none" placeholder="Briefly describe your experience and specialization..." />
+            </div>
+
+            <div className="flex justify-end">
+              <button type="submit" disabled={isSavingProfile} className="px-8 py-4 bg-emerald-950 text-white rounded-xl font-bold hover:bg-emerald-900 transition-colors shadow-lg flex items-center gap-2 disabled:opacity-70">
+                {isSavingProfile ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                Update Profile
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
     </motion.div>
   );
 
@@ -849,7 +1236,14 @@ export default function DoctorDashboard() {
                 >
                   <VideoCallInterface 
                     agoraInfo={agoraInfo} 
-                    onEndCall={() => setIsVideoCallActive(false)}
+                    consultationId={activeCallId!}
+                    onEndCall={(id) => {
+                      setIsVideoCallActive(false);
+                      if (id) {
+                        handleUpdateStatus(id, 'COMPLETED');
+                        setActiveCallId(null);
+                      }
+                    }}
                     participantName={currentPatientName}
                   />
                 </motion.div>

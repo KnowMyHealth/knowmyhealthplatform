@@ -1,9 +1,11 @@
+// frontend/app/layout.tsx
 import type {Metadata} from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
-import './globals.css'; // Global styles
+import './globals.css'; 
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Chatbot from '@/components/Chatbot';
+import PatientProfileManager from '@/components/PatientProfileManager';
 import { AuthProvider } from '@/lib/AuthContext';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -22,6 +24,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       <body className="antialiased min-h-screen flex flex-col bg-emerald-50/50 text-emerald-950 relative overflow-x-hidden" suppressHydrationWarning>
         <AuthProvider>
           <Navbar />
+          <PatientProfileManager />
           <main className="flex-1 flex flex-col">
             {children}
           </main>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { Menu, X, LogOut, UserCircle } from 'lucide-react';
+import { Menu, X, LogOut, UserCircle, Settings } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import AuthModal from './AuthModal';
 import { useAuth } from '@/lib/AuthContext';
@@ -83,6 +83,11 @@ export default function Navbar() {
                         Partner Portal
                       </Link>
                     )}
+                    {userRole === 'DOCTOR' && (
+                      <Link href="/doctor" className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md hover:shadow-lg inline-block">
+                        Doctor Portal
+                      </Link>
+                    )}
                     {userRole === 'PATIENT' && (
                       <Link href="/consultations" className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md hover:shadow-lg inline-block">
                         Consultations
@@ -92,7 +97,7 @@ export default function Navbar() {
                       <button 
                         onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
                         className="p-2 text-emerald-700 bg-emerald-50 rounded-full hover:bg-emerald-100 transition-colors flex items-center justify-center"
-                        title="Profile"
+                        title="Profile Menu"
                       >
                         <UserCircle size={22} />
                       </button>
@@ -109,6 +114,17 @@ export default function Navbar() {
                               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Signed in as</p>
                               <p className="text-sm font-bold text-gray-900 truncate">{userRole}</p>
                             </div>
+
+                            {userRole === 'PATIENT' && (
+                              <button 
+                                onClick={() => { window.dispatchEvent(new Event('open-patient-profile')); setIsProfileDropdownOpen(false); }}
+                                className="w-full px-4 py-2.5 text-left text-sm font-medium text-emerald-900 hover:bg-emerald-50 flex items-center space-x-3 transition-colors"
+                              >
+                                <Settings size={16} className="text-emerald-600" />
+                                <span>Edit Profile</span>
+                              </button>
+                            )}
+
                             <button 
                               onClick={() => { logout(); setIsProfileDropdownOpen(false); }}
                               className="w-full px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors"
@@ -176,12 +192,25 @@ export default function Navbar() {
                             Partner Portal
                           </Link>
                         )}
-                        {userRole === 'PATIENT' && (
-                          <Link href="/consultations" onClick={() => setIsOpen(false)} className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center">
-                            Consultations
+                        {userRole === 'DOCTOR' && (
+                          <Link href="/doctor" onClick={() => setIsOpen(false)} className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center">
+                            Doctor Portal
                           </Link>
                         )}
-                        <div className="px-4 py-2 bg-emerald-50 rounded-xl flex items-center justify-between">
+                        {userRole === 'PATIENT' && (
+                          <>
+                            <Link href="/consultations" onClick={() => setIsOpen(false)} className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center mb-2">
+                              Consultations
+                            </Link>
+                            <button 
+                              onClick={() => { window.dispatchEvent(new Event('open-patient-profile')); setIsOpen(false); }}
+                              className="w-full px-6 py-3 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
+                            >
+                              <Settings size={16} /> Edit Profile
+                            </button>
+                          </>
+                        )}
+                        <div className="px-4 py-2 mt-2 bg-emerald-50 rounded-xl flex items-center justify-between">
                           <div className="flex items-center space-x-2 text-emerald-900">
                             <UserCircle size={20} className="text-emerald-600" />
                             <span className="text-sm font-bold">{userRole}</span>

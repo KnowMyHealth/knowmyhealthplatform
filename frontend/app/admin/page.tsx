@@ -85,6 +85,20 @@ interface Coupon {
   valid_until: string | null;
 }
 
+interface PatientObject {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  gender: string;
+  blood_group: string;
+  phone_number: string;
+  address: string;
+  emergency_contact: string;
+  created_at: string;
+}
+
 // --- MOCK DATA FOR OTHER TABS ---
 const stats = [
   { title: 'Total Patients', value: '24,592', trend: '+14.5%', isUp: true },
@@ -96,11 +110,6 @@ const stats = [
 const mockLabs = [
   { id: 1, name: 'Apollo Diagnostics', location: 'New York, NY', tests: 145, status: 'Active' },
   { id: 2, name: 'Metropolis Healthcare', location: 'San Francisco, CA', tests: 89, status: 'Active' },
-];
-
-const mockPatients = [
-  { id: 1, name: 'Alice Cooper', email: 'alice.c@example.com', joined: 'Oct 12, 2023', consults: 4 },
-  { id: 2, name: 'Marcus Johnson', email: 'marcus.j@example.com', joined: 'Oct 15, 2023', consults: 1 },
 ];
 
 const navItems = [
@@ -186,6 +195,13 @@ export default function AdminPortal() {
   const [isGeneratingBlog, setIsGeneratingBlog] = useState(false);
   const [blogSuccess, setBlogSuccess] = useState<string | null>(null);
 
+  // --- PATIENTS STATES ---
+  const [patients, setPatients] = useState<PatientObject[]>([]);
+  const [isLoadingPatients, setIsLoadingPatients] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState<PatientObject | null>(null);
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [isLoadingPatientDetails, setIsLoadingPatientDetails] = useState(false);
+
   useEffect(() => {
     fetchAdminDetails();
     fetchAllDoctors();
@@ -204,6 +220,9 @@ export default function AdminPortal() {
     }
     if (activeTab === 'blogs') {
       fetchBlogs();
+    }
+    if (activeTab === 'patients') {
+      fetchPatients();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -855,6 +874,54 @@ export default function AdminPortal() {
       alert("Failed to generate blog via AI. Please check your connection or try again.");
     } finally {
       setIsGeneratingBlog(false);
+    }
+  };
+
+  // --- PATIENTS FETCHING LOGIC ---
+  const fetchPatients = async () => {
+    setIsLoadingPatients(true);
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      if (!token) return;
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/patients/?limit=50`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'ngrok-skip-browser-warning': 'true' 
+        }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPatients(json.data || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch patients", e);
+    } finally {
+      setIsLoadingPatients(false);
+    }
+  };
+
+  const handleViewPatientDetails = async (patientId: string) => {
+    setIsPatientModalOpen(true);
+    setIsLoadingPatientDetails(true);
+    setSelectedPatient(null);
+
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      const res = await fetch(`${BACKEND_URL}/api/v1/patients/${patientId}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'ngrok-skip-browser-warning': 'true' 
+        }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setSelectedPatient(json.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch patient details", error);
+    } finally {
+      setIsLoadingPatientDetails(false);
     }
   };
 
@@ -1864,35 +1931,125 @@ export default function AdminPortal() {
   );
 
   const renderPatients = () => (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
       <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Patients</h2>
-          <p className="text-sm text-slate-500 mt-1">Overview of registered patients.</p>
+          <h2 className="text-xl font-extrabold text-slate-900">Patients Directory</h2>
+          <p className="text-sm text-slate-500 mt-1">Overview of all registered patients in the system.</p>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="flex-1 overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
               <th className="p-4 pl-8">Patient Name</th>
-              <th className="p-4">Email</th>
+              <th className="p-4">Contact</th>
               <th className="p-4">Joined Date</th>
-              <th className="p-4 text-right pr-8">Consults</th>
+              <th className="p-4 text-right pr-8">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {mockPatients.map(p => (
-              <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-4 pl-8 font-bold text-slate-900">{p.name}</td>
-                <td className="p-4 text-sm text-slate-600">{p.email}</td>
-                <td className="p-4 text-sm text-slate-600">{p.joined}</td>
-                <td className="p-4 text-right pr-8 font-bold text-emerald-600">{p.consults}</td>
-              </tr>
-            ))}
+            {isLoadingPatients ? (
+              <tr><td colSpan={4} className="p-8 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></td></tr>
+            ) : patients.length === 0 ? (
+              <tr><td colSpan={4} className="p-8 text-center text-slate-400">No patients registered yet.</td></tr>
+            ) : (
+              patients.map(p => (
+                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4 pl-8">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+                        {getInitials(`${p.first_name} ${p.last_name}`)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">{p.first_name} {p.last_name}</p>
+                        <p className="text-xs text-slate-400 font-medium">{p.gender} • {p.blood_group || 'Blood Group N/A'}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm font-medium text-slate-600">{p.phone_number || 'No Phone Provided'}</td>
+                  <td className="p-4 text-sm font-medium text-slate-600">{formatDate(p.created_at)}</td>
+                  <td className="p-4 text-right pr-8">
+                    <button 
+                      onClick={() => handleViewPatientDetails(p.id)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                    >
+                      <Eye size={14} /> View Profile
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Patient Details Modal */}
+      <AnimatePresence>
+        {isPatientModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsPatientModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                <h2 className="text-xl font-bold text-slate-900">Patient Details</h2>
+                <button onClick={() => setIsPatientModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-6 sm:p-8">
+                {isLoadingPatientDetails ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                    <Loader2 className="animate-spin mb-4 text-emerald-500" size={32} />
+                    <p>Loading details...</p>
+                  </div>
+                ) : selectedPatient ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-4 mb-2">
+                      <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl font-bold shrink-0">
+                        {getInitials(`${selectedPatient.first_name} ${selectedPatient.last_name}`)}
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-slate-900">{selectedPatient.first_name} {selectedPatient.last_name}</h3>
+                        <p className="text-emerald-600 font-medium">Patient ID: {selectedPatient.id.substring(0, 8).toUpperCase()}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Gender</p>
+                        <p className="font-bold text-slate-900">{selectedPatient.gender}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Date of Birth</p>
+                        <p className="font-bold text-slate-900">{selectedPatient.date_of_birth ? formatDate(selectedPatient.date_of_birth) : 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Blood Group</p>
+                        <p className="font-bold text-red-500">{selectedPatient.blood_group || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number</p>
+                        <p className="font-bold text-slate-900">{selectedPatient.phone_number || 'N/A'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Emergency Contact</p>
+                        <p className="font-bold text-slate-900">{selectedPatient.emergency_contact || 'N/A'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Address</p>
+                        <p className="font-medium text-slate-700">{selectedPatient.address || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-10 text-red-500">Failed to load patient data.</div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 
