@@ -1,5 +1,5 @@
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
@@ -23,6 +23,7 @@ class DoctorSchema(BaseModel):
     education: Optional[str] = None
     license_id: str
     license_url: Optional[str] = None
+    video_consultation_enabled: bool
     consultation_fee: Decimal
     years_of_experience: Optional[int] = None
     is_available: bool
@@ -92,6 +93,7 @@ class DoctorUpdateRequest(BaseModel):
     consultation_fee: Optional[Decimal] = None
     years_of_experience: Optional[int] = None
     is_available: Optional[bool] = None
+    video_consultation_enabled: Optional[bool] = None 
 
     class Config:
         extra = "forbid"
@@ -102,3 +104,18 @@ class DoctorUpdateRequest(BaseModel):
 # -------------------------------------------------------------------------
 class DoctorStatusUpdateRequest(BaseModel):
     status: DoctorStatus
+
+
+
+
+
+class AvailabilitySchema(BaseModel):
+    day_of_week: int = Field(..., ge=0, le=6, description="0=Monday, 6=Sunday")
+    start_time: time
+    end_time: time
+
+    class Config:
+        from_attributes = True
+
+class SetAvailabilityRequest(BaseModel):
+    schedule: list[AvailabilitySchema] = Field(..., description="List of time windows")

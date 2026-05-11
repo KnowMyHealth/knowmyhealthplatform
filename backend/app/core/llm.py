@@ -19,6 +19,6 @@ model = GoogleModel(
 )
 
 groq_model = GroqModel(
-    model_name="moonshotai/kimi-k2-instruct-0905",
+    model_name="llama-3.3-70b-versatile",
     provider=groq_provider
 )

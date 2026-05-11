@@ -5,9 +5,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING    
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID, DATE
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID, DATE, TIME
 from sqlalchemy import String, Boolean, ForeignKey, Integer, Text, Enum, func, Numeric
-
 from app.db.base import Base
 
 if TYPE_CHECKING:
@@ -112,6 +111,11 @@ class Doctor(Base):
         "User", 
         back_populates="doctor_profile"
     )
+    availabilities: Mapped[list["DoctorAvailability"]] = relationship(
+        "DoctorAvailability", 
+        back_populates="doctor", 
+        cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return (
@@ -120,3 +124,19 @@ class Doctor(Base):
             f"specialization={self.specialization} "
             f"status={self.status}>"
         )
+    
+
+
+class DoctorAvailability(Base):
+    __tablename__ = "doctor_availability"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    doctor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
+    
+    # 0 = Monday, 1 = Tuesday ... 6 = Sunday (Matches Python's datetime.weekday())
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    
+    start_time: Mapped[datetime.time] = mapped_column(TIME, nullable=False)
+    end_time: Mapped[datetime.time] = mapped_column(TIME, nullable=False)
+
+    doctor: Mapped["Doctor"] = relationship("Doctor", back_populates="availabilities")

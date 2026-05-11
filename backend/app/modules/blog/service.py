@@ -13,7 +13,6 @@ from app.modules.blog.exceptions import BlogError
 
 class BlogService:
     async def generate_blog_draft(self, params: BlogGenerateRequest) -> dict:
-        """Calls the AI Agent to generate a draft (Does NOT save to DB automatically)."""
         try:
             ai_result = await run_blog_agent(
                 research_topic=params.research_topic,

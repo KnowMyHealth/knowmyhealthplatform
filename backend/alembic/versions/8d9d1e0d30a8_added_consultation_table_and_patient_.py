@@ -52,7 +52,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('channel_name')
     )
-    op.add_column('doctors', sa.Column('video_consultation_enabled', sa.Boolean(), nullable=False))
+    op.add_column('doctors', sa.Column('video_consultation_enabled', sa.Boolean(), nullable=False, server_default='true'))
     # ### end Alembic commands ###
 
 

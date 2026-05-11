@@ -4,7 +4,7 @@ import string
 import secrets
 from uuid import UUID
 from loguru import logger
-from sqlalchemy import update, select, func
+from sqlalchemy import update, select, func, delete
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,7 @@ from app.modules.user.schemas import Role
 from app.core.supabase import supabase_admin    
 from app.core.storage import upload_pdf_document
 from app.core.email import send_doctor_invite_email, send_doctor_welcome_email
+from app.modules.doctor.models import DoctorAvailability
 
 class DoctorsService:
     def __init__(self):
@@ -230,5 +231,65 @@ class DoctorsService:
             await db.rollback()
             logger.error(f"Database error updating status for doctor {doctor_id}: {e}")
             raise DoctorUpdateError("A database error occurred while updating the status.")
+        
+
+    async def get_doctor_by_user_id(self, db: AsyncSession, user_id: UUID) -> Doctor:
+        stmt = select(Doctor).where(Doctor.user_id == user_id)
+        result = await db.execute(stmt)
+        doctor = result.scalar_one_or_none()
+        if not doctor:
+            raise DoctorNotFoundError("Doctor profile not found for this user.")
+        return doctor
+
+    async def set_doctor_availability(self, db: AsyncSession, doctor_id: UUID, schedule: list[dict]):
+        """Wipes old schedule and saves the new one."""
+        try:
+            # 1. Delete existing schedule
+            await db.execute(delete(DoctorAvailability).where(DoctorAvailability.doctor_id == doctor_id))
+            
+            # 2. Insert new schedule
+            for slot in schedule:
+                db.add(DoctorAvailability(
+                    doctor_id=doctor_id,
+                    day_of_week=slot["day_of_week"],
+                    start_time=slot["start_time"],
+                    end_time=slot["end_time"]
+                ))
+            
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            raise DoctorUpdateError(f"Failed to save availability: {e}")
+
+    async def get_doctor_availability(self, db: AsyncSession, doctor_id: UUID) -> list[DoctorAvailability]:
+        stmt = select(DoctorAvailability).where(DoctorAvailability.doctor_id == doctor_id).order_by(DoctorAvailability.day_of_week, DoctorAvailability.start_time)
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+    
+    async def update_doctor_profile(self, db: AsyncSession, user_id: UUID, data: dict) -> Doctor:
+        """Updates the doctor's profile using their logged-in User ID."""
+        doctor = await self.get_doctor_by_user_id(db, user_id)
+        
+        if not data:
+            return doctor
+
+        try:
+            stmt = (
+                update(Doctor)
+                .where(Doctor.id == doctor.id)
+                .values(**data)
+                .returning(Doctor)
+            )
+            result = await db.execute(stmt)
+            updated_doctor = result.scalar_one_or_none()
+            
+            await db.commit()
+            logger.info(f"Doctor {doctor.id} updated their profile.")
+            return updated_doctor
+
+        except SQLAlchemyError as e:
+            await db.rollback()
+            logger.error(f"Database error updating doctor profile {doctor.id}: {e}")
+            raise DoctorUpdateError("Failed to update profile due to a database error.")
         
         

@@ -18,13 +18,51 @@ from app.modules.doctor.models import DoctorStatus
 from app.modules.doctor.schemas import (
     DoctorSchema, 
     DoctorCreateRequest,
-    DoctorStatusUpdateRequest
+    DoctorStatusUpdateRequest,
+    DoctorUpdateRequest
 )
 from app.modules.doctor.service import DoctorsService
 from app.modules.doctor.dependencies import get_doctors_service
 from app.utils.pagination import PaginationParams
+from app.modules.doctor.schemas import SetAvailabilityRequest, AvailabilitySchema
 
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
+
+
+@router.post(
+    "/me/availability",
+    summary="Set My Availability (Doctor)",
+    description="Allows the logged-in doctor to set their own schedule."
+)
+@limiter.limit("10/minute")
+async def set_my_availability(
+    request: Request,
+    payload: SetAvailabilityRequest = Body(...),
+    current_user = Depends(RequireRole([Role.DOCTOR])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    # Find the doctor record linked to this user
+    doctor = await service.get_doctor_by_user_id(db, UUID(str(current_user.id)))
+    
+    await service.set_doctor_availability(db, doctor.id, [s.model_dump() for s in payload.schedule])
+    return ApiResponse.success(message="Your availability has been updated.")
+
+
+@router.get(
+    "/me/availability",
+    summary="Get My Availability (Doctor)"
+)
+@limiter.limit("30/minute")
+async def get_my_availability(
+    request: Request,
+    current_user = Depends(RequireRole([Role.DOCTOR])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    doctor = await service.get_doctor_by_user_id(db, UUID(str(current_user.id)))
+    availabilities = await service.get_doctor_availability(db, doctor.id)
+    return ApiResponse.success(data=[AvailabilitySchema.model_validate(a) for a in availabilities])
 
 
 # -------------------------------------------------------------------------
@@ -87,6 +125,33 @@ async def list_approved_doctors(
         total_items=total,
         params=params,
         message="Approved doctors retrieved successfully."
+    )
+
+@router.patch(
+    "/me",
+    summary="Update My Profile (Doctor)",
+    description="Allows the logged-in doctor to update their own profile information (bio, fee, video status, etc)."
+)
+@limiter.limit("20/minute")
+async def update_my_profile(
+    request: Request,
+    payload: DoctorUpdateRequest = Body(...),
+    current_user = Depends(RequireRole([Role.DOCTOR])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    # exclude_unset=True ensures we only update the fields the frontend actually sent
+    update_data = payload.model_dump(exclude_unset=True)
+    
+    updated_doctor = await service.update_doctor_profile(
+        db=db, 
+        user_id=UUID(str(current_user.id)), 
+        data=update_data
+    )
+    
+    return ApiResponse.success(
+        data=DoctorSchema.model_validate(updated_doctor),
+        message="Profile updated successfully."
     )
 
 
@@ -202,4 +267,3 @@ async def approve_doctor_application(
         data=validated_doctor,
         message="Doctor approved and user account created."
     )
-

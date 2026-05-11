@@ -39,7 +39,6 @@ async def generate_blog(
     draft = await service.generate_blog_draft(payload)
     return ApiResponse.success(data=draft, message="Blog drafted successfully. Review and save.")
 
-# --- CRUD OPERATIONS ---
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -65,7 +64,7 @@ async def create_blog(
 async def list_blogs(
     request: Request,
     params: PaginationParams = Depends(),
-    is_published: bool | None = True, # Defaults to only showing published blogs
+    is_published: bool | None = True,
     db: AsyncSession = Depends(get_db),
     service: BlogService = Depends(get_blog_service)
 ):

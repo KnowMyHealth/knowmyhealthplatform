@@ -7,8 +7,10 @@ from app.core.config import settings
 async def drop_enums():
     engine = create_async_engine(settings.DATABASE_URL.get_secret_value())
     commands = [
+        "DROP TYPE IF EXISTS consultationstatus CASCADE;",
         "DROP TYPE IF EXISTS role CASCADE;",
-        "DROP TYPE IF EXISTS doctorstatus CASCADE;"
+        "DROP TYPE IF EXISTS doctorstatus CASCADE;",
+        "DROP TYPE IF EXISTS gender CASCADE;",
     ]
     async with engine.begin() as conn:
         for cmd in commands:
