@@ -112,7 +112,7 @@ export default function Navbar() {
                           >
                             <div className="px-4 py-3 border-b border-gray-100 mb-1">
                               <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Signed in as</p>
-                              <p className="text-sm font-bold text-gray-900 truncate">{userRole}</p>
+                              <p className="text-sm font-bold text-gray-900 truncate">{userRole ?? 'User'}</p>
                             </div>
 
                             {userRole === 'PATIENT' && (
