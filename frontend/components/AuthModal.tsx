@@ -227,10 +227,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         let role = 'PATIENT';
         if (res.ok) {
           const profileData = await res.json();
-          // Ensure exact strict casing match for redirection
           role = String(profileData.data?.role || 'PATIENT').toUpperCase();
+        } else if (isSignIn) {
+          throw new Error('Failed to load your account profile. Please try again.');
         }
-        
+
         login(role);
         onClose();
 
