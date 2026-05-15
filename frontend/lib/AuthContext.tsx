@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         localStorage.setItem('supabase_access_token', session.access_token);
         const role = await fetchUserProfile(session.access_token);
-        setUserRole(role || 'PATIENT');
+        if (role) setUserRole(role);
         setIsLoggedIn(true);
       } else {
         setIsLoggedIn(false);
