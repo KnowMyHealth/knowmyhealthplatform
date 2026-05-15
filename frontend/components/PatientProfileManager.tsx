@@ -91,6 +91,11 @@ export default function PatientProfileManager() {
 
     try {
       const token = localStorage.getItem('supabase_access_token');
+      if (!token) {
+        setMessage({ type: 'error', text: 'Session expired. Please log in again.' });
+        setIsSaving(false);
+        return;
+      }
       const endpoint = mode === 'create' ? '/api/v1/patients/' : '/api/v1/patients/me';
       const method = mode === 'create' ? 'POST' : 'PATCH';
 
