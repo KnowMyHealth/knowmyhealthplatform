@@ -213,7 +213,7 @@ export default function Navbar() {
                         <div className="px-4 py-2 mt-2 bg-emerald-50 rounded-xl flex items-center justify-between">
                           <div className="flex items-center space-x-2 text-emerald-900">
                             <UserCircle size={20} className="text-emerald-600" />
-                            <span className="text-sm font-bold">{userRole}</span>
+                            <span className="text-sm font-bold">{userRole ?? 'User'}</span>
                           </div>
                           <button 
                             onClick={() => { logout(); setIsOpen(false); }}
