@@ -50,10 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         localStorage.setItem('supabase_access_token', session.access_token);
         const role = await fetchUserProfile(session.access_token);
+        if (!isMounted) return;
         setUserRole(role);
         setIsLoggedIn(true);
       }
-      setIsLoading(false);
+      if (isMounted) setIsLoading(false);
     };
 
     initAuth();
