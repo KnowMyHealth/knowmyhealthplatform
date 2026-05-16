@@ -39,21 +39,17 @@ export default function Home() {
   const { isLoggedIn, userRole, isLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect users dynamically based on their role
+  // Only redirect once auth has fully loaded so we know the actual role.
+  // Without !isLoading the effect fires while userRole is still null.
   useEffect(() => {
-    if (isLoggedIn) {
-      if (userRole === 'ADMIN') {
-        router.push('/admin');
-      } else if (userRole === 'PARTNER') {
-        router.push('/partner');
-      } else if (userRole === 'DOCTOR') {
-        router.push('/doctor'); // Redirect to doctor portal
-      }
-    }
-  }, [isLoggedIn, userRole, router]);
+    if (isLoading || !isLoggedIn) return;
+    if (userRole === 'ADMIN') router.push('/admin');
+    else if (userRole === 'PARTNER') router.push('/partner');
+    else if (userRole === 'DOCTOR') router.push('/doctor');
+  }, [isLoggedIn, userRole, isLoading, router]);
 
-  if (isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR')) {
-    return null; // Don't render the landing page while redirecting
+  if (!isLoading && isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR')) {
+    return null;
   }
 
   return (
