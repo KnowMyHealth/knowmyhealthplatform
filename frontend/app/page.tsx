@@ -36,7 +36,7 @@ const testimonials = [
 
 export default function Home() {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-  const { isLoggedIn, userRole } = useAuth();
+  const { isLoggedIn, userRole, isLoading } = useAuth();
   const router = useRouter();
 
   // Redirect users dynamically based on their role
