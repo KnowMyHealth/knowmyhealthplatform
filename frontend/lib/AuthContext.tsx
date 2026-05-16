@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      if (!isMounted) return;
       if (session) {
         localStorage.setItem('supabase_access_token', session.access_token);
         const role = await fetchUserProfile(session.access_token);
