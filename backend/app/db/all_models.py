@@ -7,3 +7,4 @@ from app.modules.coupon.models import Coupon
 from app.modules.symptom_checker.models import SymptomAssessment, SymptomAssessmentRecommendation
 from app.modules.patient.models import Patient
 from app.modules.consultation.models import Consultation
+from app.modules.partner.models import Partner

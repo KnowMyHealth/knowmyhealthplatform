@@ -28,14 +28,8 @@ router = APIRouter(prefix="/consultations", tags=["Video Consultations"])
     summary="Book a video consultation (Patient)"
 )
 @limiter.limit("5/minute")
-@router.post(
-    "/book",
-    status_code=status.HTTP_201_CREATED,
-    summary="Book a video consultation (Patient)"
-)
-@limiter.limit("5/minute")
 async def book_consultation(
-    request: Request, # Added request for rate limiter
+    request: Request, 
     payload: BookConsultationRequest = Body(...),
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
