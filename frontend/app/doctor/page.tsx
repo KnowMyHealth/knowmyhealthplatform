@@ -853,9 +853,10 @@ export default function DoctorDashboard() {
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                       <Clock size={16} className="text-emerald-500" /> {timeStr}
                     </div>
-                    <div className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-700">
-                      <Video size={16} className="text-blue-500" /> Video Consult
-                    </div>
+                    {(apt as any).consultation_type === 'OFFLINE'
+                      ? <div className="hidden md:flex items-center gap-2 text-sm font-bold text-amber-600"><MapPin size={16} /> In-Clinic Visit</div>
+                      : <div className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-700"><Video size={16} className="text-blue-500" /> Video Consult</div>
+                    }
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
