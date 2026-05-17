@@ -1231,7 +1231,7 @@ export default function DoctorDashboard() {
 
           {/* Video Call Interface */}
           <AnimatePresence>
-            {isVideoCallActive && agoraInfo && (
+            {isVideoCallActive && agoraInfo && activeCallId && (
               <div className="fixed inset-0 z-[200] flex flex-col">
                 <motion.div 
                   initial={{ opacity: 0, y: 50 }}
