@@ -131,8 +131,7 @@ const navItems = [
   { icon: Stethoscope, label: 'Doctors', id: 'doctors' },
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
-  { icon: Building2, label: 'Partner Labs', id: 'labs' },
-  { icon: Handshake, label: 'Partner Applications', id: 'partners' },
+  { icon: Handshake, label: 'Partners', id: 'partners' },
   { icon: Users, label: 'Patients', id: 'patients' },
   { icon: BookOpen, label: 'Blogs & Insights', id: 'blogs' },
   { icon: Settings, label: 'Settings', id: 'settings' },
@@ -2258,7 +2257,7 @@ export default function AdminPortal() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
         <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900">Partner Applications</h2>
+            <h2 className="text-xl font-extrabold text-slate-900">Partners</h2>
             <p className="text-sm text-slate-500 mt-1">Review and manage incoming partnership requests.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -2555,7 +2554,6 @@ export default function AdminPortal() {
                   {activeTab === 'doctors' && renderDoctors()}
                   {activeTab === 'lab-tests' && renderLabTests()}
                   {activeTab === 'coupons' && renderCoupons()}
-                  {activeTab === 'labs' && renderLabs()}
                   {activeTab === 'partners' && renderPartners()}
                   {activeTab === 'patients' && renderPatients()}
                   {activeTab === 'blogs' && renderBlogs()}
