@@ -357,7 +357,7 @@ export default function DoctorDashboard() {
   const fetchDoctorProfile = async () => {
     let fetchedFirstName = '';
     let fetchedLastName = '';
-    
+
     // Fallback: Get name from Supabase user session
     const { data: { user } } = await supabase.auth.getUser();
     if (user && user.user_metadata) {
@@ -370,12 +370,17 @@ export default function DoctorDashboard() {
       const token = localStorage.getItem('supabase_access_token');
       if (!token) return;
 
-      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
+      const headers = { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' };
+
+      // Step 1: get doctor_id from /users/me
+      const meRes = await fetch(`${BACKEND_URL}/api/v1/users/me`, { headers });
+      if (!meRes.ok) throw new Error('Failed to fetch user profile');
+      const meJson = await meRes.json();
+      const doctorId = meJson.data?.doctor_id;
+      if (!doctorId) throw new Error('No doctor_id on user profile');
+
+      // Step 2: fetch full doctor data using the id
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/${doctorId}`, { headers });
 
       if (res.ok) {
         const json = await res.json();
@@ -397,7 +402,7 @@ export default function DoctorDashboard() {
     } catch (error) {
       console.error("Failed to fetch doctor profile from backend", error);
     }
-    
+
     // If backend fetch fails, populate what we can from user auth session
     setProfileForm(prev => ({ ...prev, first_name: fetchedFirstName, last_name: fetchedLastName }));
     setDoctorName(`${fetchedFirstName} ${fetchedLastName}`.trim() || 'Doctor');
