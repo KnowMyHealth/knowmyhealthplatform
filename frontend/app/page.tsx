@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { ArrowRight, Phone, Activity, HeartPulse, Stethoscope, FileText, Pill, Brain, Star } from 'lucide-react';
+import { ArrowRight, Phone, Activity, HeartPulse, Stethoscope, FileText, Pill, Brain, Star, Building2, Mail, MapPin, Globe, User, CheckCircle2 } from 'lucide-react';
 import Floating3DElements from '@/components/Floating3DElements';
 import StickyCallback from '@/components/StickyCallback';
 import { useState, useEffect } from 'react';
@@ -34,10 +34,45 @@ const testimonials = [
   { name: 'Priya Sharma', role: 'Patient', text: 'The symptom checker accurately recommended the tests I needed. Saved me a lot of time and anxiety.', rating: 4 },
 ];
 
+const PARTNER_TYPES = ['PHARMACY', 'LABORATORY', 'HOSPITAL', 'CLINIC', 'OTHER'] as const;
+
+const defaultPartnerForm = {
+  company_name: '', contact_person: '', email: '', phone: '',
+  partner_type: '' as typeof PARTNER_TYPES[number] | '',
+  address: '', website: '',
+};
+
 export default function Home() {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const { isLoggedIn, userRole, isLoading } = useAuth();
   const router = useRouter();
+  const [partnerForm, setPartnerForm] = useState(defaultPartnerForm);
+  const [partnerStatus, setPartnerStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [partnerError, setPartnerError] = useState('');
+
+  const handlePartnerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPartnerStatus('submitting');
+    setPartnerError('');
+    try {
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${BACKEND_URL}/api/v1/partners/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify(partnerForm),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPartnerStatus('success');
+        setPartnerForm(defaultPartnerForm);
+      } else {
+        throw new Error(data.message || 'Submission failed. Please try again.');
+      }
+    } catch (err) {
+      setPartnerError(err instanceof Error ? err.message : 'Something went wrong.');
+      setPartnerStatus('error');
+    }
+  };
 
   // Only redirect once auth has fully loaded so we know the actual role.
   // Without !isLoading the effect fires while userRole is still null.
@@ -326,6 +361,119 @@ export default function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Partner With Us */}
+      <section className="py-24 relative z-10 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900 overflow-hidden">
+        <div className="absolute top-0 left-0 w-[40vw] h-[40vw] bg-teal-400/10 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-[30vw] h-[30vw] bg-emerald-400/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className="relative z-10 max-w-7xl mx-auto px-6">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            {/* Left: Info */}
+            <div className="space-y-8">
+              <div className="inline-block px-4 py-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20">
+                <span className="text-sm font-bold tracking-wider text-emerald-300 uppercase">Partner Network</span>
+              </div>
+              <h2 className="text-4xl lg:text-5xl font-extrabold text-white leading-tight">
+                Grow Together with <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-emerald-400">Know My Health</span>
+              </h2>
+              <p className="text-emerald-100/70 text-lg leading-relaxed">
+                Join our growing network of pharmacies, laboratories, hospitals, and clinics. Reach thousands of patients actively seeking quality healthcare services.
+              </p>
+              <div className="space-y-4">
+                {[
+                  { icon: Building2, title: 'Pharmacies & Labs', desc: 'Connect with patients needing diagnostics and medicines.' },
+                  { icon: Stethoscope, title: 'Hospitals & Clinics', desc: 'Expand your patient base through our platform.' },
+                  { icon: Activity, title: 'Wellness Brands', desc: 'Promote preventive care and wellness programs.' },
+                ].map(({ icon: Icon, title, desc }) => (
+                  <div key={title} className="flex items-start gap-4 p-4 rounded-2xl bg-white/5 border border-white/10">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <Icon size={20} className="text-emerald-300" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-white">{title}</p>
+                      <p className="text-sm text-emerald-100/60">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right: Form */}
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8">
+              {partnerStatus === 'success' ? (
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center text-center py-12 gap-4">
+                  <div className="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <CheckCircle2 size={40} className="text-emerald-400" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-white">Application Submitted!</h3>
+                  <p className="text-emerald-100/70 max-w-xs">Our partnership team will review your application and reach out to you shortly.</p>
+                  <button onClick={() => setPartnerStatus('idle')} className="mt-4 px-6 py-2.5 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-400 transition-colors">
+                    Submit Another
+                  </button>
+                </motion.div>
+              ) : (
+                <>
+                  <h3 className="text-2xl font-bold text-white mb-2">Partner Application</h3>
+                  <p className="text-emerald-100/60 text-sm mb-8">Fill in your details and we&apos;ll get back to you within 48 hours.</p>
+                  <form onSubmit={handlePartnerSubmit} className="space-y-4">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="relative">
+                        <Building2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none" />
+                        <input required minLength={2} placeholder="Company Name *" value={partnerForm.company_name} onChange={e => setPartnerForm(p => ({ ...p, company_name: e.target.value }))}
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 text-sm" />
+                      </div>
+                      <div className="relative">
+                        <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none" />
+                        <input required minLength={2} placeholder="Contact Person *" value={partnerForm.contact_person} onChange={e => setPartnerForm(p => ({ ...p, contact_person: e.target.value }))}
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 text-sm" />
+                      </div>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="relative">
+                        <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none" />
+                        <input required type="email" placeholder="Email Address *" value={partnerForm.email} onChange={e => setPartnerForm(p => ({ ...p, email: e.target.value }))}
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 text-sm" />
+                      </div>
+                      <div className="relative">
+                        <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none" />
+                        <input required minLength={5} placeholder="Phone Number *" value={partnerForm.phone} onChange={e => setPartnerForm(p => ({ ...p, phone: e.target.value }))}
+                          className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 text-sm" />
+                      </div>
+                    </div>
+                    <select required value={partnerForm.partner_type} onChange={e => setPartnerForm(p => ({ ...p, partner_type: e.target.value as typeof PARTNER_TYPES[number] }))}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 [&>option]:bg-emerald-950 [&>option]:text-white appearance-none"
+                      style={{ color: partnerForm.partner_type ? 'white' : 'rgba(167,243,208,0.4)' }}
+                    >
+                      <option value="" disabled>Partner Type *</option>
+                      {PARTNER_TYPES.map(t => <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>)}
+                    </select>
+                    <div className="relative">
+                      <MapPin size={16} className="absolute left-3.5 top-3.5 text-emerald-400 pointer-events-none" />
+                      <textarea required minLength={5} placeholder="Address *" rows={2} value={partnerForm.address} onChange={e => setPartnerForm(p => ({ ...p, address: e.target.value }))}
+                        className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 text-sm resize-none" />
+                    </div>
+                    <div className="relative">
+                      <Globe size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none" />
+                      <input type="url" placeholder="Website (optional)" value={partnerForm.website} onChange={e => setPartnerForm(p => ({ ...p, website: e.target.value }))}
+                        className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder:text-emerald-300/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 text-sm" />
+                    </div>
+                    {partnerStatus === 'error' && (
+                      <p className="text-red-400 text-sm font-medium">{partnerError}</p>
+                    )}
+                    <button type="submit" disabled={partnerStatus === 'submitting'}
+                      className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {partnerStatus === 'submitting' ? (
+                        <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Submitting...</>
+                      ) : 'Submit Application'}
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </section>

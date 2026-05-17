@@ -1,15 +1,15 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  LayoutDashboard, Users, Stethoscope, Building2, 
-  Settings, Menu, X, CheckCircle2, XCircle, 
+import {
+  LayoutDashboard, Users, Stethoscope, Building2,
+  Settings, Menu, X, CheckCircle2, XCircle,
   TrendingUp, LogOut, Sparkles, Activity, CalendarDays,
   ShieldCheck, MapPin, Mail, Clock, FileText, Loader2, ArrowUpRight,
   ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, Ticket,
   Microscope, Plus, Trash2, AlertCircle, BookOpen, PenTool, Wand2, Tag,
-  Image as ImageIcon, UploadCloud, Eye, Search
+  Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -99,6 +99,20 @@ interface PatientObject {
   created_at: string;
 }
 
+interface PartnerApplication {
+  id: string;
+  company_name: string;
+  contact_person: string;
+  email: string;
+  phone: string;
+  partner_type: 'PHARMACY' | 'LABORATORY' | 'HOSPITAL' | 'CLINIC' | 'OTHER';
+  address: string;
+  website: string | null;
+  status: 'PENDING' | 'CONTACTED' | 'ACCEPTED' | 'REJECTED';
+  created_at: string;
+  updated_at: string;
+}
+
 // --- MOCK DATA FOR OTHER TABS ---
 const stats = [
   { title: 'Total Patients', value: '24,592', trend: '+14.5%', isUp: true },
@@ -118,6 +132,7 @@ const navItems = [
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
   { icon: Building2, label: 'Partner Labs', id: 'labs' },
+  { icon: Handshake, label: 'Partner Applications', id: 'partners' },
   { icon: Users, label: 'Patients', id: 'patients' },
   { icon: BookOpen, label: 'Blogs & Insights', id: 'blogs' },
   { icon: Settings, label: 'Settings', id: 'settings' },
@@ -129,7 +144,7 @@ export default function AdminPortal() {
   const [adminName, setAdminName] = useState<string>(''); 
   const { logout } = useAuth();
 
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
   // Doctor States
   const [allDoctors, setAllDoctors] = useState<DoctorListItem[]>([]);
@@ -142,6 +157,7 @@ export default function AdminPortal() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [actioningId, setActioningId] = useState<string | null>(null);
   const [doctorActionError, setDoctorActionError] = useState<string | null>(null);
 
   // Lab Tests States
@@ -202,6 +218,16 @@ export default function AdminPortal() {
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [isLoadingPatientDetails, setIsLoadingPatientDetails] = useState(false);
 
+  // --- PARTNER APPLICATIONS STATES ---
+  const [partnerApplications, setPartnerApplications] = useState<PartnerApplication[]>([]);
+  const [isLoadingPartners, setIsLoadingPartners] = useState(false);
+  const [partnerFilterStatus, setPartnerFilterStatus] = useState<'ALL' | 'PENDING' | 'CONTACTED' | 'ACCEPTED' | 'REJECTED'>('ALL');
+  const [partnerCurrentPage, setPartnerCurrentPage] = useState(1);
+  const partnersPerPage = 10;
+  const [selectedPartner, setSelectedPartner] = useState<PartnerApplication | null>(null);
+  const [isPartnerPanelOpen, setIsPartnerPanelOpen] = useState(false);
+  const [isUpdatingPartnerStatus, setIsUpdatingPartnerStatus] = useState(false);
+
   useEffect(() => {
     fetchAdminDetails();
     fetchAllDoctors();
@@ -223,6 +249,9 @@ export default function AdminPortal() {
     }
     if (activeTab === 'patients') {
       fetchPatients();
+    }
+    if (activeTab === 'partners') {
+      fetchPartnerApplications();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -925,6 +954,56 @@ export default function AdminPortal() {
     }
   };
 
+  const fetchPartnerApplications = async () => {
+    setIsLoadingPartners(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setIsLoadingPartners(false); return; }
+    try {
+      let all: PartnerApplication[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await fetch(`${BACKEND_URL}/api/v1/partners?page=${page}&limit=100`, {
+          headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+        });
+        if (!res.ok) break;
+        const json = await res.json();
+        const items: PartnerApplication[] = Array.isArray(json.data) ? json.data : [];
+        all = [...all, ...items];
+        hasMore = json.meta?.has_next ?? false;
+        page++;
+      }
+      setPartnerApplications(all);
+    } catch (err) {
+      console.error('Failed to fetch partner applications', err);
+    } finally {
+      setIsLoadingPartners(false);
+    }
+  };
+
+  const updatePartnerStatus = async (partnerId: string, newStatus: PartnerApplication['status']) => {
+    setIsUpdatingPartnerStatus(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setIsUpdatingPartnerStatus(false); return; }
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/partners/${partnerId}/status`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const updated: PartnerApplication = json.data;
+        setPartnerApplications(prev => prev.map(p => p.id === partnerId ? updated : p));
+        setSelectedPartner(updated);
+      }
+    } catch (err) {
+      console.error('Failed to update partner status', err);
+    } finally {
+      setIsUpdatingPartnerStatus(false);
+    }
+  };
+
   const formatDate = (isoString: string) => {
     return new Date(isoString).toLocaleDateString('en-US', {
       month: 'short', day: 'numeric', year: 'numeric'
@@ -939,11 +1018,13 @@ export default function AdminPortal() {
   };
 
   // Pagination filters & arrays
-  const filteredDoctors = allDoctors.filter(doc => 
+  const filteredDoctors = allDoctors.filter(doc =>
     filterStatus === 'all' ? true : doc.status.toLowerCase() === filterStatus.toLowerCase()
   );
   const totalPages = Math.max(1, Math.ceil(filteredDoctors.length / itemsPerPage));
   const paginatedDoctors = filteredDoctors.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const pendingDoctors = allDoctors.filter(doc => doc.status.toLowerCase() === 'pending');
 
   const filteredLabTests = labTests.filter(test => {
     const matchesFilter = testFilterStatus === 'all' 
@@ -968,19 +1049,22 @@ export default function AdminPortal() {
   const renderDashboard = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden group">
-            <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
-            <div className="flex items-end gap-3">
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{stat.value}</h3>
-              <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-                {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
-                {stat.trend}
-              </span>
-            </div>
-            <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
-          </motion.div>
-        ))}
+        {stats.map((stat, i) => {
+          const value = stat.title === 'Pending Verifications' ? String(pendingDoctors.length) : stat.value;
+          return (
+            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden group">
+              <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
+              <div className="flex items-end gap-3">
+                <h3 className="text-3xl font-black text-slate-900 tracking-tight">{value}</h3>
+                <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
+                  {stat.trend}
+                </span>
+              </div>
+              <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
+            </motion.div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -1019,19 +1103,99 @@ export default function AdminPortal() {
           </div>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-emerald-950 rounded-[2rem] p-8 shadow-xl relative overflow-hidden h-fit">
-          <div className="absolute -right-6 -top-6 w-32 h-32 bg-teal-500/20 blur-[30px] rounded-full" />
-          <div className="absolute -left-6 -bottom-6 w-32 h-32 bg-emerald-500/20 blur-[30px] rounded-full" />
-          <div className="relative z-10 text-white">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-bold uppercase tracking-wider mb-4">
-              <Sparkles size={14} className="text-emerald-300" />
-              <span className="text-emerald-100">AI Assistant</span>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="bg-emerald-950 rounded-[2rem] p-6 sm:p-8 shadow-xl relative overflow-hidden">
+          <div className="absolute -right-10 -top-10 w-40 h-40 bg-teal-500/20 blur-[40px] rounded-full pointer-events-none" />
+          <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-emerald-500/20 blur-[40px] rounded-full pointer-events-none" />
+          <div className="absolute right-1/3 top-1/2 w-32 h-32 bg-emerald-400/10 blur-[60px] rounded-full pointer-events-none" />
+
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm">
+                <ShieldCheck size={14} className="text-emerald-300" />
+                <span className="text-emerald-100">Verification Queue</span>
+              </div>
+              {pendingDoctors.length > 0 && (
+                <div className="flex items-center gap-1.5 text-amber-300/90 text-xs font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse" />
+                  Action Required
+                </div>
+              )}
             </div>
-            <h3 className="text-xl font-bold mb-2">Automate Tasks</h3>
-            <p className="text-sm text-emerald-100/70 mb-6">Generate reports, draft partner emails, or analyze platform growth using AI.</p>
-            <button className="w-full py-3 bg-white text-emerald-950 font-bold rounded-xl hover:bg-emerald-50 transition-colors shadow-lg">
-              Open AI Console
-            </button>
+
+            <div className="flex items-baseline gap-3 mb-1">
+              <h3 className="text-5xl font-black text-white tracking-tighter">{pendingDoctors.length}</h3>
+              <span className="text-sm text-emerald-100/70 font-medium">awaiting review</span>
+            </div>
+            <p className="text-sm text-emerald-100/60 mb-6">Approve or reject doctor applications inline.</p>
+
+            {isLoadingDocs ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="animate-spin text-emerald-300" />
+              </div>
+            ) : pendingDoctors.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center mb-3">
+                  <CheckCircle2 size={24} className="text-emerald-300" />
+                </div>
+                <p className="text-sm font-bold text-white">All caught up</p>
+                <p className="text-xs text-emerald-100/60 mt-1">No verifications pending right now.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5 mb-5">
+                {pendingDoctors.slice(0, 3).map(doc => (
+                  <motion.div
+                    key={doc.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="group flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all backdrop-blur-sm"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center font-black text-emerald-950 text-sm shrink-0">
+                      {getInitials(`${doc.first_name} ${doc.last_name}`)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-white truncate">Dr. {doc.first_name} {doc.last_name}</p>
+                      <p className="text-xs text-emerald-100/60 font-medium truncate">{doc.specialization}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={async () => {
+                          setActioningId(doc.id);
+                          await handleRejectDoctor(doc.id);
+                          setActioningId(null);
+                        }}
+                        disabled={actioningId !== null}
+                        className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 flex items-center justify-center text-red-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Reject"
+                      >
+                        {actioningId === doc.id && isRejecting ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setActioningId(doc.id);
+                          await handleApproveDoctor(doc.id);
+                          setActioningId(null);
+                        }}
+                        disabled={actioningId !== null}
+                        className="w-8 h-8 rounded-lg bg-emerald-400/20 border border-emerald-400/30 hover:bg-emerald-400/30 flex items-center justify-center text-emerald-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Approve"
+                      >
+                        {actioningId === doc.id && isApproving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+
+            {pendingDoctors.length > 0 && (
+              <button
+                onClick={() => { setActiveTab('doctors'); setFilterStatus('pending'); }}
+                className="w-full py-3 bg-white text-emerald-950 font-bold rounded-xl hover:bg-emerald-50 transition-colors shadow-lg flex items-center justify-center gap-2 group"
+              >
+                {pendingDoctors.length > 3 ? `View all ${pendingDoctors.length} pending` : 'Open verification queue'}
+                <ArrowUpRight size={16} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </button>
+            )}
           </div>
         </motion.div>
       </div>
@@ -2053,6 +2217,189 @@ export default function AdminPortal() {
     </motion.div>
   );
 
+  const renderPartners = () => {
+    const PARTNER_STATUS_COLORS: Record<PartnerApplication['status'], string> = {
+      PENDING:   'bg-yellow-50 text-yellow-700 border-yellow-200',
+      CONTACTED: 'bg-blue-50 text-blue-700 border-blue-200',
+      ACCEPTED:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+      REJECTED:  'bg-red-50 text-red-600 border-red-200',
+    };
+    const filtered = partnerFilterStatus === 'ALL'
+      ? partnerApplications
+      : partnerApplications.filter(p => p.status === partnerFilterStatus);
+    const totalPages = Math.ceil(filtered.length / partnersPerPage);
+    const paginated = filtered.slice((partnerCurrentPage - 1) * partnersPerPage, partnerCurrentPage * partnersPerPage);
+
+    return (
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
+        <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+          <div>
+            <h2 className="text-xl font-extrabold text-slate-900">Partner Applications</h2>
+            <p className="text-sm text-slate-500 mt-1">Review and manage incoming partnership requests.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['ALL', 'PENDING', 'CONTACTED', 'ACCEPTED', 'REJECTED'] as const).map(s => (
+              <button key={s} onClick={() => { setPartnerFilterStatus(s); setPartnerCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wide transition-colors border ${
+                  partnerFilterStatus === s
+                    ? s === 'PENDING' ? 'bg-yellow-100 text-yellow-700 border-yellow-300'
+                    : s === 'CONTACTED' ? 'bg-blue-100 text-blue-700 border-blue-300'
+                    : s === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                    : s === 'REJECTED' ? 'bg-red-100 text-red-600 border-red-300'
+                    : 'bg-slate-800 text-white border-slate-800'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                }`}>
+                {s === 'ALL' ? `All (${partnerApplications.length})` : s.charAt(0) + s.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                <th className="p-4 pl-8">Company</th>
+                <th className="p-4">Type</th>
+                <th className="p-4">Contact</th>
+                <th className="p-4">Applied</th>
+                <th className="p-4">Status</th>
+                <th className="p-4 text-right pr-8">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoadingPartners ? (
+                <tr><td colSpan={6} className="p-8 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></td></tr>
+              ) : paginated.length === 0 ? (
+                <tr><td colSpan={6} className="p-8 text-center text-slate-400">No applications found.</td></tr>
+              ) : paginated.map(partner => (
+                <tr key={partner.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4 pl-8">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
+                        {getInitials(partner.company_name)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900">{partner.company_name}</p>
+                        <p className="text-xs text-slate-400">{partner.contact_person}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <span className="px-2.5 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase rounded-md border border-slate-200">
+                      {partner.partner_type}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <p className="text-sm text-slate-600 font-medium">{partner.email}</p>
+                    <p className="text-xs text-slate-400">{partner.phone}</p>
+                  </td>
+                  <td className="p-4 text-sm font-medium text-slate-600">{formatDate(partner.created_at)}</td>
+                  <td className="p-4">
+                    <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md border ${PARTNER_STATUS_COLORS[partner.status]}`}>
+                      {partner.status}
+                    </span>
+                  </td>
+                  <td className="p-4 text-right pr-8">
+                    <button onClick={() => { setSelectedPartner(partner); setIsPartnerPanelOpen(true); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
+                      <Eye size={14} /> Review
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between">
+            <p className="text-sm text-slate-500">Page {partnerCurrentPage} of {totalPages}</p>
+            <div className="flex gap-2">
+              <button onClick={() => setPartnerCurrentPage(p => Math.max(1, p - 1))} disabled={partnerCurrentPage === 1}
+                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+                <ChevronLeft size={16} />
+              </button>
+              <button onClick={() => setPartnerCurrentPage(p => Math.min(totalPages, p + 1))} disabled={partnerCurrentPage === totalPages}
+                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Partner Detail Panel */}
+        <AnimatePresence>
+          {isPartnerPanelOpen && selectedPartner && (
+            <>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setIsPartnerPanelOpen(false)}
+                className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110]" />
+              <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                className="fixed top-0 right-0 h-full w-full max-w-lg bg-white shadow-2xl z-[120] flex flex-col">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <h2 className="text-lg font-extrabold text-slate-900">Partner Details</h2>
+                  <button onClick={() => setIsPartnerPanelOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl font-bold shrink-0">
+                      {getInitials(selectedPartner.company_name)}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">{selectedPartner.company_name}</h3>
+                      <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md border ${PARTNER_STATUS_COLORS[selectedPartner.status]}`}>
+                        {selectedPartner.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    {[
+                      { label: 'Contact Person', value: selectedPartner.contact_person, icon: <Briefcase size={14} /> },
+                      { label: 'Partner Type', value: selectedPartner.partner_type, icon: <Tag size={14} /> },
+                      { label: 'Email', value: selectedPartner.email, icon: <Mail size={14} />, span: true },
+                      { label: 'Phone', value: selectedPartner.phone, icon: <Phone size={14} /> },
+                      { label: 'Applied On', value: formatDate(selectedPartner.created_at), icon: <CalendarDays size={14} /> },
+                      { label: 'Address', value: selectedPartner.address, icon: <MapPin size={14} />, span: true },
+                      ...(selectedPartner.website ? [{ label: 'Website', value: selectedPartner.website, icon: <Globe size={14} />, span: true }] : []),
+                    ].map(({ label, value, icon, span }) => (
+                      <div key={label} className={span ? 'col-span-2' : ''}>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">{icon}{label}</p>
+                        <p className="font-semibold text-slate-800 text-sm break-words">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Update Status</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['PENDING', 'CONTACTED', 'ACCEPTED', 'REJECTED'] as const).map(s => (
+                        <button key={s} disabled={isUpdatingPartnerStatus || selectedPartner.status === s}
+                          onClick={() => updatePartnerStatus(selectedPartner.id, s)}
+                          className={`py-2.5 rounded-xl text-sm font-bold transition-colors border disabled:opacity-50 ${
+                            selectedPartner.status === s
+                              ? PARTNER_STATUS_COLORS[s] + ' cursor-default'
+                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                          }`}>
+                          {isUpdatingPartnerStatus && selectedPartner.status !== s ? <Loader2 size={14} className="animate-spin mx-auto" /> : s.charAt(0) + s.slice(1).toLowerCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    );
+  };
+
   const renderSettings = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] p-6 sm:p-8 max-w-2xl mx-auto">
       <h2 className="text-xl font-extrabold text-slate-900 mb-6">System Settings</h2>
@@ -2163,6 +2510,7 @@ export default function AdminPortal() {
                   {activeTab === 'lab-tests' && renderLabTests()}
                   {activeTab === 'coupons' && renderCoupons()}
                   {activeTab === 'labs' && renderLabs()}
+                  {activeTab === 'partners' && renderPartners()}
                   {activeTab === 'patients' && renderPatients()}
                   {activeTab === 'blogs' && renderBlogs()}
                   {activeTab === 'settings' && renderSettings()}
