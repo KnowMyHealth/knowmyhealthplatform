@@ -1239,9 +1239,9 @@ export default function DoctorDashboard() {
                   exit={{ opacity: 0, y: 50 }}
                   className="flex-1 relative flex flex-col"
                 >
-                  <VideoCallInterface 
-                    agoraInfo={agoraInfo} 
-                    consultationId={activeCallId!}
+                  <VideoCallInterface
+                    agoraInfo={agoraInfo}
+                    consultationId={activeCallId}
                     onEndCall={(id) => {
                       setIsVideoCallActive(false);
                       if (id) {
