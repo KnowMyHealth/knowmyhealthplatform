@@ -1,4 +1,4 @@
-// frontend/app/consultations/page.tsx
+﻿// frontend/app/consultations/page.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -20,11 +20,13 @@ interface Doctor {
   specialization: string;
   consultation_fee: number;
   video_consultation_enabled: boolean;
+  offline_consultation_enabled: boolean;
+  clinic_address: string | null;
   is_available: boolean;
   avatar_url: string | null;
   bio: string | null;
   years_of_experience: number;
-  
+
   name: string;
   city: string;
   rating: number;
@@ -262,6 +264,7 @@ export default function ConsultationsPage() {
   const datesScrollRef = useRef<HTMLDivElement>(null);
   
   const [myConsultations, setMyConsultations] = useState<any[]>([]);
+  const [selectedConsultationType, setSelectedConsultationType] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
   const [isBooking, setIsBooking] = useState(false);
   const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
@@ -303,7 +306,7 @@ export default function ConsultationsPage() {
   const fetchMyConsultations = async () => {
     try {
       const token = localStorage.getItem('supabase_access_token');
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const consRes = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -324,7 +327,7 @@ export default function ConsultationsPage() {
       setIsLoading(true);
       try {
         const token = localStorage.getItem('supabase_access_token');
-        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
         
         const res = await fetch(`${BACKEND_URL}/api/v1/doctors/approved?limit=50`, {
           headers: {
@@ -342,13 +345,15 @@ export default function ConsultationsPage() {
             name: `Dr. ${doc.first_name} ${doc.last_name}`,
             image: doc.avatar_url || `https://picsum.photos/seed/doc${index + 10}/200/200`,
             city: 'Virtual / Clinic',
-            rating: 4.8 + (Math.random() * 0.2), 
-            reviews: Math.floor(Math.random() * 200) + 50, 
+            rating: 4.8 + (Math.random() * 0.2),
+            reviews: Math.floor(Math.random() * 200) + 50,
             nextAvailable: doc.is_available ? 'Available Now' : 'Check Schedule',
-            video_consultation_enabled: doc.video_consultation_enabled !== undefined ? doc.video_consultation_enabled : true
+            video_consultation_enabled: doc.video_consultation_enabled !== undefined ? doc.video_consultation_enabled : true,
+            offline_consultation_enabled: doc.offline_consultation_enabled ?? false,
+            clinic_address: doc.clinic_address || null
           }));
-          
-          const enabledDocs = mapped.filter((d: Doctor) => d.video_consultation_enabled);
+
+          const enabledDocs = mapped.filter((d: Doctor) => d.video_consultation_enabled || d.offline_consultation_enabled);
           setDoctors(enabledDocs);
 
           const specs = Array.from(new Set(enabledDocs.map((d: Doctor) => d.specialization))) as string[];
@@ -384,7 +389,8 @@ export default function ConsultationsPage() {
 
   const handleBookClick = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
-    
+    setSelectedConsultationType('ONLINE');
+
     // Set default selected date to today (YYYY-MM-DD local time)
     const today = new Date();
     const tzOffset = today.getTimezoneOffset() * 60000;
@@ -404,7 +410,7 @@ export default function ConsultationsPage() {
       setIsLoadingSlots(true);
       try {
         const token = localStorage.getItem('supabase_access_token');
-        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
         
         // Calculate the timezone offset in minutes and invert the sign to match backend expectations if needed
         const tzOffset = new Date().getTimezoneOffset() * -1;
@@ -442,7 +448,7 @@ export default function ConsultationsPage() {
     
     try {
       const token = localStorage.getItem('supabase_access_token');
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/book`, {
         method: 'POST',
@@ -454,7 +460,8 @@ export default function ConsultationsPage() {
         body: JSON.stringify({
           doctor_id: selectedDoctor.id,
           // selectedTime is already the full ISO string returned from the backend ('2026-04-21T09:00:00+05:30')
-          scheduled_at: selectedTime 
+          scheduled_at: selectedTime,
+          consultation_type: selectedConsultationType
         })
       });
 
@@ -481,7 +488,7 @@ export default function ConsultationsPage() {
     setCurrentDoctorName(doctorName);
     try {
       const token = localStorage.getItem('supabase_access_token');
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/join`, {
         method: 'POST',
@@ -609,8 +616,11 @@ export default function ConsultationsPage() {
                         <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-md">
                           <Image src={docImage} alt={docName} fill className="object-cover" />
                         </div>
-                        <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                          <Video size={14} className="text-emerald-600" />
+                        <div className={`absolute -bottom-2 -right-2 w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-sm ${consultation.consultation_type === 'OFFLINE' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
+                          {consultation.consultation_type === 'OFFLINE'
+                            ? <MapPin size={14} className="text-amber-600" />
+                            : <Video size={14} className="text-emerald-600" />
+                          }
                         </div>
                       </div>
                       <div>
@@ -623,22 +633,29 @@ export default function ConsultationsPage() {
                         </p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => handleJoinCall(consultation.id, docName)}
-                      disabled={isJoiningId === consultation.id || !canJoin}
-                      className={`w-full md:w-auto px-8 py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${
-                        canJoin 
-                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700' 
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      {isJoiningId === consultation.id ? (
-                        <Loader2 className="animate-spin" size={20} />
-                      ) : (
-                        <Video size={20} />
-                      )}
-                      <span>{label}</span>
-                    </button>
+                    {consultation.consultation_type === 'OFFLINE' ? (
+                      <div className="w-full md:w-auto px-8 py-4 rounded-2xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
+                        <MapPin size={20} />
+                        <span>In-Clinic Visit</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleJoinCall(consultation.id, docName)}
+                        disabled={isJoiningId === consultation.id || !canJoin}
+                        className={`w-full md:w-auto px-8 py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${
+                          canJoin
+                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isJoiningId === consultation.id ? (
+                          <Loader2 className="animate-spin" size={20} />
+                        ) : (
+                          <Video size={20} />
+                        )}
+                        <span>{label}</span>
+                      </button>
+                    )}
                   </motion.div>
                 )
               })}
@@ -793,7 +810,39 @@ export default function ConsultationsPage() {
 
                   {bookingStep === 1 ? (
                     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                      
+
+                      {/* Consultation Type Selector */}
+                      {selectedDoctor.offline_consultation_enabled && (
+                        <div className="flex gap-3 mb-6">
+                          <button
+                            onClick={() => setSelectedConsultationType('ONLINE')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
+                              selectedConsultationType === 'ONLINE'
+                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                          >
+                            <Video size={16} /> Video Consult
+                          </button>
+                          <button
+                            onClick={() => setSelectedConsultationType('OFFLINE')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
+                              selectedConsultationType === 'OFFLINE'
+                                ? 'border-amber-500 bg-amber-50 text-amber-700'
+                                : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                          >
+                            <MapPin size={16} /> Visit Clinic
+                          </button>
+                        </div>
+                      )}
+                      {selectedConsultationType === 'OFFLINE' && selectedDoctor.clinic_address && (
+                        <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl mb-6 text-sm text-amber-800">
+                          <MapPin size={15} className="shrink-0 mt-0.5 text-amber-600" />
+                          <span><strong>Clinic:</strong> {selectedDoctor.clinic_address}</span>
+                        </div>
+                      )}
+
                       {/* Interactive Date Carousel */}
                       <div className="flex items-center gap-2 mb-8 border-b border-emerald-100 pb-2">
                         <button onClick={() => scrollDates('left')} className="p-2 border border-emerald-100 rounded-full hover:bg-emerald-50 text-emerald-600 shrink-0 transition-colors">
@@ -910,7 +959,7 @@ export default function ConsultationsPage() {
                       </div>
                       <h3 className="text-2xl font-bold text-emerald-950 mb-2">Confirm Booking</h3>
                       <p className="text-emerald-900/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                        You are about to book an appointment with {selectedDoctor.name} for <br/>
+                        You are about to book a <strong className="text-emerald-900">{selectedConsultationType === 'OFFLINE' ? 'clinic visit' : 'video consultation'}</strong> with {selectedDoctor.name} for <br/>
                         <strong className="text-emerald-900">
                           {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric'})} at {selectedTime && new Date(selectedTime).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'})}
                         </strong>. 
