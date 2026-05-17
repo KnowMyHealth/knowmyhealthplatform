@@ -370,17 +370,15 @@ export default function DoctorDashboard() {
       const token = localStorage.getItem('supabase_access_token');
       if (!token) return;
 
-      const headers = { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' };
+      const headers = { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true', 'Content-Type': 'application/json' };
 
-      // Step 1: get doctor_id from /users/me
-      const meRes = await fetch(`${BACKEND_URL}/api/v1/users/me`, { headers });
-      if (!meRes.ok) throw new Error('Failed to fetch user profile');
-      const meJson = await meRes.json();
-      const doctorId = meJson.data?.doctor_id;
-      if (!doctorId) throw new Error('No doctor_id on user profile');
-
-      // Step 2: fetch full doctor data using the id
-      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/${doctorId}`, { headers });
+      // PATCH /me with empty body — backend uses exclude_unset=True so nothing changes,
+      // but we get the full DoctorSchema back (no GET /doctors/me exists).
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({}),
+      });
 
       if (res.ok) {
         const json = await res.json();
