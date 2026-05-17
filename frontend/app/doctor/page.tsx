@@ -30,6 +30,39 @@ interface DayAvailability {
   end_time: string;
 }
 
+interface PatientProfile {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string | null;
+  gender: string | null;
+  blood_group: string | null;
+  phone_number: string | null;
+  address?: string | null;
+  emergency_contact?: string | null;
+  created_at?: string;
+}
+
+interface PatientListItem {
+  patient: PatientProfile;
+  last_consultation_at: string;
+  total_consultations: number;
+}
+
+interface PatientConsultationHistory {
+  id: string;
+  scheduled_at: string;
+  status: string;
+  consultation_type: string;
+  channel_name: string | null;
+}
+
+interface PatientDetail {
+  patient: PatientProfile;
+  history: PatientConsultationHistory[];
+}
+
 const stats = [
   { title: 'Total Patients', value: '1,248', trend: '+12%', isUp: true },
   { title: "Today's Consults", value: '14', trend: '+2', isUp: true },
@@ -313,6 +346,15 @@ export default function DoctorDashboard() {
 
   const [appointmentFilter, setAppointmentFilter] = useState<'ALL' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'>('ALL');
 
+  // Patient Management States
+  const [patientList, setPatientList] = useState<PatientListItem[]>([]);
+  const [isLoadingPatients, setIsLoadingPatients] = useState(false);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [selectedPatientUserId, setSelectedPatientUserId] = useState<string | null>(null);
+  const [patientDetail, setPatientDetail] = useState<PatientDetail | null>(null);
+  const [isLoadingPatientDetail, setIsLoadingPatientDetail] = useState(false);
+  const [isPatientDetailOpen, setIsPatientDetailOpen] = useState(false);
+
   // Real-time tracker for join buttons
   const [now, setNow] = useState(new Date());
 
@@ -351,6 +393,7 @@ export default function DoctorDashboard() {
     fetchDoctorProfile();
     fetchAppointments();
     fetchAvailability();
+    fetchPatients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -481,6 +524,57 @@ export default function DoctorDashboard() {
     } catch (e) {
       console.error("Failed to fetch availability", e);
     }
+  };
+
+  const fetchPatients = async () => {
+    setIsLoadingPatients(true);
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      if (!token) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/patients`, {
+        headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPatientList(json.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch patients', e);
+    } finally {
+      setIsLoadingPatients(false);
+    }
+  };
+
+  const fetchPatientDetail = async (userIdParam: string) => {
+    setIsLoadingPatientDetail(true);
+    setPatientDetail(null);
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      if (!token) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/patients/${userIdParam}`, {
+        headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPatientDetail(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch patient detail', e);
+    } finally {
+      setIsLoadingPatientDetail(false);
+    }
+  };
+
+  const handleViewPatient = (userId: string) => {
+    setSelectedPatientUserId(userId);
+    setIsPatientDetailOpen(true);
+    fetchPatientDetail(userId);
+  };
+
+  const handleClosePatientPanel = () => {
+    setIsPatientDetailOpen(false);
+    setSelectedPatientUserId(null);
+    setPatientDetail(null);
   };
 
   const handleSaveAvailability = async () => {
@@ -898,64 +992,195 @@ export default function DoctorDashboard() {
     </motion.div>
   );
 
-  const renderPatients = () => (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] overflow-hidden">
-      <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Patient Directory</h2>
-          <p className="text-sm text-slate-500 mt-1">Access patient records, history, and active prescriptions.</p>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Search patients..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 w-full sm:w-72"
-          />
-        </div>
-      </div>
+  const renderPatients = () => {
+    const filtered = patientList.filter(item => {
+      const name = `${item.patient.first_name} ${item.patient.last_name}`.toLowerCase();
+      return name.includes(patientSearchQuery.toLowerCase());
+    });
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50/50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
-              <th className="p-4 pl-8">Patient Name</th>
-              <th className="p-4">Primary Condition</th>
-              <th className="p-4">Last Visit</th>
-              <th className="p-4 pr-8 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {recentPatients.map((patient) => (
-              <tr key={patient.id} className="hover:bg-slate-50/50 transition-colors group cursor-pointer">
-                <td className="p-4 pl-8">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
-                      {getInitials(patient.name)}
-                    </div>
-                    <span className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{patient.name}</span>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <span className="inline-flex px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
-                    {patient.condition}
-                  </span>
-                </td>
-                <td className="p-4 text-sm font-medium text-slate-600">{patient.lastVisit}</td>
-                <td className="p-4 pr-8 text-right">
-                  <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
-                    <FileText size={14} /> Records
+    return (
+      <div className="relative">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] overflow-hidden">
+          <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">Patient Directory</h2>
+              <p className="text-sm text-slate-500 mt-1">{patientList.length} unique patient{patientList.length !== 1 ? 's' : ''} have consulted with you.</p>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search patients..."
+                value={patientSearchQuery}
+                onChange={(e) => setPatientSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 w-full sm:w-72"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            {isLoadingPatients ? (
+              <div className="py-16 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
+            ) : filtered.length === 0 ? (
+              <div className="py-16 text-center text-slate-500 font-medium">
+                {patientSearchQuery ? 'No patients match your search.' : 'No patients yet.'}
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                    <th className="p-4 pl-8">Patient</th>
+                    <th className="p-4">Gender</th>
+                    <th className="p-4">Blood Group</th>
+                    <th className="p-4">Phone</th>
+                    <th className="p-4">Last Visit</th>
+                    <th className="p-4">Visits</th>
+                    <th className="p-4 pr-8 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((item) => {
+                    const { patient } = item;
+                    const fullName = `${patient.first_name} ${patient.last_name}`;
+                    const lastVisit = new Date(item.last_consultation_at).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+                    return (
+                      <tr key={patient.user_id} className="hover:bg-slate-50/50 transition-colors group cursor-pointer" onClick={() => handleViewPatient(patient.user_id)}>
+                        <td className="p-4 pl-8">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
+                              {getInitials(fullName)}
+                            </div>
+                            <span className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{fullName}</span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-sm text-slate-600">{patient.gender || '—'}</td>
+                        <td className="p-4">
+                          {patient.blood_group
+                            ? <span className="inline-flex px-2 py-0.5 rounded-md bg-red-50 text-red-700 text-xs font-bold border border-red-100">{patient.blood_group}</span>
+                            : <span className="text-slate-400 text-sm">—</span>
+                          }
+                        </td>
+                        <td className="p-4 text-sm text-slate-600">{patient.phone_number || '—'}</td>
+                        <td className="p-4 text-sm text-slate-600">{lastVisit}</td>
+                        <td className="p-4 text-sm font-bold text-emerald-700">{item.total_consultations}</td>
+                        <td className="p-4 pr-8 text-right">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleViewPatient(patient.user_id); }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors"
+                          >
+                            <FileText size={14} /> View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Slide-in Patient Detail Panel */}
+        <AnimatePresence>
+          {isPatientDetailOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm"
+                onClick={handleClosePatientPanel}
+              />
+              <motion.div
+                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col overflow-hidden"
+              >
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <h3 className="text-lg font-extrabold text-slate-900">Patient Profile</h3>
+                  <button onClick={handleClosePatientPanel} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+                    <X size={16} />
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  {isLoadingPatientDetail ? (
+                    <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+                  ) : patientDetail ? (
+                    <div className="p-6 space-y-8">
+                      {/* Profile Card */}
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-extrabold text-xl shrink-0">
+                          {getInitials(`${patientDetail.patient.first_name} ${patientDetail.patient.last_name}`)}
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-extrabold text-slate-900">{patientDetail.patient.first_name} {patientDetail.patient.last_name}</h4>
+                          <p className="text-sm text-slate-500 mt-0.5">
+                            {patientDetail.patient.gender || 'Unknown gender'}
+                            {patientDetail.patient.date_of_birth ? ` · Born ${new Date(patientDetail.patient.date_of_birth).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Info Grid */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {[
+                          { label: 'Blood Group', value: patientDetail.patient.blood_group, highlight: true },
+                          { label: 'Phone', value: patientDetail.patient.phone_number },
+                          { label: 'Address', value: patientDetail.patient.address },
+                          { label: 'Emergency Contact', value: patientDetail.patient.emergency_contact },
+                        ].map(({ label, value, highlight }) => (
+                          <div key={label} className={`p-4 rounded-2xl border ${highlight ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">{label}</p>
+                            <p className={`font-bold text-sm ${highlight ? 'text-red-700' : 'text-slate-800'}`}>{value || '—'}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Consultation History */}
+                      <div>
+                        <h5 className="font-extrabold text-slate-900 mb-4">Consultation History <span className="text-slate-400 font-medium text-sm">({patientDetail.history.length})</span></h5>
+                        {patientDetail.history.length === 0 ? (
+                          <p className="text-slate-500 text-sm">No consultations recorded.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {[...patientDetail.history]
+                              .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime())
+                              .map((h) => (
+                                <div key={h.id} className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 bg-white hover:bg-slate-50 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${h.consultation_type === 'OFFLINE' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+                                      {h.consultation_type === 'OFFLINE' ? <MapPin size={16} /> : <Video size={16} />}
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-bold text-slate-800">
+                                        {new Date(h.scheduled_at).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                                      </p>
+                                      <p className="text-xs text-slate-400">
+                                        {new Date(h.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {h.consultation_type === 'OFFLINE' ? 'In-Clinic' : 'Video'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                                    h.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700' :
+                                    h.status === 'CANCELLED' ? 'bg-red-50 text-red-600' :
+                                    'bg-blue-50 text-blue-700'
+                                  }`}>{h.status}</span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-500">Failed to load patient data.</div>
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
-    </motion.div>
-  );
+    );
+  };
 
   const renderAnalytics = () => (
     <div className="space-y-8">
