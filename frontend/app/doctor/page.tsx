@@ -820,11 +820,19 @@ export default function DoctorDashboard() {
             {isLoadingAppointments ? (
               <div className="py-10 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
             ) : (() => {
+              const getSortPriority = (apt: any) => {
+                if (apt.status === 'SCHEDULED') {
+                  const { label } = getJoinStatus(apt.scheduled_at);
+                  return label === 'Expired' ? 2 : 0;
+                }
+                if (apt.status === 'COMPLETED') return 1;
+                return 3; // CANCELLED
+              };
               const filteredAppointments = appointments
                 .filter(apt => appointmentFilter === 'ALL' || apt.status === appointmentFilter)
                 .sort((a, b) => {
-                  if (a.status === 'SCHEDULED' && b.status !== 'SCHEDULED') return -1;
-                  if (a.status !== 'SCHEDULED' && b.status === 'SCHEDULED') return 1;
+                  const pa = getSortPriority(a), pb = getSortPriority(b);
+                  if (pa !== pb) return pa - pb;
                   return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
                 });
               return filteredAppointments.length === 0 ? (
