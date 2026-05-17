@@ -3,12 +3,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  LayoutDashboard, Users, Calendar, Wallet, 
-  Settings, Menu, X, Video, Clock, TrendingUp, 
-  LogOut, Star, FileText, Search, 
+import {
+  LayoutDashboard, Users, Calendar, Wallet,
+  Settings, Menu, X, Video, Clock, TrendingUp,
+  LogOut, Star, FileText, Search,
   ChevronRight, Phone, MessageSquare, Mic, MicOff, VideoOff, XCircle,
-  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2, AlertCircle, Save
+  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2, AlertCircle, Save, MapPin
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -304,7 +304,9 @@ export default function DoctorDashboard() {
     last_name: '',
     consultation_fee: 1500,
     bio: '',
-    video_consultation_enabled: true
+    video_consultation_enabled: true,
+    offline_consultation_enabled: false,
+    clinic_address: ''
   });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
@@ -384,7 +386,9 @@ export default function DoctorDashboard() {
             last_name: docData.last_name || fetchedLastName,
             consultation_fee: docData.consultation_fee || 1500,
             bio: docData.bio || '',
-            video_consultation_enabled: docData.video_consultation_enabled ?? true
+            video_consultation_enabled: docData.video_consultation_enabled ?? true,
+            offline_consultation_enabled: docData.offline_consultation_enabled ?? false,
+            clinic_address: docData.clinic_address || ''
           });
           setDoctorName(`${docData.first_name || fetchedFirstName} ${docData.last_name || fetchedLastName}`.trim() || 'Doctor');
           return;
@@ -411,7 +415,9 @@ export default function DoctorDashboard() {
         last_name: profileForm.last_name,
         consultation_fee: Number(profileForm.consultation_fee),
         bio: profileForm.bio,
-        video_consultation_enabled: profileForm.video_consultation_enabled
+        video_consultation_enabled: profileForm.video_consultation_enabled,
+        offline_consultation_enabled: profileForm.offline_consultation_enabled,
+        clinic_address: profileForm.clinic_address || null
       };
 
       const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
@@ -822,6 +828,9 @@ export default function DoctorDashboard() {
                     <div>
                       <h4 className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">{patientLabel}</h4>
                       <p className={`text-xs font-bold uppercase tracking-wider ${apt.status === 'COMPLETED' ? 'text-emerald-600' : apt.status === 'CANCELLED' ? 'text-red-500' : 'text-blue-500'}`}>{apt.status}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">
+                        {(apt as any).consultation_type === 'OFFLINE' ? 'In-Clinic' : 'Video'}
+                      </p>
                     </div>
                   </div>
 
@@ -836,18 +845,24 @@ export default function DoctorDashboard() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     {apt.status === 'SCHEDULED' && (
-                      <button 
-                        onClick={() => handleJoinCall(apt.id, patientLabel)}
-                        disabled={isJoiningId === apt.id || !canJoin}
-                        className={`px-6 py-2.5 text-sm font-bold rounded-xl transition-colors flex items-center gap-2 ${
-                          canJoin 
-                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' 
-                            : 'bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed'
-                        }`}
-                      >
-                        {isJoiningId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Video size={16} />} 
-                        {label}
-                      </button>
+                      (apt as any).consultation_type === 'OFFLINE' ? (
+                        <span className="px-6 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
+                          <MapPin size={16} /> In-Clinic Visit
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleJoinCall(apt.id, patientLabel)}
+                          disabled={isJoiningId === apt.id || !canJoin}
+                          className={`px-6 py-2.5 text-sm font-bold rounded-xl transition-colors flex items-center gap-2 ${
+                            canJoin
+                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              : 'bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed'
+                          }`}
+                        >
+                          {isJoiningId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Video size={16} />}
+                          {label}
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
@@ -1113,12 +1128,24 @@ export default function DoctorDashboard() {
                   <span className="text-sm font-bold text-slate-700">Enable Video Consultations</span>
                 </label>
               </div>
+              <div className="flex items-center pt-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={profileForm.offline_consultation_enabled} onChange={e => setProfileForm({...profileForm, offline_consultation_enabled: e.target.checked})} className="w-5 h-5 accent-emerald-600 rounded" />
+                  <span className="text-sm font-bold text-slate-700">Enable In-Clinic Visits</span>
+                </label>
+              </div>
             </div>
-            
+
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Professional Bio</label>
               <textarea rows={4} value={profileForm.bio} onChange={e => setProfileForm({...profileForm, bio: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900 resize-none" placeholder="Briefly describe your experience and specialization..." />
             </div>
+            {profileForm.offline_consultation_enabled && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Clinic Address</label>
+                <input type="text" value={profileForm.clinic_address} onChange={e => setProfileForm({...profileForm, clinic_address: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-medium text-slate-900" placeholder="e.g. 123 Medical Plaza, Suite 4B, New York" />
+              </div>
+            )}
 
             <div className="flex justify-end">
               <button type="submit" disabled={isSavingProfile} className="px-8 py-4 bg-emerald-950 text-white rounded-xl font-bold hover:bg-emerald-900 transition-colors shadow-lg flex items-center gap-2 disabled:opacity-70">
