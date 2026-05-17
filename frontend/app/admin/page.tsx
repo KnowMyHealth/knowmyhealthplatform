@@ -2401,7 +2401,7 @@ export default function AdminPortal() {
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Update Status</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {(['PENDING', 'CONTACTED', 'ACCEPTED', 'REJECTED'] as const).map(s => (
+                      {(['ACCEPTED', 'REJECTED'] as const).map(s => (
                         <button key={s} disabled={isUpdatingPartnerStatus || selectedPartner.status === s}
                           onClick={() => updatePartnerStatus(selectedPartner.id, s)}
                           className={`py-2.5 rounded-xl text-sm font-bold transition-colors border disabled:opacity-50 ${
