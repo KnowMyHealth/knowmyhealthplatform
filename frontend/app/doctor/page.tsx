@@ -309,6 +309,8 @@ export default function DoctorDashboard() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
 
+  const [appointmentFilter, setAppointmentFilter] = useState<'ALL' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+
   // Real-time tracker for join buttons
   const [now, setNow] = useState(new Date());
 
@@ -775,13 +777,38 @@ export default function DoctorDashboard() {
 
       <div className="p-6 sm:p-8">
         <div className="space-y-6">
-          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">All Consultations</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {(['ALL', 'SCHEDULED', 'COMPLETED', 'CANCELLED'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setAppointmentFilter(f)}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide transition-colors ${
+                  appointmentFilter === f
+                    ? f === 'SCHEDULED' ? 'bg-blue-100 text-blue-700'
+                    : f === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700'
+                    : f === 'CANCELLED' ? 'bg-red-100 text-red-600'
+                    : 'bg-slate-800 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
           <div className="grid gap-4">
             {isLoadingAppointments ? (
               <div className="py-10 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
-            ) : appointments.length === 0 ? (
+            ) : (() => {
+              const filteredAppointments = appointments
+                .filter(apt => appointmentFilter === 'ALL' || apt.status === appointmentFilter)
+                .sort((a, b) => {
+                  if (a.status === 'SCHEDULED' && b.status !== 'SCHEDULED') return -1;
+                  if (a.status !== 'SCHEDULED' && b.status === 'SCHEDULED') return 1;
+                  return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+                });
+              return filteredAppointments.length === 0 ? (
               <div className="py-10 text-center text-slate-500 font-medium">No consultations found.</div>
-            ) : appointments.map((apt) => {
+            ) : filteredAppointments.map((apt) => {
               const timeStr = new Date(apt.scheduled_at).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
               const patientLabel = `Patient ${apt.patient_user_id.substring(0, 6)}`;
               const { canJoin, label } = getJoinStatus(apt.scheduled_at);
@@ -825,7 +852,7 @@ export default function DoctorDashboard() {
                   </div>
                 </div>
               )
-            })}
+            })})()}
           </div>
         </div>
       </div>
