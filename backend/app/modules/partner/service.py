@@ -1,6 +1,6 @@
 from uuid import UUID
 from loguru import logger
-from sqlalchemy import update, select, func
+from sqlalchemy import update, select, func, delete
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,3 +73,18 @@ class PartnerService:
             await db.rollback()
             logger.error(f"Error updating partner status: {e}")
             raise PartnerUpdateError("Database error while updating status.")
+        
+    async def delete_partner(self, db: AsyncSession, partner_id: UUID) -> None:
+        try:
+            stmt = delete(Partner).where(Partner.id == partner_id)
+            result = await db.execute(stmt)
+            
+            if result.rowcount == 0:
+                raise PartnerNotFoundError("Partner application not found.")
+                
+            await db.commit()
+            logger.info(f"Deleted partner application {partner_id}")
+        except SQLAlchemyError as e:
+            await db.rollback()
+            logger.error(f"Error deleting partner: {e}")
+            raise PartnerUpdateError("Failed to delete partner application.")

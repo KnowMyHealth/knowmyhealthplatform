@@ -95,3 +95,20 @@ async def update_partner_status(
         data=PartnerSchema.model_validate(updated_partner),
         message="Partner status updated."
     )
+
+
+@router.delete(
+    "/{partner_id}", 
+    summary="Delete Partner Application (Admin)",
+    description="Permanently deletes a partner application."
+)
+@limiter.limit("10/minute")
+async def delete_partner(
+    request: Request,
+    partner_id: UUID,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: PartnerService = Depends(get_partner_service)
+):
+    await service.delete_partner(db, partner_id)
+    return ApiResponse.no_content()
