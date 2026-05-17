@@ -357,7 +357,7 @@ export default function DoctorDashboard() {
   const fetchDoctorProfile = async () => {
     let fetchedFirstName = '';
     let fetchedLastName = '';
-    
+
     // Fallback: Get name from Supabase user session
     const { data: { user } } = await supabase.auth.getUser();
     if (user && user.user_metadata) {
@@ -370,11 +370,14 @@ export default function DoctorDashboard() {
       const token = localStorage.getItem('supabase_access_token');
       if (!token) return;
 
+      const headers = { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true', 'Content-Type': 'application/json' };
+
+      // PATCH /me with empty body — backend uses exclude_unset=True so nothing changes,
+      // but we get the full DoctorSchema back (no GET /doctors/me exists).
       const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'ngrok-skip-browser-warning': 'true'
-        }
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({}),
       });
 
       if (res.ok) {
@@ -397,7 +400,7 @@ export default function DoctorDashboard() {
     } catch (error) {
       console.error("Failed to fetch doctor profile from backend", error);
     }
-    
+
     // If backend fetch fails, populate what we can from user auth session
     setProfileForm(prev => ({ ...prev, first_name: fetchedFirstName, last_name: fetchedLastName }));
     setDoctorName(`${fetchedFirstName} ${fetchedLastName}`.trim() || 'Doctor');
@@ -714,30 +717,42 @@ export default function DoctorDashboard() {
                     <p className={`text-sm font-medium ${apt.status === 'COMPLETED' ? 'text-emerald-600' : apt.status === 'CANCELLED' ? 'text-red-500' : 'text-slate-500'}`}>{apt.status}</p>
                     <div className="flex items-center gap-3 mt-1 sm:hidden">
                       <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1"><Clock size={12}/> {timeStr}</span>
-                      <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">Video Consult</span>
+                      {(apt as any).consultation_type === 'OFFLINE'
+                        ? <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1"><MapPin size={11}/> In-Clinic</span>
+                        : <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1"><Video size={11}/> Video</span>
+                      }
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="hidden sm:flex flex-1 flex-col items-center justify-center px-4">
                   <span className="text-sm font-bold text-slate-900 flex items-center gap-1.5"><Clock size={14} className="text-emerald-500"/> {timeStr}</span>
-                  <span className="text-xs font-bold text-slate-500">Video Consult</span>
+                  {(apt as any).consultation_type === 'OFFLINE'
+                    ? <span className="text-xs font-bold text-amber-600 flex items-center gap-1"><MapPin size={11}/> In-Clinic Visit</span>
+                    : <span className="text-xs font-bold text-slate-500 flex items-center gap-1"><Video size={11}/> Video Consult</span>
+                  }
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                   {apt.status === 'SCHEDULED' && (
-                    <button 
+                    (apt as any).consultation_type === 'OFFLINE' ? (
+                      <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
+                        <MapPin size={18} /> In-Clinic Visit
+                      </span>
+                    ) : (
+                    <button
                       onClick={() => handleJoinCall(apt.id, patientLabel)}
                       disabled={isJoiningId === apt.id || !canJoin}
                       className={`flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
-                        isNext 
-                          ? (canJoin ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200') 
+                        isNext
+                          ? (canJoin ? 'bg-emerald-600 text-white shadow-md hover:bg-emerald-700' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200')
                           : (canJoin ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 cursor-not-allowed')
                       }`}
                     >
                       {isJoiningId === apt.id ? <Loader2 size={18} className="animate-spin" /> : <Video size={18} />}
                       <span>{label}</span>
                     </button>
+                    )
                   )}
                   {apt.status === 'COMPLETED' && (
                     <span className="px-6 py-2.5 bg-emerald-50 text-emerald-700 font-bold rounded-xl flex items-center gap-2">
@@ -805,11 +820,19 @@ export default function DoctorDashboard() {
             {isLoadingAppointments ? (
               <div className="py-10 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
             ) : (() => {
+              const getSortPriority = (apt: any) => {
+                if (apt.status === 'SCHEDULED') {
+                  const { label } = getJoinStatus(apt.scheduled_at);
+                  return label === 'Expired' ? 2 : 0;
+                }
+                if (apt.status === 'COMPLETED') return 1;
+                return 3; // CANCELLED
+              };
               const filteredAppointments = appointments
                 .filter(apt => appointmentFilter === 'ALL' || apt.status === appointmentFilter)
                 .sort((a, b) => {
-                  if (a.status === 'SCHEDULED' && b.status !== 'SCHEDULED') return -1;
-                  if (a.status !== 'SCHEDULED' && b.status === 'SCHEDULED') return 1;
+                  const pa = getSortPriority(a), pb = getSortPriority(b);
+                  if (pa !== pb) return pa - pb;
                   return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
                 });
               return filteredAppointments.length === 0 ? (
@@ -838,9 +861,10 @@ export default function DoctorDashboard() {
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                       <Clock size={16} className="text-emerald-500" /> {timeStr}
                     </div>
-                    <div className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-700">
-                      <Video size={16} className="text-blue-500" /> Video Consult
-                    </div>
+                    {(apt as any).consultation_type === 'OFFLINE'
+                      ? <div className="hidden md:flex items-center gap-2 text-sm font-bold text-amber-600"><MapPin size={16} /> In-Clinic Visit</div>
+                      : <div className="hidden md:flex items-center gap-2 text-sm font-bold text-slate-700"><Video size={16} className="text-blue-500" /> Video Consult</div>
+                    }
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
