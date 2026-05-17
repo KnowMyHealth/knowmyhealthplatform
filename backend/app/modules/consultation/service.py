@@ -2,10 +2,11 @@
 import uuid
 from uuid import UUID
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.modules.patient.models import Patient
 from app.modules.consultation.models import Consultation, ConsultationStatus, ConsultationType
 from app.modules.doctor.models import Doctor
 from app.modules.consultation.schemas import BookConsultationRequest, AgoraJoinResponse
@@ -74,6 +75,78 @@ class ConsultationService:
         await db.commit()
         await db.refresh(consultation)
         return consultation
+
+    async def list_doctor_patients(self, db: AsyncSession, doctor_user_id: UUID) -> list[dict]:
+        """
+        Returns a list of unique patients who have consulted with this doctor.
+        """
+        # 1. Get the doctor's internal ID
+        doctor = (await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))).scalar_one_or_none()
+        if not doctor:
+            return []
+
+        # 2. Query distinct patients joined with their last consultation date
+        # We group by Patient to get unique records and count how many times they visited
+        stmt = (
+            select(
+                Patient,
+                func.max(Consultation.scheduled_at).label("last_consultation"),
+                func.count(Consultation.id).label("visit_count")
+            )
+            .join(Consultation, Consultation.patient_user_id == Patient.user_id)
+            .where(Consultation.doctor_id == doctor.id)
+            .group_by(Patient.id)
+            .order_by(desc("last_consultation"))
+        )
+        
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        patients_list = []
+        for patient_obj, last_consult, count in rows:
+            patients_list.append({
+                "patient": patient_obj,
+                "last_consultation_at": last_consult,
+                "total_consultations": count
+            })
+
+        return patients_list
+
+    async def get_doctor_patient_detail(self, db: AsyncSession, doctor_user_id: UUID, patient_user_id: UUID) -> dict:
+        # 1. Get the doctor internal ID
+        doctor = (await db.execute(select(Doctor).where(Doctor.user_id == doctor_user_id))).scalar_one_or_none()
+        if not doctor:
+            raise ConsultationAccessDenied("Doctor profile not found.")
+
+        # 2. Verify that this doctor has at least one consultation with this patient
+        # (Medical Privacy: Doctors shouldn't browse patients who haven't booked them)
+        check_stmt = select(Consultation).where(
+            Consultation.doctor_id == doctor.id,
+            Consultation.patient_user_id == patient_user_id
+        ).limit(1)
+        
+        has_consultation = (await db.execute(check_stmt)).scalar_one_or_none()
+        if not has_consultation:
+            raise ConsultationAccessDenied("You do not have permission to view this patient's profile.")
+
+        # 3. Fetch Patient Profile
+        patient_stmt = select(Patient).where(Patient.user_id == patient_user_id)
+        patient = (await db.execute(patient_stmt)).scalar_one_or_none()
+        if not patient:
+            raise ConsultationError("Patient profile is incomplete or not found.", status_code=404)
+
+        # 4. Fetch Consultation History between these two
+        history_stmt = (
+            select(Consultation)
+            .where(Consultation.doctor_id == doctor.id, Consultation.patient_user_id == patient_user_id)
+            .order_by(Consultation.scheduled_at.desc())
+        )
+        history = (await db.execute(history_stmt)).scalars().all()
+
+        return {
+            "patient": patient,
+            "history": list(history)
+        }
 
     async def generate_join_token(self, db: AsyncSession, consultation_id: UUID, user_id: UUID, user_role: str) -> AgoraJoinResponse:
         # 1. Fetch Consultation

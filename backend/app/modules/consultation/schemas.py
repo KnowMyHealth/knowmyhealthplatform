@@ -4,6 +4,17 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Optional
 from app.modules.consultation.models import ConsultationStatus, ConsultationType
+from app.modules.patient.schemas import PatientSchema
+from typing import List
+
+
+class DoctorPatientResponse(BaseModel):
+    patient: PatientSchema
+    last_consultation_at: datetime
+    total_consultations: int
+
+    class Config:
+        from_attributes = True
 
 class ConsultationSchema(BaseModel):
     id: UUID
@@ -17,6 +28,15 @@ class ConsultationSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DoctorPatientDetailResponse(BaseModel):
+    patient: PatientSchema
+    history: List[ConsultationSchema]
+
+    class Config:
+        from_attributes = True
+
 
 class BookConsultationRequest(BaseModel):
     doctor_id: UUID
