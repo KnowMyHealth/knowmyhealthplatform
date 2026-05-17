@@ -566,11 +566,16 @@ export default function DoctorDashboard() {
     setCurrentPatientName(patientName);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
+      if (!session) {
+        alert('Your session has expired. Please log in again.');
+        setIsJoiningId(null);
+        return;
+      }
+
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/join`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
