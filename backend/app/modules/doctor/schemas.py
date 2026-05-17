@@ -1,3 +1,4 @@
+# app/modules/doctor/schemas.py
 from uuid import UUID
 from datetime import datetime, time
 from decimal import Decimal
@@ -24,6 +25,8 @@ class DoctorSchema(BaseModel):
     license_id: str
     license_url: Optional[str] = None
     video_consultation_enabled: bool
+    offline_consultation_enabled: bool
+    clinic_address: Optional[str] = None
     consultation_fee: Decimal
     years_of_experience: Optional[int] = None
     is_available: bool
@@ -34,11 +37,9 @@ class DoctorSchema(BaseModel):
     class Config:
         from_attributes = True
 
-
 # -------------------------------------------------------------------------
 # CREATE SCHEMA
 # -------------------------------------------------------------------------
-
 class DoctorCreateRequest(BaseModel):
     first_name: str
     last_name: str
@@ -78,7 +79,6 @@ class DoctorCreateRequest(BaseModel):
             years_of_experience=years_of_experience
         )
 
-
 # -------------------------------------------------------------------------
 # UPDATE SCHEMA
 # -------------------------------------------------------------------------
@@ -94,19 +94,17 @@ class DoctorUpdateRequest(BaseModel):
     years_of_experience: Optional[int] = None
     is_available: Optional[bool] = None
     video_consultation_enabled: Optional[bool] = None 
+    offline_consultation_enabled: Optional[bool] = None
+    clinic_address: Optional[str] = None
 
     class Config:
         extra = "forbid"
-
 
 # -------------------------------------------------------------------------
 # ADMIN STATUS UPDATE SCHEMA
 # -------------------------------------------------------------------------
 class DoctorStatusUpdateRequest(BaseModel):
     status: DoctorStatus
-
-
-
 
 
 class AvailabilitySchema(BaseModel):

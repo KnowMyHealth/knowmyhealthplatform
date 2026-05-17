@@ -1,3 +1,4 @@
+# app/modules/consultation/models.py
 import uuid
 import enum
 from datetime import datetime
@@ -18,6 +19,10 @@ class ConsultationStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
+class ConsultationType(str, enum.Enum):
+    ONLINE = "ONLINE"
+    OFFLINE = "OFFLINE"
+
 class Consultation(Base):
     __tablename__ = "consultations"
 
@@ -29,9 +34,10 @@ class Consultation(Base):
     
     scheduled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     status: Mapped[ConsultationStatus] = mapped_column(Enum(ConsultationStatus), default=ConsultationStatus.SCHEDULED, nullable=False)
+    consultation_type: Mapped[ConsultationType] = mapped_column(Enum(ConsultationType), default=ConsultationType.ONLINE, nullable=False)
     
-    # The unique Agora channel room name
-    channel_name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    # The unique Agora channel room name (Nullable for OFFLINE consultations)
+    channel_name: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

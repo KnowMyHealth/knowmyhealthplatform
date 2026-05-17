@@ -28,7 +28,7 @@ class Doctor(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"), # Matches User table name
+        ForeignKey("users.id", ondelete="CASCADE"), 
         nullable=True,
         unique=True 
     )
@@ -75,6 +75,15 @@ class Doctor(Base):
         Boolean, 
         default=False, 
         nullable=False
+    )
+    offline_consultation_enabled: Mapped[bool] = mapped_column(
+        Boolean, 
+        default=False, 
+        nullable=False
+    )
+    clinic_address: Mapped[str | None] = mapped_column(
+        Text, 
+        nullable=True
     )
     consultation_fee: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), 
@@ -125,8 +134,6 @@ class Doctor(Base):
             f"status={self.status}>"
         )
     
-
-
 class DoctorAvailability(Base):
     __tablename__ = "doctor_availability"
 
