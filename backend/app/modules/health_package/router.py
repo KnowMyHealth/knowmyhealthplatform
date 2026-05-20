@@ -1,0 +1,93 @@
+from uuid import UUID
+from fastapi import APIRouter, Depends, status, Body, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from loguru import logger
+
+from app.db.deps import get_db
+from app.db.all_models import User
+from app.utils.api_response import ApiResponse
+from app.core.security import RequireRole, get_current_user
+from app.core.rate_limiter import limiter
+from app.utils.pagination import PaginationParams
+from app.modules.user.schemas import Role
+
+from app.modules.health_package.schemas import (
+    HealthPackageSchema, 
+    HealthPackageCreateRequest, 
+    HealthPackageUpdateRequest
+)
+from app.modules.health_package.service import HealthPackageService
+from app.modules.health_package.dependencies import get_health_package_service
+
+router = APIRouter(prefix="/health-packages", tags=["Health Packages"])
+
+# -------------------------------------------------------------------------
+# ADMIN ONLY: CREATE, UPDATE, DELETE
+# -------------------------------------------------------------------------
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Create Health Package (Admin)")
+@limiter.limit("20/minute")
+async def create_package(
+    request: Request,
+    payload: HealthPackageCreateRequest = Body(...),
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: HealthPackageService = Depends(get_health_package_service)
+):
+    package = await service.create_package(db, payload)
+    return ApiResponse.created(data=HealthPackageSchema.model_validate(package))
+
+@router.patch("/{package_id}", summary="Update Health Package (Admin)")
+@limiter.limit("20/minute")
+async def update_package(
+    request: Request,
+    package_id: UUID,
+    payload: HealthPackageUpdateRequest = Body(...),
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: HealthPackageService = Depends(get_health_package_service)
+):
+    update_data = payload.model_dump(exclude_unset=True)
+    updated_package = await service.update_package(db, package_id, update_data)
+    return ApiResponse.success(data=HealthPackageSchema.model_validate(updated_package))
+
+@router.delete("/{package_id}", summary="Delete Health Package (Admin)")
+@limiter.limit("10/minute")
+async def delete_package(
+    request: Request,
+    package_id: UUID,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: HealthPackageService = Depends(get_health_package_service)
+):
+    await service.delete_package(db, package_id)
+    return ApiResponse.no_content()
+
+
+# -------------------------------------------------------------------------
+# PUBLIC/ALL USERS: LIST AND GET DETAILS
+# -------------------------------------------------------------------------
+@router.get("", summary="List Health Packages")
+@limiter.limit("60/minute")
+async def list_packages(
+    request: Request,
+    params: PaginationParams = Depends(),
+    is_active: bool | None = None,
+    current_user = Depends(get_current_user), # Available to logged-in users (patients, admins, etc)
+    db: AsyncSession = Depends(get_db),
+    service: HealthPackageService = Depends(get_health_package_service)
+):
+    items, total = await service.list_packages(db, params, is_active)
+    validated_items = [HealthPackageSchema.model_validate(i) for i in items]
+    return ApiResponse.paginated(items=validated_items, total_items=total, params=params)
+
+@router.get("/{package_id}", summary="Get Health Package Details")
+@limiter.limit("60/minute")
+async def get_package(
+    request: Request,
+    package_id: UUID,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: HealthPackageService = Depends(get_health_package_service)
+):
+    package = await service.get_package_by_id(db, package_id)
+    return ApiResponse.success(data=HealthPackageSchema.model_validate(package))
