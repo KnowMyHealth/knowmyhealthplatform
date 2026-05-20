@@ -28,6 +28,7 @@ export default function Navbar() {
 
   const [isPrescriptionPanelOpen, setIsPrescriptionPanelOpen] = useState(false);
   const [consultationHistory, setConsultationHistory] = useState<any[]>([]);
+  const [doctorsMap, setDoctorsMap] = useState<Record<string, any>>({});
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const { isLoggedIn, userRole, logout, isAuthModalOpen, openAuthModal, closeAuthModal } = useAuth();
@@ -47,12 +48,27 @@ export default function Navbar() {
     try {
       const token = localStorage.getItem('supabase_access_token');
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, {
-        headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        const completed = (json.data as any[])
+
+      const [consRes, docRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/v1/consultations/me`, {
+          headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+        }),
+        fetch(`${BACKEND_URL}/api/v1/doctors/approved?limit=100`, {
+          headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+        }),
+      ]);
+
+      const [consJson, docJson] = await Promise.all([consRes.json(), docRes.json()]);
+
+      if (docJson.success) {
+        const items = Array.isArray(docJson.data) ? docJson.data : (docJson.data?.items ?? []);
+        const map: Record<string, any> = {};
+        for (const d of items) map[d.id] = d;
+        setDoctorsMap(map);
+      }
+
+      if (consRes.ok && consJson.success) {
+        const completed = (consJson.data as any[])
           .filter(c => c.status === 'COMPLETED')
           .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime());
         setConsultationHistory(completed);
@@ -302,102 +318,134 @@ export default function Navbar() {
       <AnimatePresence>
         {isPrescriptionPanelOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-[60]"
+              className="fixed inset-0 bg-emerald-950/50 backdrop-blur-sm z-[60]"
               onClick={() => setIsPrescriptionPanelOpen(false)}
             />
 
-            {/* Drawer */}
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed right-0 top-0 h-full w-full max-w-md bg-white z-[70] shadow-2xl flex flex-col"
+              transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+              className="fixed right-0 top-0 h-full w-full max-w-[420px] bg-white z-[70] shadow-2xl flex flex-col"
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-slate-50/70">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
-                    <FileText size={18} className="text-emerald-700" />
-                  </div>
+              <div className="px-6 pt-6 pb-5 bg-emerald-950 relative overflow-hidden shrink-0">
+                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(rgba(167,243,208,0.3) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+                <div className="absolute top-0 right-0 w-48 h-48 bg-teal-400/10 blur-[60px] rounded-full pointer-events-none" />
+                <div className="relative flex items-center justify-between">
                   <div>
-                    <h2 className="font-extrabold text-slate-900 text-base">My Prescriptions</h2>
-                    <p className="text-xs text-slate-400">Doctor-issued after consultations</p>
+                    <p className="text-emerald-400/70 text-xs font-bold uppercase tracking-widest mb-1">Health Records</p>
+                    <h2 className="font-extrabold text-white text-xl tracking-tight">My Prescriptions</h2>
+                    {!isLoadingHistory && (
+                      <p className="text-emerald-300/60 text-xs mt-1">
+                        {consultationHistory.filter(c => c.prescription_url).length} prescription{consultationHistory.filter(c => c.prescription_url).length !== 1 ? 's' : ''} available
+                      </p>
+                    )}
                   </div>
+                  <button
+                    onClick={() => setIsPrescriptionPanelOpen(false)}
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                  >
+                    <X size={18} className="text-white" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setIsPrescriptionPanelOpen(false)}
-                  className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-100 transition-colors"
-                >
-                  <X size={16} className="text-slate-500" />
-                </button>
               </div>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              <div className="flex-1 overflow-y-auto bg-slate-50/60">
                 {isLoadingHistory ? (
-                  <div className="flex items-center justify-center py-24">
-                    <Loader2 size={36} className="animate-spin text-emerald-500" />
+                  <div className="flex flex-col items-center justify-center py-32">
+                    <Loader2 size={36} className="animate-spin text-emerald-500 mb-3" />
+                    <p className="text-sm text-slate-400 font-medium">Loading your records…</p>
                   </div>
                 ) : consultationHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-24 text-center">
-                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-                      <FileText size={28} className="text-slate-300" />
+                  <div className="flex flex-col items-center justify-center py-32 text-center px-8">
+                    <div className="w-20 h-20 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center mb-5">
+                      <FileText size={32} className="text-slate-300" />
                     </div>
-                    <p className="font-semibold text-slate-500 text-sm">No completed consultations yet.</p>
-                    <p className="text-xs text-slate-400 mt-1">Prescriptions will appear here after a consultation is completed.</p>
+                    <p className="font-bold text-slate-600 text-base mb-1">No prescriptions yet</p>
+                    <p className="text-sm text-slate-400 leading-relaxed">Prescriptions issued by your doctor after a consultation will show up here.</p>
                   </div>
                 ) : (
-                  consultationHistory.map((c) => {
-                    const isOnline = c.consultation_type === 'ONLINE';
-                    const date = new Date(c.scheduled_at);
-                    return (
-                      <motion.div
-                        key={c.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-white border border-slate-200/80 rounded-2xl p-4 flex items-center gap-4 hover:shadow-sm transition-shadow"
-                      >
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${isOnline ? 'bg-blue-50' : 'bg-amber-50'}`}>
-                          {isOnline
-                            ? <Video size={18} className="text-blue-500" />
-                            : <MapPin size={18} className="text-amber-500" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-900 text-sm truncate">
-                            {isOnline ? 'Video Consultation' : 'In-Clinic Visit'}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-0.5">
-                            {date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
-                            {' · '}
-                            {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                        {c.prescription_url ? (
-                          <a
-                            href={c.prescription_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 bg-emerald-900 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 transition-colors"
-                          >
-                            <FileText size={13} />
-                            View
-                            <ExternalLink size={11} />
-                          </a>
-                        ) : (
-                          <span className="shrink-0 px-3 py-2 bg-slate-100 text-slate-400 text-xs font-semibold rounded-xl">
-                            No Rx
-                          </span>
-                        )}
-                      </motion.div>
-                    );
-                  })
+                  <div className="p-4 space-y-3">
+                    {consultationHistory.map((c, i) => {
+                      const doc = doctorsMap[c.doctor_id];
+                      const doctorName = doc ? `Dr. ${doc.first_name} ${doc.last_name}` : 'Your Doctor';
+                      const specialization = doc?.specialization ?? '';
+                      const isOnline = c.consultation_type === 'ONLINE';
+                      const date = new Date(c.scheduled_at);
+                      const hasPrescription = !!c.prescription_url;
+
+                      return (
+                        <motion.div
+                          key={c.id}
+                          initial={{ opacity: 0, y: 14 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                          className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                        >
+                          {/* Card top: doctor info */}
+                          <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-extrabold text-base shrink-0 shadow-sm">
+                              {doctorName.split(' ').filter(Boolean).map(w => w[0]).slice(1, 3).join('')}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-extrabold text-slate-900 text-sm truncate">{doctorName}</p>
+                              {specialization && (
+                                <p className="text-xs text-emerald-600 font-semibold truncate">{specialization}</p>
+                              )}
+                            </div>
+                            {hasPrescription ? (
+                              <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                                Rx Ready
+                              </span>
+                            ) : (
+                              <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wider px-2 py-1 rounded-full bg-slate-100 text-slate-400">
+                                No Rx
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Card bottom: meta + CTA */}
+                          <div className="flex items-center justify-between px-4 pb-4 gap-3">
+                            <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                              <span className={`flex items-center gap-1 px-2 py-1 rounded-lg font-bold ${isOnline ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
+                                {isOnline ? <Video size={11} /> : <MapPin size={11} />}
+                                {isOnline ? 'Video' : 'In-Clinic'}
+                              </span>
+                              <span>
+                                {date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </span>
+                              <span>·</span>
+                              <span>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+
+                            {hasPrescription ? (
+                              <a
+                                href={c.prescription_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 bg-emerald-900 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 transition-colors shadow-sm"
+                              >
+                                <FileText size={13} />
+                                View Rx
+                                <ExternalLink size={11} />
+                              </a>
+                            ) : (
+                              <span className="shrink-0 px-3.5 py-2 bg-slate-100 text-slate-400 text-xs font-semibold rounded-xl">
+                                Pending
+                              </span>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </motion.div>
