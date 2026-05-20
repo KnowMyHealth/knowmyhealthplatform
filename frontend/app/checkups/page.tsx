@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Check, X, ChevronDown, ChevronUp, ArrowRight,
-  Shield, HeartPulse, Phone, Mail, User, Loader2,
+  Heart, Activity, Shield, Microscope, Users, Zap,
+  HeartPulse, Phone, Mail, User, Loader2, Star,
 } from 'lucide-react';
-import Link from 'next/link';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
@@ -16,10 +16,100 @@ interface HealthPackage {
   title: string;
   organization: string;
   description: string | null;
-  price: number;               // original / strikethrough price
-  discount_percentage: number; // e.g. 22.11
+  price: number;
+  discount_percentage: number;
   included_tests: string[];
   is_active: boolean;
+}
+
+/* ─── Category / styling ─────────────────────────────────────────────────── */
+
+type Category = 'Cardiac' | 'Diabetes' | 'Full Body' | 'Cancer' | "Women's Health" | 'Joints';
+
+const CATEGORY_META: Record<Category, {
+  icon: any;
+  iconBg: string;
+  iconText: string;
+  catText: string;
+  checkBg: string;
+  checkText: string;
+  headerGradient: string;
+}> = {
+  Cardiac: {
+    icon: Heart,
+    iconBg: 'bg-rose-100',
+    iconText: 'text-rose-600',
+    catText: 'text-rose-600',
+    checkBg: 'bg-rose-50',
+    checkText: 'text-rose-500',
+    headerGradient: 'from-rose-50 to-white',
+  },
+  Diabetes: {
+    icon: Activity,
+    iconBg: 'bg-sky-100',
+    iconText: 'text-sky-600',
+    catText: 'text-sky-600',
+    checkBg: 'bg-sky-50',
+    checkText: 'text-sky-500',
+    headerGradient: 'from-sky-50 to-white',
+  },
+  'Full Body': {
+    icon: Shield,
+    iconBg: 'bg-emerald-100',
+    iconText: 'text-emerald-700',
+    catText: 'text-emerald-700',
+    checkBg: 'bg-emerald-50',
+    checkText: 'text-emerald-600',
+    headerGradient: 'from-emerald-50 to-white',
+  },
+  Cancer: {
+    icon: Microscope,
+    iconBg: 'bg-violet-100',
+    iconText: 'text-violet-600',
+    catText: 'text-violet-600',
+    checkBg: 'bg-violet-50',
+    checkText: 'text-violet-500',
+    headerGradient: 'from-violet-50 to-white',
+  },
+  "Women's Health": {
+    icon: Users,
+    iconBg: 'bg-pink-100',
+    iconText: 'text-pink-600',
+    catText: 'text-pink-600',
+    checkBg: 'bg-pink-50',
+    checkText: 'text-pink-500',
+    headerGradient: 'from-pink-50 to-white',
+  },
+  Joints: {
+    icon: Zap,
+    iconBg: 'bg-amber-100',
+    iconText: 'text-amber-600',
+    catText: 'text-amber-600',
+    checkBg: 'bg-amber-50',
+    checkText: 'text-amber-600',
+    headerGradient: 'from-amber-50 to-white',
+  },
+};
+
+const CATEGORIES: Category[] = ['Cardiac', 'Diabetes', 'Full Body', 'Cancer', "Women's Health", 'Joints'];
+
+function getCategory(title: string): Category {
+  const t = title.toLowerCase();
+  if (t.includes('heart') || t.includes('cardiac') || t.includes('troponin') || t.includes('cpk')) return 'Cardiac';
+  if (t.includes('diabet') || t.includes('thyroid') || t.includes('hormon') || t.includes('insulin') || t.includes('hba1c')) return 'Diabetes';
+  if (t.includes('cancer') || t.includes('screening') || t.includes('tumor') || t.includes('tumour') || t.includes('psa') || t.includes('oncol')) return 'Cancer';
+  if (t.includes('women') || t.includes('female') || t.includes('mammo') || t.includes('papsmear') || t.includes('pap smear') || t.includes('gynae') || t.includes('gynaec')) return "Women's Health";
+  if (t.includes('arthrit') || t.includes('joint') || t.includes('uric acid') || t.includes('ra factor') || t.includes('bone')) return 'Joints';
+  return 'Full Body';
+}
+
+function getBadge(pkg: HealthPackage): string | null {
+  const t = pkg.title.toLowerCase();
+  if (pkg.price > 20000) return 'Premium';
+  if (t.includes('master')) return 'Most Popular';
+  if (t.includes('executive')) return 'Best Value';
+  if (Math.round(pkg.discount_percentage) >= 38) return 'Best Deal';
+  return null;
 }
 
 function finalPrice(pkg: HealthPackage) {
@@ -28,81 +118,172 @@ function finalPrice(pkg: HealthPackage) {
 
 /* ─── Package Card ───────────────────────────────────────────────────────── */
 
-function PackageCard({ pkg, onEnquire, index }: { pkg: HealthPackage; onEnquire: (p: HealthPackage) => void; index: number }) {
+function PackageCard({ pkg, onEnquire, index }: {
+  pkg: HealthPackage; onEnquire: (p: HealthPackage) => void; index: number;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const discountRounded = Math.round(pkg.discount_percentage);
-  const calculatedPrice = finalPrice(pkg);
+  const category = getCategory(pkg.title);
+  const meta = CATEGORY_META[category];
+  const Icon = meta.icon;
+  const badge = getBadge(pkg);
+  const isFeatured = badge === 'Most Popular';
+  const discount = Math.round(pkg.discount_percentage);
+  const fp = finalPrice(pkg);
   const visibleTests = expanded ? pkg.included_tests : pkg.included_tests.slice(0, 5);
-  const isFeatured = discountRounded >= 40; // packages with big discounts get the dark card
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 32 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-40px' }}
-      transition={{ delay: index * 0.05, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -6, transition: { duration: 0.25 } }}
-      className={`relative flex flex-col rounded-[2rem] overflow-hidden border transition-shadow duration-300 ${
-        isFeatured
-          ? 'bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 border-emerald-700 shadow-[0_30px_60px_-20px_rgba(2,44,34,0.5)] text-white'
-          : 'bg-white border-slate-100/80 shadow-[0_4px_24px_-4px_rgba(2,44,34,0.06)] hover:shadow-[0_20px_40px_-12px_rgba(2,44,34,0.12)]'
-      }`}
-    >
-      {isFeatured && (
-        <div className="absolute top-0 right-0 w-64 h-64 bg-teal-400/10 blur-[80px] rounded-full pointer-events-none" />
-      )}
+  if (isFeatured) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 36 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: '-30px' }}
+        transition={{ delay: index * 0.06, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        whileHover={{ y: -8, transition: { duration: 0.22 } }}
+        className="relative flex flex-col rounded-3xl overflow-hidden border border-emerald-700/60 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 shadow-[0_32px_64px_-20px_rgba(2,44,34,0.6)] group"
+      >
+        {/* Glows */}
+        <div className="absolute top-0 right-0 w-72 h-72 bg-teal-400/10 blur-[90px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-56 h-56 bg-emerald-300/5 blur-[70px] rounded-full pointer-events-none" />
 
-      <div className="p-6 flex-1 flex flex-col relative z-10">
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-4">
-          {pkg.organization ? (
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${
-              isFeatured ? 'bg-white/10 border-white/20 text-emerald-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'
-            }`}>
-              {pkg.organization}
-            </span>
-          ) : <span />}
-          <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-            isFeatured ? 'bg-white text-emerald-800' : 'bg-teal-100 text-teal-700 border border-teal-200'
-          }`}>
-            {discountRounded}% off
-          </span>
+        {/* Badge ribbon */}
+        <div className="absolute top-6 right-0 bg-white text-emerald-900 text-xs font-extrabold px-4 py-1.5 rounded-l-full shadow-lg tracking-wide flex items-center gap-1.5">
+          <Star size={11} className="fill-amber-400 text-amber-400" />
+          Most Popular
         </div>
 
-        {/* Title */}
-        <h3 className={`text-lg font-extrabold leading-snug mb-1 capitalize ${isFeatured ? 'text-white' : 'text-emerald-950'}`}>
-          {pkg.title}
-        </h3>
-        {pkg.description && (
-          <p className={`text-xs mb-3 leading-relaxed ${isFeatured ? 'text-emerald-200/60' : 'text-slate-400'}`}>{pkg.description}</p>
-        )}
+        <div className="relative z-10 p-8 flex-1 flex flex-col">
+          {/* Category icon */}
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center">
+              <Icon size={22} className="text-teal-300" />
+            </div>
+            <div>
+              <p className="text-emerald-400/70 text-xs font-bold uppercase tracking-widest">{category}</p>
+              <p className="text-white/50 text-xs">{pkg.organization}</p>
+            </div>
+          </div>
 
-        {/* Pricing */}
-        <div className="flex items-end gap-2.5 mt-3 mb-5">
-          <span className={`text-3xl font-black tracking-tight ${isFeatured ? 'text-white' : 'text-emerald-950'}`}>
-            ₹{calculatedPrice.toLocaleString('en-IN')}
-          </span>
-          <div className="flex flex-col mb-1">
-            <span className={`text-xs line-through ${isFeatured ? 'text-emerald-300/60' : 'text-slate-400'}`}>₹{pkg.price.toLocaleString('en-IN')}</span>
-            <span className={`text-xs font-extrabold ${isFeatured ? 'text-teal-300' : 'text-emerald-600'}`}>
-              save ₹{(pkg.price - calculatedPrice).toLocaleString('en-IN')}
-            </span>
+          {/* Title */}
+          <h3 className="text-2xl font-extrabold text-white capitalize leading-tight mb-1">{pkg.title}</h3>
+          {pkg.description && <p className="text-emerald-200/40 text-sm mb-5 leading-relaxed">{pkg.description}</p>}
+
+          {/* Pricing */}
+          <div className="flex items-end gap-3 mb-6">
+            <span className="text-4xl font-black text-white tracking-tight">₹{fp.toLocaleString('en-IN')}</span>
+            <div className="mb-1">
+              <p className="text-emerald-300/40 text-sm line-through leading-tight">₹{pkg.price.toLocaleString('en-IN')}</p>
+              <span className="bg-teal-400/20 text-teal-300 text-xs font-extrabold px-2 py-0.5 rounded-full">{discount}% off</span>
+            </div>
+          </div>
+
+          <div className="border-t border-white/[0.07] mb-5" />
+
+          {/* Tests */}
+          <p className="text-emerald-400/50 text-xs font-bold uppercase tracking-wider mb-3">{pkg.included_tests.length} Tests Included</p>
+          <div className="flex-1 space-y-2.5 mb-2">
+            <AnimatePresence initial={false}>
+              {visibleTests.map((test) => (
+                <motion.div key={test}
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                  className="flex items-start gap-2.5 overflow-hidden"
+                >
+                  <div className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Check size={9} className="text-teal-300" strokeWidth={3} />
+                  </div>
+                  <span className="text-sm text-emerald-100/75">{test}</span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {pkg.included_tests.length > 5 && (
+            <button onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 text-xs font-bold text-teal-300 hover:text-white transition-colors mb-5"
+            >
+              {expanded ? <><ChevronUp size={13} /> Show less</> : <><ChevronDown size={13} /> +{pkg.included_tests.length - 5} more tests</>}
+            </button>
+          )}
+
+          <button onClick={() => onEnquire(pkg)}
+            className="mt-auto w-full py-4 rounded-2xl font-bold text-sm bg-white text-emerald-900 hover:bg-emerald-50 transition-all flex items-center justify-center gap-2 group/btn shadow-[0_8px_24px_-8px_rgba(255,255,255,0.2)]"
+          >
+            Enquire Now
+            <ArrowRight size={14} className="group-hover/btn:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  /* Standard card */
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 36 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-30px' }}
+      transition={{ delay: index * 0.06, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ y: -6, transition: { duration: 0.2 } }}
+      className="relative flex flex-col rounded-3xl overflow-hidden border border-slate-200/80 bg-white shadow-[0_4px_20px_-6px_rgba(0,0,0,0.07)] hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.13)] transition-shadow duration-300 group"
+    >
+      {/* Badge ribbon */}
+      {badge && (
+        <div className={`absolute top-5 right-0 text-xs font-extrabold px-3.5 py-1.5 rounded-l-full tracking-wide shadow-sm ${
+          badge === 'Premium'   ? 'bg-slate-900 text-white' :
+          badge === 'Best Value' ? 'bg-teal-700 text-white' :
+          badge === 'Best Deal'  ? 'bg-amber-500 text-white' :
+          'bg-emerald-800 text-white'
+        }`}>
+          {badge}
+        </div>
+      )}
+
+      {/* Gradient header */}
+      <div className={`bg-gradient-to-b ${meta.headerGradient} px-7 pt-7 pb-6`}>
+        <div className="flex items-center gap-3.5 mb-5">
+          <div className={`w-12 h-12 rounded-2xl ${meta.iconBg} flex items-center justify-center shadow-sm`}>
+            <Icon size={22} className={meta.iconText} />
+          </div>
+          <div>
+            <p className={`text-xs font-extrabold uppercase tracking-widest ${meta.catText}`}>{category}</p>
+            {pkg.organization && <p className="text-slate-400 text-xs font-medium">{pkg.organization}</p>}
           </div>
         </div>
 
-        {/* Divider */}
-        <div className={`border-t mb-4 ${isFeatured ? 'border-white/10' : 'border-slate-100'}`} />
+        <h3 className="text-[1.2rem] font-extrabold text-slate-900 capitalize leading-snug group-hover:text-emerald-900 transition-colors">
+          {pkg.title}
+        </h3>
+        {pkg.description && (
+          <p className="text-slate-500 text-xs mt-1.5 leading-relaxed line-clamp-2">{pkg.description}</p>
+        )}
+      </div>
 
-        {/* Tests */}
-        <div className="flex-1 space-y-2.5 mb-3">
+      {/* Pricing */}
+      <div className="mx-6 -mt-2 mb-5 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-end gap-2">
+            <span className="text-3xl font-black text-slate-900 tracking-tight">₹{fp.toLocaleString('en-IN')}</span>
+            <span className="text-sm text-slate-400 line-through mb-0.5">₹{pkg.price.toLocaleString('en-IN')}</span>
+          </div>
+          <span className="bg-emerald-100 text-emerald-700 text-xs font-extrabold px-2.5 py-1 rounded-full">
+            {discount}% off
+          </span>
+        </div>
+      </div>
+
+      {/* Tests */}
+      <div className="px-6 flex-1">
+        <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-3">{pkg.included_tests.length} Tests Included</p>
+        <div className="space-y-2.5 mb-2">
           <AnimatePresence initial={false}>
             {visibleTests.map((test) => (
-              <motion.div key={test} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                className="flex items-start gap-2.5">
-                <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${isFeatured ? 'bg-white/15' : 'bg-emerald-100'}`}>
-                  <Check size={9} className={isFeatured ? 'text-teal-300' : 'text-emerald-600'} strokeWidth={3} />
+              <motion.div key={test}
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="flex items-start gap-2.5 overflow-hidden"
+              >
+                <div className={`w-4 h-4 rounded-full ${meta.checkBg} flex items-center justify-center shrink-0 mt-0.5`}>
+                  <Check size={9} className={meta.checkText} strokeWidth={3} />
                 </div>
-                <span className={`text-sm ${isFeatured ? 'text-emerald-100/80' : 'text-slate-600'}`}>{test}</span>
+                <span className="text-sm text-slate-600">{test}</span>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -110,19 +291,20 @@ function PackageCard({ pkg, onEnquire, index }: { pkg: HealthPackage; onEnquire:
 
         {pkg.included_tests.length > 5 && (
           <button onClick={() => setExpanded(!expanded)}
-            className={`flex items-center gap-1 text-xs font-bold mb-4 transition-colors ${isFeatured ? 'text-teal-300 hover:text-white' : 'text-emerald-600 hover:text-emerald-700'}`}>
+            className={`flex items-center gap-1 text-xs font-bold mt-2 mb-3 transition-colors ${meta.checkText} hover:opacity-70`}
+          >
             {expanded ? <><ChevronUp size={13} /> Show less</> : <><ChevronDown size={13} /> +{pkg.included_tests.length - 5} more tests</>}
           </button>
         )}
+      </div>
 
-        {/* CTA */}
+      {/* CTA */}
+      <div className="p-6 pt-4">
         <button onClick={() => onEnquire(pkg)}
-          className={`w-full mt-auto py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 group/btn ${
-            isFeatured
-              ? 'bg-white text-emerald-900 hover:bg-emerald-50 shadow-[0_10px_20px_-8px_rgba(255,255,255,0.3)]'
-              : 'bg-emerald-900 text-white hover:bg-emerald-950 shadow-[0_8px_16px_-6px_rgba(2,44,34,0.3)]'
-          }`}>
-          Enquire Now <ArrowRight size={14} className="group-hover/btn:translate-x-0.5 transition-transform" />
+          className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-900 text-white hover:bg-emerald-800 transition-colors flex items-center justify-center gap-2 group/btn shadow-[0_8px_24px_-8px_rgba(2,44,34,0.35)] hover:shadow-[0_12px_28px_-8px_rgba(2,44,34,0.45)]"
+        >
+          Enquire Now
+          <ArrowRight size={14} className="group-hover/btn:translate-x-0.5 transition-transform" />
         </button>
       </div>
     </motion.div>
@@ -134,7 +316,10 @@ function PackageCard({ pkg, onEnquire, index }: { pkg: HealthPackage; onEnquire:
 function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => void }) {
   const [form, setForm] = useState({ name: '', phone: '', email: '' });
   const [submitted, setSubmitted] = useState(false);
-  const calculated = finalPrice(pkg);
+  const fp = finalPrice(pkg);
+  const category = getCategory(pkg.title);
+  const meta = CATEGORY_META[category];
+  const Icon = meta.icon;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -144,28 +329,38 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
         initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-        className="relative w-full max-w-md bg-white/90 backdrop-blur-2xl border border-white/60 rounded-[2rem] shadow-[0_30px_60px_-20px_rgba(2,44,34,0.4)] overflow-hidden"
+        className="relative w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-[0_32px_64px_-20px_rgba(2,44,34,0.35)] overflow-hidden"
       >
-        <div className="h-1 w-full bg-gradient-to-r from-emerald-500 to-teal-400" />
-        <div className="p-7">
-          <div className="flex items-start justify-between mb-5">
-            <div>
-              <h3 className="font-extrabold text-emerald-950 text-xl leading-tight capitalize">Book This Package</h3>
-              <p className="text-sm text-slate-400 mt-1 capitalize">{pkg.title}</p>
+        {/* Header */}
+        <div className={`bg-gradient-to-b ${meta.headerGradient} px-7 pt-7 pb-6 border-b border-slate-100`}>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-11 h-11 rounded-2xl ${meta.iconBg} flex items-center justify-center`}>
+                <Icon size={20} className={meta.iconText} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-lg leading-tight">Book This Package</h3>
+                <p className={`text-xs font-bold ${meta.catText}`}>{category} · {pkg.included_tests.length} tests</p>
+              </div>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
-              <X size={15} />
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm">
+              <X size={15} className="text-slate-500" />
             </button>
           </div>
+          <h4 className="mt-4 text-sm font-semibold text-slate-700 capitalize">{pkg.title}</h4>
+        </div>
 
-          <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-100 rounded-2xl mb-6">
+        <div className="p-7">
+          {/* Price summary */}
+          <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl mb-6">
             <div>
-              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">{pkg.included_tests.length} Tests Included</p>
               <p className="text-xs text-slate-400 line-through">₹{pkg.price.toLocaleString('en-IN')}</p>
+              <p className="text-2xl font-black text-slate-900">₹{fp.toLocaleString('en-IN')}</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-black text-emerald-950">₹{calculated.toLocaleString('en-IN')}</p>
-              <p className="text-xs font-extrabold text-emerald-600">{Math.round(pkg.discount_percentage)}% savings</p>
+              <span className="bg-emerald-100 text-emerald-700 text-sm font-extrabold px-3 py-1 rounded-full">
+                {Math.round(pkg.discount_percentage)}% savings
+              </span>
             </div>
           </div>
 
@@ -175,31 +370,31 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
                 { icon: User,  key: 'name',  placeholder: 'Your full name *', type: 'text',  required: true },
                 { icon: Phone, key: 'phone', placeholder: 'Phone number *',   type: 'tel',   required: true },
                 { icon: Mail,  key: 'email', placeholder: 'Email (optional)',  type: 'email', required: false },
-              ].map(({ icon: Icon, key, placeholder, type, required }) => (
+              ].map(({ icon: FieldIcon, key, placeholder, type, required }) => (
                 <div key={key} className="relative">
-                  <Icon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <FieldIcon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type={type} required={required} placeholder={placeholder}
                     value={(form as any)[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
                     className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 placeholder:text-slate-400" />
                 </div>
               ))}
               <button type="submit"
-                className="w-full py-3.5 bg-emerald-900 text-white rounded-2xl font-bold text-sm hover:bg-emerald-950 transition-colors shadow-[0_8px_16px_-6px_rgba(2,44,34,0.4)] flex items-center justify-center gap-2 group mt-1">
+                className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-900 text-white hover:bg-emerald-800 flex items-center justify-center gap-2 group transition-colors mt-1">
                 Request Callback <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
               </button>
               <p className="text-xs text-center text-slate-400">Our health advisor will call you within 30 minutes.</p>
             </form>
           ) : (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center py-4">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Check size={32} className="text-emerald-600" strokeWidth={2.5} />
+              <div className={`w-16 h-16 rounded-full ${meta.checkBg} flex items-center justify-center mx-auto mb-4`}>
+                <Check size={32} className={meta.checkText} strokeWidth={2.5} />
               </div>
-              <h4 className="font-extrabold text-emerald-950 text-lg mb-2">Request Sent!</h4>
+              <h4 className="font-extrabold text-slate-900 text-lg mb-2">Request Sent!</h4>
               <p className="text-sm text-slate-500 leading-relaxed capitalize">
-                We'll call you shortly about the <strong className="text-emerald-900">{pkg.title}</strong>.
+                We'll call you shortly about <strong className="text-emerald-900">{pkg.title}</strong>.
               </p>
               <button onClick={onClose}
-                className="mt-6 px-8 py-2.5 bg-emerald-900 text-white rounded-xl font-bold text-sm hover:bg-emerald-950 transition-colors">
+                className="mt-6 px-8 py-2.5 rounded-xl font-bold text-sm text-white bg-emerald-900 hover:bg-emerald-800 transition-colors">
                 Done
               </button>
             </motion.div>
@@ -210,11 +405,51 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
   );
 }
 
+/* ─── Filter Bar ─────────────────────────────────────────────────────────── */
+
+function FilterBar({ packages, active, onChange }: {
+  packages: HealthPackage[];
+  active: string;
+  onChange: (c: string) => void;
+}) {
+  const countFor = (cat: string) => cat === 'All' ? packages.length : packages.filter(p => getCategory(p.title) === cat).length;
+  return (
+    <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl border-b border-slate-200/60 shadow-sm">
+      <div className="max-w-7xl mx-auto px-6 py-3.5">
+        <div className="flex items-center gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {(['All', ...CATEGORIES] as string[]).map(cat => {
+            const meta = CATEGORY_META[cat as Category];
+            const Icon = meta?.icon;
+            const isActive = active === cat;
+            const count = countFor(cat);
+            return (
+              <button key={cat} onClick={() => onChange(cat)}
+                className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold border transition-all duration-200 ${
+                  isActive
+                    ? 'bg-emerald-900 text-white border-emerald-900 shadow-sm'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'
+                }`}
+              >
+                {Icon && <Icon size={13} className={isActive ? 'text-white' : meta.iconText} />}
+                {cat}
+                <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-bold tabular-nums ${isActive ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
 export default function CheckupsPage() {
   const [packages, setPackages] = useState<HealthPackage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState('All');
   const [enquiringPkg, setEnquiringPkg] = useState<HealthPackage | null>(null);
 
   useEffect(() => {
@@ -227,8 +462,7 @@ export default function CheckupsPage() {
         });
         if (res.ok) {
           const json = await res.json();
-          const items = json.data?.items ?? json.data ?? [];
-          setPackages(items);
+          setPackages(json.data?.items ?? json.data ?? []);
         }
       } catch (e) {
         console.error('Failed to load health packages', e);
@@ -238,6 +472,10 @@ export default function CheckupsPage() {
     };
     load();
   }, []);
+
+  const filtered = activeCategory === 'All'
+    ? packages
+    : packages.filter(p => getCategory(p.title) === activeCategory);
 
   return (
     <ProtectedRoute requiredRole="PATIENT">
@@ -259,36 +497,65 @@ export default function CheckupsPage() {
               </div>
               <h1 className="text-5xl lg:text-6xl font-extrabold text-white tracking-tight leading-[1.1] mb-5">
                 Choose Your{' '}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">Health Package</span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300">
+                  Health Package
+                </span>
               </h1>
               <p className="text-lg text-emerald-300/60 max-w-xl mx-auto leading-relaxed">
                 Comprehensive health checkups tailored to your wellness needs — designed for proactive care and peace of mind.
               </p>
             </motion.div>
+
+            {/* Stats */}
+            {!isLoading && packages.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7 }}
+                className="mt-12 inline-flex items-center divide-x divide-white/[0.06] bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden">
+                {[
+                  { label: 'Packages', value: packages.length },
+                  { label: 'Avg. Discount', value: `${Math.round(packages.reduce((s, p) => s + p.discount_percentage, 0) / packages.length)}%` },
+                  { label: 'Categories', value: CATEGORIES.length },
+                ].map(s => (
+                  <div key={s.label} className="px-8 py-4 text-center">
+                    <p className="text-3xl font-black text-white tabular-nums">{s.value}</p>
+                    <p className="text-emerald-400/60 text-xs font-bold uppercase tracking-[0.12em] mt-1">{s.label}</p>
+                  </div>
+                ))}
+              </motion.div>
+            )}
           </div>
         </section>
 
+        {/* ── Filter Bar ───────────────────────────────────────────────── */}
+        {!isLoading && packages.length > 0 && (
+          <FilterBar packages={packages} active={activeCategory} onChange={setActiveCategory} />
+        )}
+
         {/* ── Package Grid ─────────────────────────────────────────────── */}
         <section className="flex-1 py-16 bg-slate-50/60 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-[50vw] h-[50vw] bg-emerald-50 blur-[120px] rounded-full pointer-events-none opacity-70" />
-          <div className="absolute bottom-0 left-0 w-[30vw] h-[30vw] bg-teal-50 blur-[100px] rounded-full pointer-events-none opacity-70" />
+          <div className="absolute top-0 right-0 w-[50vw] h-[50vw] bg-emerald-50 blur-[120px] rounded-full pointer-events-none opacity-50" />
+          <div className="absolute bottom-0 left-0 w-[30vw] h-[30vw] bg-teal-50 blur-[100px] rounded-full pointer-events-none opacity-50" />
 
           <div className="max-w-7xl mx-auto px-6 relative">
             {isLoading ? (
               <div className="flex items-center justify-center py-32">
                 <Loader2 size={40} className="animate-spin text-emerald-600" />
               </div>
-            ) : packages.length === 0 ? (
-              <div className="text-center py-32">
-                <Shield size={48} className="text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500 font-medium">No packages available right now.</p>
-              </div>
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-32 text-slate-400 font-medium">No packages in this category.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {packages.map((pkg, i) => (
-                  <PackageCard key={pkg.id} pkg={pkg} onEnquire={setEnquiringPkg} index={i} />
-                ))}
-              </div>
+              <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <AnimatePresence mode="popLayout">
+                  {filtered.map((pkg, i) => (
+                    <motion.div key={pkg.id} layout
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.96 }}
+                    >
+                      <PackageCard pkg={pkg} onEnquire={setEnquiringPkg} index={i} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
             )}
           </div>
         </section>
@@ -310,20 +577,26 @@ export default function CheckupsPage() {
                 {packages.length > 0 && (
                   <button onClick={() => setEnquiringPkg(packages[0])}
                     className="group flex items-center justify-center gap-2 px-8 py-4 bg-white text-emerald-900 rounded-full font-semibold hover:bg-emerald-50 transition-all shadow-[0_10px_20px_-10px_rgba(255,255,255,0.3)]">
-                    <Phone size={16} /> Talk to an Advisor
-                    <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+                    <HeartPulse size={18} />
+                    Get a Free Recommendation
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
                   </button>
                 )}
-                <Link href="/" className="flex items-center justify-center gap-2 px-8 py-4 border border-white/20 text-white rounded-full font-semibold hover:bg-white/10 transition-colors">
-                  Back to Home
-                </Link>
+                <a href="tel:+917892934391"
+                  className="group flex items-center justify-center gap-2 px-8 py-4 bg-white/10 border border-white/20 text-white rounded-full font-semibold hover:bg-white/15 transition-all">
+                  <Phone size={16} />
+                  +91 78929 34391
+                </a>
               </div>
             </motion.div>
           </div>
         </section>
 
+        {/* ── Enquire Modal ─────────────────────────────────────────── */}
         <AnimatePresence>
-          {enquiringPkg && <EnquireModal pkg={enquiringPkg} onClose={() => setEnquiringPkg(null)} />}
+          {enquiringPkg && (
+            <EnquireModal pkg={enquiringPkg} onClose={() => setEnquiringPkg(null)} />
+          )}
         </AnimatePresence>
       </div>
     </ProtectedRoute>
