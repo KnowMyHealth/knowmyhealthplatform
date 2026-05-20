@@ -9,7 +9,8 @@ import {
   ShieldCheck, MapPin, Mail, Clock, FileText, Loader2, ArrowUpRight,
   ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, Ticket,
   Microscope, Plus, Trash2, AlertCircle, BookOpen, PenTool, Wand2, Tag,
-  Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone
+  Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone,
+  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -99,6 +100,19 @@ interface PatientObject {
   created_at: string;
 }
 
+interface HealthPackage {
+  id: string;
+  title: string;
+  organization: string;
+  description: string | null;
+  price: number;
+  discount_percentage: number;
+  included_tests: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 interface PartnerApplication {
   id: string;
   company_name: string;
@@ -130,6 +144,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   { icon: Stethoscope, label: 'Doctors', id: 'doctors' },
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
+  { icon: HeartPulse, label: 'Health Packages', id: 'health-packages' },
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
   { icon: Handshake, label: 'Partners', id: 'partners' },
   { icon: Users, label: 'Patients', id: 'patients' },
@@ -229,6 +244,19 @@ export default function AdminPortal() {
   const [isDeletingPartner, setIsDeletingPartner] = useState(false);
   const [confirmDeletePartner, setConfirmDeletePartner] = useState(false);
 
+  // Health Packages states
+  const [healthPackages, setHealthPackages] = useState<HealthPackage[]>([]);
+  const [isLoadingHealthPackages, setIsLoadingHealthPackages] = useState(false);
+  const [hpSearchQuery, setHpSearchQuery] = useState('');
+  const [selectedHp, setSelectedHp] = useState<HealthPackage | null>(null);
+  const [isHpPanelOpen, setIsHpPanelOpen] = useState(false);
+  const [isHpPanelCreate, setIsHpPanelCreate] = useState(false);
+  const [isSavingHp, setIsSavingHp] = useState(false);
+  const [isDeletingHp, setIsDeletingHp] = useState(false);
+  const [confirmDeleteHp, setConfirmDeleteHp] = useState(false);
+  const defaultHpForm = { title: '', organization: '', description: '', price: '', discount_percentage: '', included_tests: '' };
+  const [hpForm, setHpForm] = useState(defaultHpForm);
+
   useEffect(() => {
     fetchAdminDetails();
     fetchAllDoctors();
@@ -253,6 +281,9 @@ export default function AdminPortal() {
     }
     if (activeTab === 'partners') {
       fetchPartnerApplications();
+    }
+    if (activeTab === 'health-packages') {
+      fetchHealthPackages();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -953,6 +984,76 @@ export default function AdminPortal() {
     } finally {
       setIsLoadingPatientDetails(false);
     }
+  };
+
+  const fetchHealthPackages = async () => {
+    setIsLoadingHealthPackages(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/health-packages?limit=100`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setHealthPackages(json.data?.items ?? json.data ?? []);
+      }
+    } catch (e) { console.error('Failed to fetch health packages', e); }
+    finally { setIsLoadingHealthPackages(false); }
+  };
+
+  const saveHealthPackage = async () => {
+    setIsSavingHp(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const body = {
+        title: hpForm.title.trim(),
+        organization: hpForm.organization.trim(),
+        description: hpForm.description.trim() || null,
+        price: parseFloat(hpForm.price),
+        discount_percentage: parseFloat(hpForm.discount_percentage),
+        included_tests: hpForm.included_tests.split('\n').map(t => t.trim()).filter(Boolean),
+      };
+      const url = isHpPanelCreate
+        ? `${BACKEND_URL}/api/v1/health-packages`
+        : `${BACKEND_URL}/api/v1/health-packages/${selectedHp!.id}`;
+      const res = await fetch(url, {
+        method: isHpPanelCreate ? 'POST' : 'PATCH',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) { setIsHpPanelOpen(false); fetchHealthPackages(); }
+    } catch (e) { console.error('Failed to save health package', e); }
+    finally { setIsSavingHp(false); }
+  };
+
+  const toggleHpActive = async (pkg: HealthPackage) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch(`${BACKEND_URL}/api/v1/health-packages/${pkg.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ is_active: !pkg.is_active }),
+      });
+      fetchHealthPackages();
+    } catch (e) { console.error('Failed to toggle package', e); }
+  };
+
+  const deleteHealthPackage = async (id: string) => {
+    setIsDeletingHp(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      await fetch(`${BACKEND_URL}/api/v1/health-packages/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      setIsHpPanelOpen(false);
+      fetchHealthPackages();
+    } catch (e) { console.error('Failed to delete health package', e); }
+    finally { setIsDeletingHp(false); setConfirmDeleteHp(false); }
   };
 
   const fetchPartnerApplications = async () => {
@@ -2117,6 +2218,204 @@ export default function AdminPortal() {
     </motion.div>
   );
 
+  const renderHealthPackages = () => {
+    const filtered = healthPackages.filter(p =>
+      p.title.toLowerCase().includes(hpSearchQuery.toLowerCase()) ||
+      p.organization?.toLowerCase().includes(hpSearchQuery.toLowerCase())
+    );
+    return (
+      <div className="space-y-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] overflow-hidden">
+
+          {/* Header */}
+          <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">Health Packages</h2>
+              <p className="text-sm text-slate-500 mt-1">{healthPackages.length} packages · {healthPackages.filter(p => p.is_active).length} active</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={hpSearchQuery} onChange={e => setHpSearchQuery(e.target.value)}
+                  placeholder="Search packages…"
+                  className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 w-56" />
+              </div>
+              <button onClick={() => { setIsHpPanelCreate(true); setSelectedHp(null); setHpForm(defaultHpForm); setConfirmDeleteHp(false); setIsHpPanelOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-600/20">
+                <Plus size={16} /> New Package
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          {isLoadingHealthPackages ? (
+            <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+          ) : filtered.length === 0 ? (
+            <div className="py-20 text-center text-slate-400 font-medium">No packages found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                    <th className="p-4 pl-8">Title</th>
+                    <th className="p-4">Org</th>
+                    <th className="p-4">Original Price</th>
+                    <th className="p-4">Discount</th>
+                    <th className="p-4">Final Price</th>
+                    <th className="p-4">Tests</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 pr-8 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map(pkg => {
+                    const fp = Math.round(pkg.price - (pkg.price * pkg.discount_percentage) / 100);
+                    return (
+                      <tr key={pkg.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="p-4 pl-8">
+                          <p className="font-bold text-slate-900 capitalize group-hover:text-emerald-700 transition-colors">{pkg.title}</p>
+                          {pkg.description && <p className="text-xs text-slate-400 truncate max-w-[180px]">{pkg.description}</p>}
+                        </td>
+                        <td className="p-4 text-sm text-slate-600">{pkg.organization || '—'}</td>
+                        <td className="p-4 text-sm text-slate-500 line-through">₹{pkg.price.toLocaleString('en-IN')}</td>
+                        <td className="p-4">
+                          <span className="inline-flex px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">
+                            {Math.round(pkg.discount_percentage)}% off
+                          </span>
+                        </td>
+                        <td className="p-4 font-extrabold text-emerald-700 text-sm">₹{fp.toLocaleString('en-IN')}</td>
+                        <td className="p-4 text-sm text-slate-600">{pkg.included_tests.length}</td>
+                        <td className="p-4">
+                          <button onClick={() => toggleHpActive(pkg)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition-colors ${pkg.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
+                            {pkg.is_active ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                            {pkg.is_active ? 'Active' : 'Inactive'}
+                          </button>
+                        </td>
+                        <td className="p-4 pr-8 text-right">
+                          <button onClick={() => {
+                            setSelectedHp(pkg);
+                            setIsHpPanelCreate(false);
+                            setHpForm({
+                              title: pkg.title,
+                              organization: pkg.organization || '',
+                              description: pkg.description || '',
+                              price: String(pkg.price),
+                              discount_percentage: String(pkg.discount_percentage),
+                              included_tests: pkg.included_tests.join('\n'),
+                            });
+                            setConfirmDeleteHp(false);
+                            setIsHpPanelOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">
+                            <Pencil size={13} /> Edit
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Slide-in Panel */}
+        <AnimatePresence>
+          {isHpPanelOpen && (
+            <>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/30 z-40 backdrop-blur-sm" onClick={() => setIsHpPanelOpen(false)} />
+              <motion.div
+                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="fixed right-0 top-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col"
+              >
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <h3 className="text-lg font-extrabold text-slate-900">{isHpPanelCreate ? 'New Health Package' : 'Edit Package'}</h3>
+                  <button onClick={() => setIsHpPanelOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  {[
+                    { key: 'title', label: 'Title', placeholder: 'e.g. heart package', type: 'text' },
+                    { key: 'organization', label: 'Organization', placeholder: 'e.g. Isha', type: 'text' },
+                    { key: 'price', label: 'Original Price (₹)', placeholder: '3980', type: 'number' },
+                    { key: 'discount_percentage', label: 'Discount %', placeholder: '22.11', type: 'number' },
+                  ].map(({ key, label, placeholder, type }) => (
+                    <div key={key}>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
+                      <input type={type} placeholder={placeholder} value={(hpForm as any)[key]}
+                        onChange={e => setHpForm(p => ({ ...p, [key]: e.target.value }))}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                    </div>
+                  ))}
+
+                  {/* Preview final price */}
+                  {hpForm.price && hpForm.discount_percentage && (
+                    <div className="flex items-center justify-between px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                      <span className="text-xs font-bold text-slate-500">Final Price Preview</span>
+                      <span className="font-extrabold text-emerald-700 text-lg">
+                        ₹{Math.round(parseFloat(hpForm.price) - (parseFloat(hpForm.price) * parseFloat(hpForm.discount_percentage)) / 100).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Description</label>
+                    <textarea rows={2} placeholder="Optional short description…" value={hpForm.description}
+                      onChange={e => setHpForm(p => ({ ...p, description: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Included Tests <span className="text-slate-400 font-normal normal-case">(one per line)</span></label>
+                    <textarea rows={8} placeholder={"FBS/PPBS\nLipid Profile\nHbA1c"} value={hpForm.included_tests}
+                      onChange={e => setHpForm(p => ({ ...p, included_tests: e.target.value }))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none font-mono" />
+                  </div>
+
+                  {/* Delete */}
+                  {!isHpPanelCreate && selectedHp && (
+                    <div className="pt-2 border-t border-slate-100">
+                      {confirmDeleteHp ? (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
+                          <AlertCircle size={18} className="text-red-500 shrink-0" />
+                          <p className="text-sm font-medium text-red-700 flex-1">Permanently delete this package?</p>
+                          <button onClick={() => deleteHealthPackage(selectedHp.id)} disabled={isDeletingHp}
+                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center gap-1">
+                            {isDeletingHp ? <Loader2 size={12} className="animate-spin" /> : null} Delete
+                          </button>
+                          <button onClick={() => setConfirmDeleteHp(false)} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmDeleteHp(true)}
+                          className="flex items-center gap-2 text-red-500 text-sm font-bold hover:text-red-600 transition-colors px-2">
+                          <Trash2 size={15} /> Delete Package
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-6 border-t border-slate-100 shrink-0">
+                  <button onClick={saveHealthPackage} disabled={isSavingHp || !hpForm.title || !hpForm.price || !hpForm.discount_percentage}
+                    className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSavingHp ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {isHpPanelCreate ? 'Create Package' : 'Save Changes'}
+                  </button>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   const renderPatients = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
       <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
@@ -2553,6 +2852,7 @@ export default function AdminPortal() {
                   {activeTab === 'dashboard' && renderDashboard()}
                   {activeTab === 'doctors' && renderDoctors()}
                   {activeTab === 'lab-tests' && renderLabTests()}
+                  {activeTab === 'health-packages' && renderHealthPackages()}
                   {activeTab === 'coupons' && renderCoupons()}
                   {activeTab === 'partners' && renderPartners()}
                   {activeTab === 'patients' && renderPatients()}
