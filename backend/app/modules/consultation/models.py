@@ -38,6 +38,8 @@ class Consultation(Base):
     
     # The unique Agora channel room name (Nullable for OFFLINE consultations)
     channel_name: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+
+    prescription_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

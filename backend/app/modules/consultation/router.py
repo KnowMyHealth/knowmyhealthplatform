@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 import uuid
-from fastapi import APIRouter, Depends, status, Body, Request
+from fastapi import APIRouter, Depends, status, Body, Request, File, UploadFile
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -196,3 +196,33 @@ async def get_doctor_slots(
     slots = await service.get_available_slots(db, doctor_id, date, timezone_offset)
     return ApiResponse.success(data=slots)
 
+@router.post(
+    "/{consultation_id}/prescription",
+    summary="Upload Prescription (Doctor Only)",
+    description="Upload a PDF prescription for a specific consultation. (Automatically marks consultation as COMPLETED)."
+)
+@limiter.limit("10/minute")
+async def upload_prescription(
+    request: Request,
+    consultation_id: UUID,
+    file: UploadFile = File(...),
+    current_user = Depends(RequireRole([Role.DOCTOR])),
+    db: AsyncSession = Depends(get_db),
+    service: ConsultationService = Depends(get_consultation_service)
+):
+    if file.content_type != "application/pdf":
+        raise BadRequestError("Only PDF files are allowed for prescriptions.")
+        
+    pdf_bytes = await file.read()
+    
+    updated_consultation = await service.upload_prescription(
+        db=db,
+        consultation_id=consultation_id,
+        doctor_user_id=UUID(str(current_user.id)),
+        pdf_bytes=pdf_bytes
+    )
+    
+    return ApiResponse.success(
+        data=ConsultationSchema.model_validate(updated_consultation),
+        message="Prescription uploaded successfully."
+    )

@@ -24,6 +24,7 @@ class ConsultationSchema(BaseModel):
     status: ConsultationStatus
     consultation_type: ConsultationType
     channel_name: Optional[str] = None
+    prescription_url: Optional[str] = None
     created_at: datetime
 
     class Config:

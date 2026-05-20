@@ -6,6 +6,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.storage import upload_prescription_pdf
 from app.modules.patient.models import Patient
 from app.modules.consultation.models import Consultation, ConsultationStatus, ConsultationType
 from app.modules.doctor.models import Doctor
@@ -276,3 +277,36 @@ class ConsultationService:
                 current_time += timedelta(minutes=15)
 
         return slots
+    
+
+    async def upload_prescription(self, db: AsyncSession, consultation_id: UUID, doctor_user_id: UUID, pdf_bytes: bytes) -> Consultation:
+        # 1. Fetch consultation and the doctor's profile
+        stmt = select(Consultation).options(selectinload(Consultation.doctor)).where(Consultation.id == consultation_id)
+        consultation = (await db.execute(stmt)).scalar_one_or_none()
+        
+        if not consultation:
+            raise ConsultationNotFoundError("Consultation not found.")
+
+        # 2. Security Check: Ensure the logged-in user is the assigned doctor
+        if consultation.doctor.user_id != doctor_user_id:
+            raise ConsultationAccessDenied("You can only upload prescriptions for your own patients.")
+
+        # 3. Security Check: Only allow uploads if the appointment isn't cancelled
+        if consultation.status == ConsultationStatus.CANCELLED:
+            raise ConsultationError("Cannot upload a prescription for a cancelled consultation.")
+
+        # 4. Upload to Supabase
+        _, public_url = await upload_prescription_pdf(pdf_bytes)
+
+        # 5. Save to database
+        consultation.prescription_url = public_url
+        
+        # Optional UX boost: Automatically mark as COMPLETED if they upload a prescription
+        if consultation.status == ConsultationStatus.SCHEDULED:
+            consultation.status = ConsultationStatus.COMPLETED
+
+        await db.commit()
+        await db.refresh(consultation)
+        
+        logger.info(f"Prescription uploaded for consultation {consultation_id}")
+        return consultation
