@@ -7,7 +7,7 @@ import {
   Search, MapPin, Video, Calendar as CalendarIcon, Star, Clock,
   ChevronRight, ChevronLeft, Phone, MessageSquare, X, CheckCircle2,
   Loader2, Mic, MicOff, VideoOff, Users, AlertCircle,
-  Sun, Sunrise, Moon, MoonStar, FileText, ExternalLink
+  Sun, Sunrise, Moon, MoonStar
 } from 'lucide-react';
 import Image from 'next/image';
 
@@ -564,9 +564,6 @@ export default function ConsultationsPage() {
     .filter(c => c.status === 'SCHEDULED')
     .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
 
-  const pastConsultations = myConsultations
-    .filter(c => c.status === 'COMPLETED' || c.status === 'CANCELLED')
-    .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime());
 
   return (
     <ProtectedRoute requiredRole="PATIENT">
@@ -680,79 +677,6 @@ export default function ConsultationsPage() {
                   </motion.div>
                 )
               })}
-            </div>
-          )}
-
-          {/* Past Consultations & Prescriptions */}
-          {pastConsultations.length > 0 && (
-            <div className="mb-12">
-              <h2 className="text-lg font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                <FileText size={18} className="text-emerald-600" /> Past Consultations &amp; Prescriptions
-              </h2>
-              <div className="space-y-3">
-                {pastConsultations.map((consultation) => {
-                  const doc = doctors.find(d => d.id === consultation.doctor_id);
-                  const docName = doc ? doc.name : 'Unknown Doctor';
-                  const docImage = doc?.image || 'https://picsum.photos/seed/generic/200/200';
-                  const scheduledDate = new Date(consultation.scheduled_at);
-                  const isCompleted = consultation.status === 'COMPLETED';
-
-                  return (
-                    <motion.div
-                      key={consultation.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="relative w-14 h-14 rounded-xl overflow-hidden shadow-sm shrink-0">
-                          <Image src={docImage} alt={docName} fill className="object-cover" />
-                          <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-white ${consultation.consultation_type === 'OFFLINE' ? 'bg-amber-100' : 'bg-emerald-100'}`}>
-                            {consultation.consultation_type === 'OFFLINE'
-                              ? <MapPin size={11} className="text-amber-600" />
-                              : <Video size={11} className="text-emerald-600" />
-                            }
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                              isCompleted ? 'bg-emerald-100 text-emerald-700' : 'bg-red-50 text-red-600'
-                            }`}>
-                              {consultation.status}
-                            </span>
-                          </div>
-                          <h3 className="font-bold text-slate-900 text-sm">{docName}</h3>
-                          <p className="text-slate-400 text-xs flex items-center gap-1 mt-0.5">
-                            <Clock size={11} />
-                            {scheduledDate.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 sm:shrink-0">
-                        {isCompleted && consultation.prescription_url ? (
-                          <a
-                            href={consultation.prescription_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-900 text-white font-bold text-sm rounded-xl hover:bg-emerald-800 transition-colors shadow-sm"
-                          >
-                            <FileText size={15} />
-                            View Prescription
-                            <ExternalLink size={12} />
-                          </a>
-                        ) : isCompleted ? (
-                          <span className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-400 font-bold text-sm rounded-xl">
-                            <FileText size={15} />
-                            No Prescription
-                          </span>
-                        ) : null}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
             </div>
           )}
 

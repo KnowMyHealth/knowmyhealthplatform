@@ -1,25 +1,29 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  UploadCloud, 
-  FileText, 
-  CheckCircle, 
-  Clock, 
-  Brain, 
-  X, 
-  AlertCircle, 
-  Sparkles, 
-  Pill, 
-  Activity, 
-  CalendarDays, 
-  Building2, 
+import {
+  UploadCloud,
+  FileText,
+  CheckCircle,
+  Clock,
+  Brain,
+  X,
+  AlertCircle,
+  Sparkles,
+  Pill,
+  Activity,
+  CalendarDays,
+  Building2,
   UserCircle2,
   Loader2,
   ShoppingCart,
-  Microscope
+  Microscope,
+  Stethoscope,
+  ExternalLink,
+  Video,
+  MapPin
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -92,6 +96,9 @@ export default function PrescriptionVaultPage() {
   
   const [history, setHistory] = useState<PrescriptionSchema[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  const [doctorConsultations, setDoctorConsultations] = useState<any[]>([]);
+  const [isLoadingDoctorRx, setIsLoadingDoctorRx] = useState(true);
   
   // Specific Record Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -101,7 +108,7 @@ export default function PrescriptionVaultPage() {
   const fetchHistory = async () => {
     try {
       const token = localStorage.getItem('supabase_access_token');
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/`, {
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -119,8 +126,30 @@ export default function PrescriptionVaultPage() {
     }
   };
 
+  const fetchDoctorConsultations = async () => {
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, {
+        headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const completed = (data.data as any[])
+          .filter(c => c.status === 'COMPLETED')
+          .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime());
+        setDoctorConsultations(completed);
+      }
+    } catch (e) {
+      console.error('Failed to fetch doctor consultations', e);
+    } finally {
+      setIsLoadingDoctorRx(false);
+    }
+  };
+
   useEffect(() => {
     fetchHistory();
+    fetchDoctorConsultations();
   }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -149,7 +178,7 @@ export default function PrescriptionVaultPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const token = localStorage.getItem('supabase_access_token'); 
 
       const response = await fetch(`${BACKEND_URL}/api/v1/prescriptions/ocr`, {
@@ -185,7 +214,7 @@ export default function PrescriptionVaultPage() {
 
     try {
       const token = localStorage.getItem('supabase_access_token');
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/${id}`, {
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -605,6 +634,90 @@ export default function PrescriptionVaultPage() {
               </motion.div>
             )}
           </div>
+
+          {/* Doctor-Issued Prescriptions */}
+          <div className="pt-12 border-t border-emerald-100/50 w-full">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-4">
+              <div>
+                <h3 className="text-3xl font-extrabold text-emerald-950 tracking-tight flex items-center gap-3">
+                  <Stethoscope className="text-emerald-600" size={28} />
+                  Doctor Prescriptions
+                </h3>
+                <p className="text-emerald-900/50 text-sm mt-1">PDFs issued by your doctors after consultations.</p>
+              </div>
+              {!isLoadingDoctorRx && (
+                <span className="px-4 py-1.5 bg-emerald-50 text-emerald-700 font-bold border border-emerald-100 rounded-full text-sm w-fit shadow-sm">
+                  {doctorConsultations.filter(c => c.prescription_url).length} Prescriptions
+                </span>
+              )}
+            </div>
+
+            {isLoadingDoctorRx ? (
+              <div className="flex justify-center items-center py-20">
+                <Loader2 className="animate-spin text-emerald-500" size={48} />
+              </div>
+            ) : doctorConsultations.length === 0 ? (
+              <div className="text-center py-20">
+                <div className="w-20 h-20 bg-white shadow-sm border border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-200">
+                  <Stethoscope size={40} />
+                </div>
+                <p className="text-emerald-900/60 font-medium">No completed consultations yet.</p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {doctorConsultations.map((c) => {
+                  const date = new Date(c.scheduled_at);
+                  const isOnline = c.consultation_type === 'ONLINE';
+                  return (
+                    <motion.div
+                      key={c.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.4 }}
+                      className="p-6 bg-white/80 backdrop-blur-xl border border-emerald-100/60 rounded-3xl shadow-sm hover:shadow-[0_15px_35px_-10px_rgba(5,150,105,0.15)] transition-all duration-300 flex flex-col gap-4"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${isOnline ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
+                          {isOnline ? <Video size={20} /> : <MapPin size={20} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-emerald-950 text-sm truncate">
+                            {isOnline ? 'Video Consultation' : 'In-Clinic Visit'}
+                          </p>
+                          <p className="text-emerald-900/50 text-xs flex items-center gap-1 mt-0.5">
+                            <CalendarDays size={11} />
+                            {date.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-emerald-50 pt-4">
+                        {c.prescription_url ? (
+                          <a
+                            href={c.prescription_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-emerald-900 text-white font-bold text-sm rounded-2xl hover:bg-emerald-800 transition-colors shadow-sm"
+                          >
+                            <FileText size={15} />
+                            View Prescription
+                            <ExternalLink size={13} />
+                          </a>
+                        ) : (
+                          <div className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-slate-100 text-slate-400 font-bold text-sm rounded-2xl">
+                            <FileText size={15} />
+                            No Prescription Yet
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Modal for Viewing Record Details */}
