@@ -1,3 +1,4 @@
+# app/modules/patient/models.py
 import uuid
 import enum
 from datetime import datetime, date
@@ -11,6 +12,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.modules.user.models import User
+    from app.modules.partner.models import Partner
 
 
 class Gender(str, enum.Enum):
@@ -33,6 +35,14 @@ class Patient(Base):
         nullable=False,
         unique=True 
     )
+    
+    # NEW: Link patient to a partner (Nullable because normal users register independently)
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), 
+        ForeignKey("partners.id", ondelete="SET NULL"), 
+        nullable=True
+    )
+
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     
@@ -56,10 +66,10 @@ class Patient(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship(
-        "User", 
-        back_populates="patient_profile"
-    )
+    user: Mapped["User"] = relationship("User", back_populates="patient_profile")
+    
+    # NEW: Partner relationship
+    partner: Mapped["Partner"] = relationship("Partner", back_populates="patients")
 
     def __repr__(self):
         return f"<Patient id={self.id} user_id={self.user_id} name={self.first_name} {self.last_name}>"
