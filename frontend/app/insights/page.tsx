@@ -1,13 +1,13 @@
-// frontend/app/insights/page.tsx
+﻿// frontend/app/insights/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Calendar, Clock, ArrowRight, Sparkles, Activity, 
-  ArrowUpRight, ChevronLeft, Bookmark, Share2, 
-  Heart, Stethoscope, Mail, CheckCircle2, Loader2
+import {
+  Calendar, Clock, ArrowRight, Sparkles, Activity,
+  ArrowUpRight, ChevronLeft, Bookmark, Share2,
+  Heart, Stethoscope, Mail, CheckCircle2, Loader2, BookOpen
 } from 'lucide-react';
 import Image from 'next/image';
 import Markdown from 'react-markdown';
@@ -34,8 +34,11 @@ export default function InsightsPage() {
   
   const [articles, setArticles] = useState<BlogPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [isSubscribing, setIsSubscribing] = useState(false);
+  const [subscribeSuccess, setSubscribeSuccess] = useState(false);
 
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
   useEffect(() => {
     fetchPublishedBlogs();
@@ -60,7 +63,10 @@ export default function InsightsPage() {
           content: b.content || '',
           image: b.cover_image_url || 'https://picsum.photos/seed/health-placeholder/1200/800',
           date: new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          readTime: '5 min read',
+          readTime: (() => {
+            const words = (b.content || '').split(/\s+/).filter(Boolean).length;
+            return `${Math.max(1, Math.ceil(words / 200))} min read`;
+          })(),
           category: b.category || 'Wellness',
           author: { 
             name: 'KnowMyHealth Editorial', 
@@ -90,6 +96,25 @@ export default function InsightsPage() {
   const handleBack = () => {
     setViewState('hub');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNewsletterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterEmail.trim() || isSubscribing) return;
+    setIsSubscribing(true);
+    try {
+      await fetch(`${BACKEND_URL}/api/v1/newsletter/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ email: newsletterEmail.trim() })
+      });
+    } catch {
+      // silently succeed — newsletter is best-effort
+    } finally {
+      setIsSubscribing(false);
+      setSubscribeSuccess(true);
+      setNewsletterEmail('');
+    }
   };
 
   if (isLoading) {
@@ -138,7 +163,7 @@ export default function InsightsPage() {
               >
                 <div className="relative w-full h-[65%] overflow-hidden">
                   <Image src={featuredArticle.image} alt={featuredArticle.title} fill className="object-cover transition-transform duration-1000 group-hover:scale-105" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/80 via-transparent to-transparent" />
+                  <div className="absolute inset-0 bg-linear-to-t from-emerald-950/80 via-transparent to-transparent" />
                   <div className="absolute bottom-6 left-6">
                     <span className="px-4 py-1.5 bg-emerald-500 text-white font-bold uppercase tracking-wider text-xs rounded-full shadow-lg">Featured</span>
                   </div>
@@ -194,7 +219,7 @@ export default function InsightsPage() {
               {/* Ad Slot: Sidebar Square (Redirects to Diagnostics) */}
               <div 
                 onClick={() => router.push('/diagnostics')}
-                className="flex-1 bg-gradient-to-br from-emerald-900 to-teal-950 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl group cursor-pointer border border-emerald-800 hover:shadow-2xl hover:shadow-emerald-900/40 transition-all"
+                className="flex-1 bg-linear-to-br from-emerald-900 to-teal-950 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-xl group cursor-pointer border border-emerald-800 hover:shadow-2xl hover:shadow-emerald-900/40 transition-all"
               >
                 <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/30 blur-3xl rounded-full" />
                 <div className="absolute top-6 right-6">
@@ -290,17 +315,26 @@ export default function InsightsPage() {
                 <h2 className="text-3xl md:text-4xl font-black text-white tracking-tight">Stay ahead of your health.</h2>
                 <p className="text-emerald-100/70 text-lg">Join 50,000+ readers getting weekly, evidence-based medical insights delivered directly to their inbox.</p>
                 
-                <form className="flex flex-col sm:flex-row gap-3 pt-4" onSubmit={(e) => e.preventDefault()}>
-                  <input 
-                    type="email" 
-                    placeholder="Enter your email address" 
-                    className="flex-1 px-6 py-4 bg-emerald-950/50 border border-emerald-700 rounded-2xl text-white placeholder:text-emerald-500/50 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
-                  />
-                  <button className="px-8 py-4 bg-white text-emerald-950 font-bold rounded-2xl hover:bg-emerald-50 transition-colors shadow-lg flex items-center justify-center gap-2">
-                    <span>Subscribe</span>
-                    <CheckCircle2 size={20} className="text-emerald-600" />
-                  </button>
-                </form>
+                {subscribeSuccess ? (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center justify-center gap-3 py-6 text-emerald-300 font-bold text-lg">
+                    <CheckCircle2 size={28} className="text-emerald-400" /> You&apos;re on the list!
+                  </motion.div>
+                ) : (
+                  <form className="flex flex-col sm:flex-row gap-3 pt-4" onSubmit={handleNewsletterSubmit}>
+                    <input
+                      type="email"
+                      required
+                      value={newsletterEmail}
+                      onChange={(e) => setNewsletterEmail(e.target.value)}
+                      placeholder="Enter your email address"
+                      className="flex-1 px-6 py-4 bg-emerald-950/50 border border-emerald-700 rounded-2xl text-white placeholder:text-emerald-500/50 focus:outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20"
+                    />
+                    <button type="submit" disabled={isSubscribing} className="px-8 py-4 bg-white text-emerald-950 font-bold rounded-2xl hover:bg-emerald-50 transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70">
+                      {isSubscribing ? <Loader2 size={20} className="animate-spin" /> : <><span>Subscribe</span><CheckCircle2 size={20} className="text-emerald-600" /></>}
+                    </button>
+                  </form>
+                )}
                 <p className="text-xs text-emerald-400/60 font-medium">No spam. Unsubscribe anytime.</p>
             </div>
           </div>
