@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, MapPin, Video, Calendar as CalendarIcon, Star, Clock, 
-  ChevronRight, ChevronLeft, Phone, MessageSquare, X, CheckCircle2, 
+import {
+  Search, MapPin, Video, Calendar as CalendarIcon, Star, Clock,
+  ChevronRight, ChevronLeft, Phone, MessageSquare, X, CheckCircle2,
   Loader2, Mic, MicOff, VideoOff, Users, AlertCircle,
   Sun, Sunrise, Moon, MoonStar
 } from 'lucide-react';
@@ -253,8 +253,8 @@ export default function ConsultationsPage() {
   
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [bookingStep, setBookingStep] = useState(1); 
-  
+  const [bookingStep, setBookingStep] = useState(1);
+
   // Date and Time selection states
   const [availableDates, setAvailableDates] = useState<Date[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -262,6 +262,7 @@ export default function ConsultationsPage() {
   const [availableSlots, setAvailableSlots] = useState<Slot[]>([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const datesScrollRef = useRef<HTMLDivElement>(null);
+  const [calendarMonth, setCalendarMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() });
   
   const [myConsultations, setMyConsultations] = useState<any[]>([]);
   const [selectedConsultationType, setSelectedConsultationType] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
@@ -391,17 +392,33 @@ export default function ConsultationsPage() {
     setSelectedDoctor(doctor);
     setSelectedConsultationType('ONLINE');
 
-    // Set default selected date to today (YYYY-MM-DD local time)
     const today = new Date();
     const tzOffset = today.getTimezoneOffset() * 60000;
     const localISODate = new Date(today.getTime() - tzOffset).toISOString().split('T')[0];
-    
+
     setSelectedDate(localISODate);
     setAvailableSlots([]);
     setIsBookingModalOpen(true);
     setBookingStep(1);
     setSelectedTime(null);
+    setCalendarMonth({ year: today.getFullYear(), month: today.getMonth() });
   };
+
+  // Calendar helpers
+  const getAvailableDateSet = () => new Set(availableDates.map(d => {
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tz).toISOString().split('T')[0];
+  }));
+
+  const calendarDays = (() => {
+    const { year, month } = calendarMonth;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const rawFirst = new Date(year, month, 1).getDay();
+    const firstDow = rawFirst === 0 ? 6 : rawFirst - 1; // Mon=0
+    const cells: (number | null)[] = Array(firstDow).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  })();
 
   // Fetch slots whenever the selected date changes
   useEffect(() => {
@@ -546,6 +563,7 @@ export default function ConsultationsPage() {
   const upcomingConsultations = myConsultations
     .filter(c => c.status === 'SCHEDULED')
     .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+
 
   return (
     <ProtectedRoute requiredRole="PATIENT">
@@ -774,215 +792,247 @@ export default function ConsultationsPage() {
         <AnimatePresence>
           {isBookingModalOpen && selectedDoctor && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-emerald-950/60 backdrop-blur-sm"
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
                 onClick={() => setIsBookingModalOpen(false)}
               />
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                initial={{ opacity: 0, scale: 0.96, y: 24 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="relative w-full max-w-3xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                exit={{ opacity: 0, scale: 0.96, y: 24 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+                className="relative w-full max-w-4xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
               >
                 {/* Header */}
-                <div className="p-6 border-b border-emerald-100 flex items-center justify-between bg-emerald-50/50">
-                  <h2 className="text-xl font-bold text-emerald-950">Book Appointment</h2>
-                  <button onClick={() => setIsBookingModalOpen(false)} className="p-2 text-emerald-900/40 hover:text-emerald-900 hover:bg-emerald-100 rounded-full transition-colors">
-                    <X size={20} />
-                  </button>
-                </div>
-
-                {/* Content */}
-                <div className="p-6 overflow-y-auto">
-                  <div className="flex items-center gap-4 mb-8 p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden relative shrink-0 border border-emerald-200">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl overflow-hidden relative border border-slate-100 shrink-0">
                       <Image src={selectedDoctor.image} alt={selectedDoctor.name} fill className="object-cover" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-emerald-950">{selectedDoctor.name}</h3>
-                      <p className="text-sm text-emerald-600 font-medium">{selectedDoctor.specialization}</p>
-                      <p className="text-sm text-emerald-900/60 font-medium mt-1">Consultation Fee: <span className="text-emerald-900 font-bold">₹{selectedDoctor.consultation_fee}</span></p>
+                      <h3 className="font-extrabold text-slate-900 leading-tight">{selectedDoctor.name}</h3>
+                      <p className="text-xs text-slate-400 font-medium">{selectedDoctor.specialization} · ₹{selectedDoctor.consultation_fee}</p>
                     </div>
                   </div>
+                  <button onClick={() => setIsBookingModalOpen(false)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+                    <X size={16} />
+                  </button>
+                </div>
 
-                  {bookingStep === 1 ? (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                {bookingStep === 1 ? (
+                  <div className="flex flex-col lg:flex-row flex-1 overflow-hidden min-h-0">
 
-                      {/* Consultation Type Selector */}
+                    {/* Left: Calendar */}
+                    <div className="lg:w-[400px] shrink-0 p-6 border-b lg:border-b-0 lg:border-r border-slate-100 overflow-y-auto">
+
+                      {/* Consult type toggle */}
                       {selectedDoctor.offline_consultation_enabled && (
-                        <div className="flex gap-3 mb-6">
-                          <button
-                            onClick={() => setSelectedConsultationType('ONLINE')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
-                              selectedConsultationType === 'ONLINE'
-                                ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                                : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                            }`}
-                          >
-                            <Video size={16} /> Video Consult
+                        <div className="flex gap-2 mb-5 p-1 bg-slate-100 rounded-xl">
+                          <button onClick={() => setSelectedConsultationType('ONLINE')}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${selectedConsultationType === 'ONLINE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>
+                            <Video size={14} /> Video
                           </button>
-                          <button
-                            onClick={() => setSelectedConsultationType('OFFLINE')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
-                              selectedConsultationType === 'OFFLINE'
-                                ? 'border-amber-500 bg-amber-50 text-amber-700'
-                                : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                            }`}
-                          >
-                            <MapPin size={16} /> Visit Clinic
+                          <button onClick={() => setSelectedConsultationType('OFFLINE')}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${selectedConsultationType === 'OFFLINE' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500'}`}>
+                            <MapPin size={14} /> In-Clinic
                           </button>
                         </div>
                       )}
                       {selectedConsultationType === 'OFFLINE' && selectedDoctor.clinic_address && (
-                        <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl mb-6 text-sm text-amber-800">
-                          <MapPin size={15} className="shrink-0 mt-0.5 text-amber-600" />
-                          <span><strong>Clinic:</strong> {selectedDoctor.clinic_address}</span>
+                        <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-100 rounded-xl mb-5 text-xs text-amber-800">
+                          <MapPin size={12} className="shrink-0 mt-0.5 text-amber-500" />
+                          <span>{selectedDoctor.clinic_address}</span>
                         </div>
                       )}
 
-                      {/* Interactive Date Carousel */}
-                      <div className="flex items-center gap-2 mb-8 border-b border-emerald-100 pb-2">
-                        <button onClick={() => scrollDates('left')} className="p-2 border border-emerald-100 rounded-full hover:bg-emerald-50 text-emerald-600 shrink-0 transition-colors">
-                          <ChevronLeft size={20} />
+                      {/* Month navigation */}
+                      <div className="flex items-center justify-between mb-4">
+                        <button
+                          onClick={() => setCalendarMonth(prev => {
+                            const d = new Date(prev.year, prev.month - 1);
+                            return { year: d.getFullYear(), month: d.getMonth() };
+                          })}
+                          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors"
+                        >
+                          <ChevronLeft size={16} />
                         </button>
-                        
-                        <div className="flex-1 overflow-x-hidden scroll-smooth flex gap-2" ref={datesScrollRef}>
-                          {availableDates.map((dateObj, i) => {
-                            const tzOffset = dateObj.getTimezoneOffset() * 60000;
-                            const localISODate = new Date(dateObj.getTime() - tzOffset).toISOString().split('T')[0];
-                            const isSelected = selectedDate === localISODate;
-                            
-                            let label = dateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-                            if (i === 0) label = 'Today';
-                            else if (i === 1) label = 'Tomorrow';
+                        <span className="font-extrabold text-slate-900 text-sm">
+                          {new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        </span>
+                        <button
+                          onClick={() => setCalendarMonth(prev => {
+                            const d = new Date(prev.year, prev.month + 1);
+                            return { year: d.getFullYear(), month: d.getMonth() };
+                          })}
+                          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
 
+                      {/* Day-of-week headers */}
+                      <div className="grid grid-cols-7 mb-2">
+                        {['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => (
+                          <div key={d} className="text-center text-[11px] font-bold text-slate-400 py-1">{d}</div>
+                        ))}
+                      </div>
+
+                      {/* Calendar grid */}
+                      <div className="grid grid-cols-7 gap-y-1">
+                        {(() => {
+                          const availSet = getAvailableDateSet();
+                          const todayISO = (() => { const t = new Date(); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
+                          return calendarDays.map((day, idx) => {
+                            if (day === null) return <div key={`empty-${idx}`} />;
+                            const iso = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                            const isAvailable = availSet.has(iso);
+                            const isSelected = selectedDate === iso;
+                            const isToday = iso === todayISO;
+                            const isPast = iso < todayISO;
                             return (
-                              <button 
-                                key={localISODate}
-                                onClick={() => {
-                                  setSelectedDate(localISODate);
-                                  setSelectedTime(null);
-                                }}
-                                className={`shrink-0 min-w-[140px] py-3 flex flex-col items-center justify-center transition-all border-b-[3px] rounded-t-xl ${
-                                  isSelected 
-                                    ? 'border-emerald-600 bg-emerald-50/80' 
-                                    : 'border-transparent text-gray-600 hover:bg-emerald-50/50 hover:text-emerald-800'
-                                }`}
+                              <button
+                                key={iso}
+                                disabled={!isAvailable}
+                                onClick={() => { setSelectedDate(iso); setSelectedTime(null); }}
+                                className={`relative h-9 w-full flex items-center justify-center rounded-full text-sm font-bold transition-all
+                                  ${isSelected ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30' :
+                                    isToday && isAvailable ? 'ring-2 ring-emerald-500 text-emerald-700 hover:bg-emerald-50' :
+                                    isAvailable ? 'text-slate-800 hover:bg-emerald-50 hover:text-emerald-700' :
+                                    isPast ? 'text-slate-200 cursor-not-allowed' :
+                                    'text-slate-300 cursor-not-allowed'}`}
                               >
-                                <span className={`text-[15px] font-bold ${isSelected ? 'text-emerald-950' : 'text-gray-600'}`}>{label}</span>
-                                <span className={`text-[11px] mt-1 ${isSelected ? 'text-emerald-500 font-bold' : 'text-gray-400 font-medium'}`}>
-                                  {isSelected && !isLoadingSlots 
-                                    ? `${getAvailableCount()} Slots Available` 
-                                    : 'Check Availability'}
-                                </span>
+                                {day}
+                                {isAvailable && !isSelected && (
+                                  <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-400" />
+                                )}
                               </button>
-                            )
-                          })}
-                        </div>
-                        
-                        <button onClick={() => scrollDates('right')} className="p-2 border border-emerald-100 rounded-full hover:bg-emerald-50 text-emerald-600 shrink-0 transition-colors">
-                          <ChevronRight size={20} />
+                            );
+                          });
+                        })()}
+                      </div>
+
+                      <p className="text-xs text-slate-400 mt-4 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Dates with available slots
+                      </p>
+                    </div>
+
+                    {/* Right: Time Slots */}
+                    <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+                      <div className="px-6 pt-5 pb-3 shrink-0 border-b border-slate-50">
+                        {selectedDate ? (
+                          <div>
+                            <p className="font-extrabold text-slate-900">
+                              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                            {!isLoadingSlots && (
+                              <p className="text-xs text-slate-400 mt-0.5">{getAvailableCount()} slot{getAvailableCount() !== 1 ? 's' : ''} available</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-slate-400 font-medium text-sm">Select a date to see available slots</p>
+                        )}
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto px-6 py-4">
+                        {!selectedDate ? (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-3">
+                            <CalendarIcon size={40} />
+                            <p className="font-medium text-sm">Pick a date on the left</p>
+                          </div>
+                        ) : isLoadingSlots ? (
+                          <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={28} /></div>
+                        ) : availableSlots.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-3">
+                            <Clock size={40} />
+                            <p className="font-medium text-sm">No slots available for this date</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-5">
+                            {Object.entries(groupedSlots).map(([period, slots]) => {
+                              if (slots.length === 0) return null;
+                              let Icon = Sunrise;
+                              if (period === 'Afternoon') Icon = Sun;
+                              if (period === 'Evening') Icon = Moon;
+                              if (period === 'Night') Icon = MoonStar;
+                              return (
+                                <div key={period}>
+                                  <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                                    <Icon size={13} className="text-emerald-500" /> {period}
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {slots.map(slot => {
+                                      const timeLabel = new Date(slot.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                                      const isSel = selectedTime === slot.time;
+                                      return (
+                                        <button
+                                          key={slot.time}
+                                          disabled={slot.is_booked}
+                                          onClick={() => setSelectedTime(slot.time)}
+                                          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all border ${
+                                            slot.is_booked
+                                              ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed line-through'
+                                              : isSel
+                                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/25'
+                                                : 'border-slate-200 text-slate-700 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50'
+                                          }`}
+                                        >
+                                          {timeLabel}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer CTA */}
+                      <div className="px-6 py-4 border-t border-slate-100 shrink-0">
+                        <button
+                          disabled={!selectedTime || isLoadingSlots}
+                          onClick={() => setBookingStep(2)}
+                          className="w-full py-3.5 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {selectedTime
+                            ? <>Continue <ChevronRight size={16} /></>
+                            : 'Select a time slot'}
                         </button>
                       </div>
-
-                      {/* Grouped Time Slots Grid */}
-                      {isLoadingSlots ? (
-                        <div className="py-12 flex justify-center text-emerald-500">
-                          <Loader2 className="animate-spin" size={32} />
-                        </div>
-                      ) : availableSlots.length === 0 ? (
-                        <div className="text-center py-12 text-emerald-900/40 font-medium">
-                          No slots available for this date.
-                        </div>
-                      ) : (
-                        <div className="space-y-4 mb-8">
-                          {Object.entries(groupedSlots).map(([period, slots]) => {
-                            if (slots.length === 0) return null;
-                            
-                            let Icon = Sunrise;
-                            if (period === 'Afternoon') Icon = Sun;
-                            if (period === 'Evening') Icon = Moon;
-                            if (period === 'Night') Icon = MoonStar;
-
-                            return (
-                              <div key={period} className="flex flex-col md:flex-row gap-4 py-4 border-b border-emerald-50 border-dashed last:border-0">
-                                <div className="w-32 flex items-center gap-2 text-emerald-900/60 font-bold text-sm shrink-0">
-                                  <Icon size={18} className="text-emerald-500" />
-                                  <span>{period}</span>
-                                </div>
-                                <div className="flex-1 flex flex-wrap gap-3">
-                                  {slots.map(slot => {
-                                    const d = new Date(slot.time); // Auto-converts ISO to local timezone
-                                    const timeLabel = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                                    const isSelected = selectedTime === slot.time;
-                                    
-                                    return (
-                                      <button 
-                                        key={slot.time} 
-                                        disabled={slot.is_booked}
-                                        onClick={() => setSelectedTime(slot.time)}
-                                        className={`px-5 py-2.5 rounded-lg border text-sm font-bold transition-all ${
-                                          slot.is_booked 
-                                            ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed line-through decoration-gray-300' 
-                                            : isSelected 
-                                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/30' 
-                                              : 'border-emerald-600 text-emerald-600 hover:bg-emerald-50'
-                                        }`}
-                                      >
-                                        {timeLabel}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      <button 
-                        disabled={!selectedTime || isLoadingSlots}
-                        onClick={() => setBookingStep(2)}
-                        className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-4"
-                      >
-                        <span>Continue</span>
-                        <ChevronRight size={18} />
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="text-center py-8">
-                      <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <CheckCircle2 size={40} className="text-emerald-600" />
-                      </div>
-                      <h3 className="text-2xl font-bold text-emerald-950 mb-2">Confirm Booking</h3>
-                      <p className="text-emerald-900/60 mb-8 leading-relaxed max-w-sm mx-auto">
-                        You are about to book a <strong className="text-emerald-900">{selectedConsultationType === 'OFFLINE' ? 'clinic visit' : 'video consultation'}</strong> with {selectedDoctor.name} for <br/>
-                        <strong className="text-emerald-900">
-                          {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric'})} at {selectedTime && new Date(selectedTime).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'})}
-                        </strong>. 
-                        Your consultation will be scheduled immediately.
-                      </p>
-                      
-                      <button 
-                        onClick={handleConfirmBooking}
-                        disabled={isBooking}
-                        className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        {isBooking && <Loader2 size={20} className="animate-spin" />}
-                        Confirm Appointment
-                      </button>
-                      <button 
-                        onClick={() => setBookingStep(1)}
-                        className="w-full py-4 mt-3 text-emerald-900/60 font-bold hover:text-emerald-900 transition-colors"
-                      >
-                        Back to Slots
-                      </button>
-                    </motion.div>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                ) : (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 text-center">
+                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <CheckCircle2 size={40} className="text-emerald-600" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Confirm Booking</h3>
+                    <p className="text-slate-500 mb-2 text-sm">
+                      {selectedConsultationType === 'OFFLINE' ? 'In-Clinic Visit' : 'Video Consultation'} with
+                    </p>
+                    <p className="text-xl font-extrabold text-slate-900 mb-1">{selectedDoctor.name}</p>
+                    <p className="text-emerald-600 font-bold mb-6">
+                      {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                      {' at '}
+                      {selectedTime && new Date(selectedTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    <div className="flex items-center justify-center gap-2 text-sm text-slate-400 mb-8">
+                      {selectedConsultationType === 'OFFLINE'
+                        ? <><MapPin size={14} className="text-amber-500" /> {selectedDoctor.clinic_address || 'Clinic location TBD'}</>
+                        : <><Video size={14} className="text-blue-500" /> Link will be shared before the call</>
+                      }
+                    </div>
+                    <button onClick={handleConfirmBooking} disabled={isBooking}
+                      className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mb-3">
+                      {isBooking && <Loader2 size={20} className="animate-spin" />}
+                      Confirm Appointment
+                    </button>
+                    <button onClick={() => setBookingStep(1)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm">
+                      ← Change date or time
+                    </button>
+                  </motion.div>
+                )}
               </motion.div>
             </div>
           )}

@@ -8,7 +8,8 @@ import {
   Settings, Menu, X, Video, Clock, TrendingUp,
   LogOut, Star, FileText, Search,
   ChevronRight, Phone, MessageSquare, Mic, MicOff, VideoOff, XCircle,
-  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2, AlertCircle, Save, MapPin
+  Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2, AlertCircle, Save, MapPin,
+  Upload, ExternalLink
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -21,6 +22,8 @@ interface Consultation {
   scheduled_at: string;
   status: string;
   channel_name: string;
+  consultation_type?: string;
+  prescription_url?: string | null;
 }
 
 interface DayAvailability {
@@ -355,6 +358,11 @@ export default function DoctorDashboard() {
   const [isLoadingPatientDetail, setIsLoadingPatientDetail] = useState(false);
   const [isPatientDetailOpen, setIsPatientDetailOpen] = useState(false);
 
+  // Prescription upload states
+  const [uploadingPrescriptionId, setUploadingPrescriptionId] = useState<string | null>(null);
+  const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
+  const prescriptionInputRef = useRef<HTMLInputElement>(null);
+
   // Real-time tracker for join buttons
   const [now, setNow] = useState(new Date());
 
@@ -575,6 +583,34 @@ export default function DoctorDashboard() {
     setIsPatientDetailOpen(false);
     setSelectedPatientUserId(null);
     setPatientDetail(null);
+  };
+
+  const handleUploadPrescription = async (consultationId: string, file: File) => {
+    setUploadingPrescriptionId(consultationId);
+    try {
+      const token = localStorage.getItem('supabase_access_token');
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/prescription`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: formData,
+      });
+      if (res.ok) {
+        await fetchAppointments();
+      } else {
+        const err = await res.json();
+        console.error('Prescription upload failed', err);
+      }
+    } catch (e) {
+      console.error('Prescription upload error', e);
+    } finally {
+      setUploadingPrescriptionId(null);
+      setPendingUploadId(null);
+    }
   };
 
   const handleSaveAvailability = async () => {
@@ -849,9 +885,25 @@ export default function DoctorDashboard() {
                     )
                   )}
                   {apt.status === 'COMPLETED' && (
-                    <span className="px-6 py-2.5 bg-emerald-50 text-emerald-700 font-bold rounded-xl flex items-center gap-2">
-                      <CheckCircle2 size={18} /> Completed
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {apt.prescription_url ? (
+                        <a href={apt.prescription_url} target="_blank" rel="noopener noreferrer"
+                          className="px-4 py-2.5 bg-blue-50 text-blue-700 font-bold rounded-xl flex items-center gap-2 hover:bg-blue-100 transition-colors border border-blue-100">
+                          <FileText size={16} /> View Rx
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => { setPendingUploadId(apt.id); prescriptionInputRef.current?.click(); }}
+                          disabled={uploadingPrescriptionId === apt.id}
+                          className="px-4 py-2.5 bg-violet-50 text-violet-700 font-bold rounded-xl flex items-center gap-2 hover:bg-violet-100 transition-colors border border-violet-200">
+                          {uploadingPrescriptionId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                          Upload Rx
+                        </button>
+                      )}
+                      <span className="px-4 py-2.5 bg-emerald-50 text-emerald-700 font-bold rounded-xl flex items-center gap-2">
+                        <CheckCircle2 size={18} /> Completed
+                      </span>
+                    </div>
                   )}
                   {apt.status === 'CANCELLED' && (
                     <span className="px-6 py-2.5 bg-red-50 text-red-600 font-bold rounded-xl flex items-center gap-2">
@@ -963,24 +1015,61 @@ export default function DoctorDashboard() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     {apt.status === 'SCHEDULED' && (
-                      (apt as any).consultation_type === 'OFFLINE' ? (
-                        <span className="px-6 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
-                          <MapPin size={16} /> In-Clinic Visit
-                        </span>
-                      ) : (
+                      <>
+                        {(apt as any).consultation_type === 'OFFLINE' ? (
+                          <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
+                            <MapPin size={16} /> In-Clinic Visit
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleJoinCall(apt.id, patientLabel)}
+                            disabled={isJoiningId === apt.id || !canJoin}
+                            className={`px-5 py-2.5 text-sm font-bold rounded-xl transition-colors flex items-center gap-2 ${
+                              canJoin
+                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed'
+                            }`}
+                          >
+                            {isJoiningId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Video size={16} />}
+                            {label}
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleJoinCall(apt.id, patientLabel)}
-                          disabled={isJoiningId === apt.id || !canJoin}
-                          className={`px-6 py-2.5 text-sm font-bold rounded-xl transition-colors flex items-center gap-2 ${
-                            canJoin
-                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed'
-                          }`}
+                          onClick={() => { setPendingUploadId(apt.id); prescriptionInputRef.current?.click(); }}
+                          disabled={uploadingPrescriptionId === apt.id}
+                          className="px-4 py-2.5 text-sm font-bold rounded-xl bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-2 hover:bg-violet-100 transition-colors"
                         >
-                          {isJoiningId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Video size={16} />}
-                          {label}
+                          {uploadingPrescriptionId === apt.id ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                          Upload Rx
                         </button>
-                      )
+                      </>
+                    )}
+                    {apt.status === 'COMPLETED' && (
+                      <>
+                        {apt.prescription_url ? (
+                          <a href={apt.prescription_url} target="_blank" rel="noopener noreferrer"
+                            className="px-4 py-2.5 text-sm font-bold rounded-xl bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-2 hover:bg-blue-100 transition-colors">
+                            <FileText size={15} /> View Rx
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => { setPendingUploadId(apt.id); prescriptionInputRef.current?.click(); }}
+                            disabled={uploadingPrescriptionId === apt.id}
+                            className="px-4 py-2.5 text-sm font-bold rounded-xl bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-2 hover:bg-violet-100 transition-colors"
+                          >
+                            {uploadingPrescriptionId === apt.id ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                            Upload Rx
+                          </button>
+                        )}
+                        <span className="px-4 py-2.5 text-sm font-bold rounded-xl bg-emerald-50 text-emerald-700 flex items-center gap-2">
+                          <CheckCircle2 size={15} /> Completed
+                        </span>
+                      </>
+                    )}
+                    {apt.status === 'CANCELLED' && (
+                      <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-red-50 text-red-600 flex items-center gap-2">
+                        <XCircle size={15} /> Cancelled
+                      </span>
                     )}
                   </div>
                 </div>
@@ -1531,6 +1620,21 @@ export default function DoctorDashboard() {
               </AnimatePresence>
             </div>
           </main>
+
+          {/* Hidden prescription file input */}
+          <input
+            ref={prescriptionInputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file && pendingUploadId) {
+                handleUploadPrescription(pendingUploadId, file);
+              }
+              e.target.value = '';
+            }}
+          />
 
           {/* Video Call Interface */}
           <AnimatePresence>
