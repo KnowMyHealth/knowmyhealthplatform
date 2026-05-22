@@ -9,3 +9,4 @@ from app.modules.patient.models import Patient
 from app.modules.consultation.models import Consultation
 from app.modules.partner.models import Partner
 from app.modules.health_package.models import HealthPackage
+from app.modules.callback.models import CallbackRequest
