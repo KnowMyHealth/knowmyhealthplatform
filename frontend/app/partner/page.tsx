@@ -58,7 +58,7 @@ const EMPTY_FORM: FormData = {
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
-  { icon: Users,           label: 'My Patients', id: 'patients' },
+  { icon: Users,           label: 'My Employees', id: 'patients' },
 ];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────────── */
@@ -141,8 +141,8 @@ function PatientModal({ mode, patient, onClose, onSaved }: {
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(rgba(167,243,208,0.3) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
           <div className="relative flex items-center justify-between">
             <div>
-              <p className="text-emerald-400/70 text-xs font-bold uppercase tracking-widest mb-0.5">{mode === 'add' ? 'New Patient' : 'Edit Patient'}</p>
-              <h2 className="font-extrabold text-white text-xl">{mode === 'add' ? 'Add a Patient' : `${patient?.first_name} ${patient?.last_name}`}</h2>
+              <p className="text-emerald-400/70 text-xs font-bold uppercase tracking-widest mb-0.5">{mode === 'add' ? 'New Employee' : 'Edit Employee'}</p>
+              <h2 className="font-extrabold text-white text-xl">{mode === 'add' ? 'Add an Employee' : `${patient?.first_name} ${patient?.last_name}`}</h2>
             </div>
             <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
               <X size={18} className="text-white" />
@@ -182,7 +182,7 @@ function PatientModal({ mode, patient, onClose, onSaved }: {
             <button type="submit" disabled={isSaving}
               className="flex-1 py-3 rounded-2xl font-bold text-sm text-white bg-emerald-900 hover:bg-emerald-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-60">
               {isSaving && <Loader2 size={15} className="animate-spin" />}
-              {mode === 'add' ? 'Create Patient' : 'Save Changes'}
+              {mode === 'add' ? 'Create Employee' : 'Save Changes'}
             </button>
           </div>
         </form>
@@ -221,7 +221,7 @@ function DeleteConfirm({ patient, onClose, onDeleted }: {
         <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mx-auto mb-5">
           <Trash2 size={26} className="text-red-500" />
         </div>
-        <h3 className="font-extrabold text-slate-900 text-xl mb-2">Delete Patient?</h3>
+        <h3 className="font-extrabold text-slate-900 text-xl mb-2">Delete Employee?</h3>
         <p className="text-slate-500 text-sm mb-1">
           This will permanently remove <span className="font-bold text-slate-800">{patient.first_name} {patient.last_name}</span> and their login account.
         </p>
@@ -292,7 +292,7 @@ function PatientPanel({ patient, onClose, onEdit }: {
         <div className="p-5 border-t border-slate-100 shrink-0">
           <button onClick={onEdit}
             className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-900 text-white hover:bg-emerald-800 transition-colors flex items-center justify-center gap-2 shadow-sm">
-            <Edit2 size={14} /> Edit Patient
+            <Edit2 size={14} /> Edit Employee
           </button>
         </div>
       </motion.div>
@@ -336,7 +336,7 @@ function PartnerContent() {
         setPatients(json.data ?? []);
         setMeta(json.meta ?? null);
       }
-    } catch { showToast('Failed to load patients.', 'error'); }
+    } catch { showToast('Failed to load employees.', 'error'); }
     finally { setIsLoading(false); }
   }, []);
 
@@ -367,7 +367,7 @@ function PartnerContent() {
   const onDeleted = () => {
     setIsDeleteOpen(false); setIsPanelOpen(false); setSelected(null);
     fetchPatients(page); fetchAllPatients();
-    showToast('Patient deleted.');
+    showToast('Employee deleted.');
   };
 
   /* ── Dashboard stats ── */
@@ -382,7 +382,7 @@ function PartnerContent() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {[
-          { label: 'Total Patients',  value: totalPatients, icon: <Users size={20} />,    color: 'from-emerald-500 to-teal-600' },
+          { label: 'Total Employees',  value: totalPatients, icon: <Users size={20} />,    color: 'from-emerald-500 to-teal-600' },
           { label: 'Male',            value: maleCount,     icon: <UserCircle2 size={20} />, color: 'from-blue-500 to-indigo-600' },
           { label: 'Female',          value: femaleCount,   icon: <UserCircle2 size={20} />, color: 'from-pink-500 to-rose-600' },
         ].map((s, i) => (
@@ -404,7 +404,7 @@ function PartnerContent() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
           className="lg:col-span-2 bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
-            <h3 className="font-extrabold text-slate-900 text-lg">Recent Patients</h3>
+            <h3 className="font-extrabold text-slate-900 text-lg">Recent Employees</h3>
             <button onClick={() => setActiveTab('patients')}
               className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1">
               View All <ArrowUpRight size={12} />
@@ -414,7 +414,7 @@ function PartnerContent() {
             {isLoading ? (
               <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-emerald-500" /></div>
             ) : recentPatients.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 text-sm">No patients yet.</div>
+              <div className="text-center py-12 text-slate-400 text-sm">No employees yet.</div>
             ) : recentPatients.map((p, i) => (
               <motion.div key={p.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
                 className="flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors">
@@ -450,16 +450,16 @@ function PartnerContent() {
               <Activity size={12} className="text-emerald-400" />
               <span className="text-emerald-200 text-[11px] font-bold uppercase tracking-wider">Quick Actions</span>
             </div>
-            <h3 className="text-white font-extrabold text-xl mb-2 leading-tight">Manage Your Patients</h3>
-            <p className="text-emerald-300/60 text-sm mb-8 leading-relaxed">Add new corporate patients or browse the full patient list.</p>
+            <h3 className="text-white font-extrabold text-xl mb-2 leading-tight">Manage Your Employees</h3>
+            <p className="text-emerald-300/60 text-sm mb-8 leading-relaxed">Add new corporate employees or browse the full employee list.</p>
             <div className="space-y-3 mt-auto">
               <button onClick={() => { setSelected(null); setModal('add'); }}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm bg-white text-emerald-950 hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2 shadow-md">
-                <UserPlus size={15} /> Add New Patient
+                <UserPlus size={15} /> Add New Employee
               </button>
               <button onClick={() => setActiveTab('patients')}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm bg-white/10 border border-white/10 text-white hover:bg-white/20 transition-colors flex items-center justify-center gap-2">
-                <Users size={15} /> View All Patients
+                <Users size={15} /> View All Employees
               </button>
             </div>
           </div>
@@ -479,7 +479,7 @@ function PartnerContent() {
         </div>
         <button onClick={() => { setSelected(null); setModal('add'); }}
           className="flex items-center gap-2 px-6 py-3 bg-emerald-900 text-white rounded-2xl font-bold text-sm hover:bg-emerald-800 transition-colors shadow-sm shrink-0">
-          <Plus size={16} /> Add Patient
+          <Plus size={16} /> Add Employee
         </button>
       </div>
 
@@ -490,7 +490,7 @@ function PartnerContent() {
             <div className="w-14 h-14 rounded-2xl bg-emerald-950 flex items-center justify-center shadow-lg">
               <Loader2 size={24} className="animate-spin text-emerald-400" />
             </div>
-            <p className="text-slate-400 text-sm font-medium">Loading patients…</p>
+            <p className="text-slate-400 text-sm font-medium">Loading employees…</p>
           </div>
         </div>
       ) : filtered.length === 0 ? (
@@ -498,8 +498,8 @@ function PartnerContent() {
           <div className="w-24 h-24 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-center mb-6">
             <Users size={36} className="text-slate-300" />
           </div>
-          <p className="font-extrabold text-slate-700 text-xl mb-2">{search ? 'No results found' : 'No patients yet'}</p>
-          <p className="text-slate-400 text-sm max-w-xs">{search ? 'Try a different name or phone.' : 'Click "Add Patient" to register your first corporate patient.'}</p>
+          <p className="font-extrabold text-slate-700 text-xl mb-2">{search ? 'No results found' : 'No employees yet'}</p>
+          <p className="text-slate-400 text-sm max-w-xs">{search ? 'Try a different name or phone.' : 'Click "Add Employee" to register your first corporate employee.'}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -631,10 +631,10 @@ function PartnerContent() {
             </button>
             <div>
               <h1 className="text-base font-extrabold text-slate-900 capitalize">
-                {activeTab === 'dashboard' ? 'Dashboard' : 'My Patients'}
+                {activeTab === 'dashboard' ? 'Dashboard' : 'My Employees'}
               </h1>
               <p className="text-xs text-slate-400 font-medium hidden sm:block">
-                {activeTab === 'dashboard' ? 'Overview of your patient base' : 'Manage corporate patient records'}
+                {activeTab === 'dashboard' ? 'Overview of your employee base' : 'Manage corporate employee records'}
               </p>
             </div>
           </div>
@@ -642,7 +642,7 @@ function PartnerContent() {
             {activeTab === 'patients' && (
               <button onClick={() => { setSelected(null); setModal('add'); }}
                 className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-900 text-white rounded-xl font-bold text-xs hover:bg-emerald-800 transition-colors shadow-sm">
-                <Plus size={14} /> Add Patient
+                <Plus size={14} /> Add Employee
               </button>
             )}
             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -663,7 +663,7 @@ function PartnerContent() {
         {modal && (
           <PatientModal key="modal" mode={modal} patient={selected ?? undefined}
             onClose={() => { setModal(null); setSelected(null); }}
-            onSaved={() => onSaved(modal === 'add' ? 'Patient created successfully.' : 'Patient updated.')} />
+            onSaved={() => onSaved(modal === 'add' ? 'Employee created successfully.' : 'Employee updated.')} />
         )}
         {isDeleteOpen && selected && (
           <DeleteConfirm key="delete" patient={selected}
