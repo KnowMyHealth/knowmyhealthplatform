@@ -4,22 +4,40 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import settings
 
-async def drop_enums():
+async def reset_partner_enums():
     engine = create_async_engine(settings.DATABASE_URL.get_secret_value())
-    commands = [
-        "DROP TYPE IF EXISTS consultationstatus CASCADE;",
-        "DROP TYPE IF EXISTS role CASCADE;",
-        "DROP TYPE IF EXISTS doctorstatus CASCADE;",
-        "DROP TYPE IF EXISTS gender CASCADE;",
+    
+    # 1. Drop only Partner ENUMs
+    drop_commands = [
+        "DROP TYPE IF EXISTS partnerstatus CASCADE;",
+        "DROP TYPE IF EXISTS partnertype CASCADE;",
     ]
+
+    # 2. Recreate them with the exact values from the Partner model
+    create_commands = [
+        "CREATE TYPE partnerstatus AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED');",
+        "CREATE TYPE partnertype AS ENUM ('PHARMACY', 'LABORATORY', 'HOSPITAL', 'CLINIC', 'OTHER');",
+    ]
+
     async with engine.begin() as conn:
-        for cmd in commands:
+        print("--- Dropping Partner ENUMs ---")
+        for cmd in drop_commands:
             try:
                 await conn.execute(text(cmd))
-                print(f"Executed: {cmd}")
+                print(f"✅ Executed: {cmd}")
             except Exception as e:
-                print(f"Failed: {cmd} (Likely already gone)")
+                print(f"❌ Failed: {cmd} (Error: {e})")
+
+        print("\n--- Creating Partner ENUMs ---")
+        for cmd in create_commands:
+            try:
+                await conn.execute(text(cmd))
+                print(f"✅ Executed: {cmd}")
+            except Exception as e:
+                print(f"❌ Failed: {cmd} (Error: {e})")
+
     await engine.dispose()
+    print("\n🎉 Partner ENUMs reset complete!")
 
 if __name__ == "__main__":
-    asyncio.run(drop_enums())
+    asyncio.run(reset_partner_enums())
