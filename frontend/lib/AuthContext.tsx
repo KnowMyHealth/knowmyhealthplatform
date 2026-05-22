@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from './supabase';
 
 interface AuthContextType {
@@ -17,6 +18,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,6 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         setUserRole(role);
         setIsLoggedIn(true);
+        // Auto-redirect portal roles if landing on homepage
+        if (pathname === '/') {
+          if (role === 'ADMIN') router.push('/admin');
+          else if (role === 'PARTNER') router.push('/partner');
+          else if (role === 'DOCTOR') router.push('/doctor');
+        }
       }
       if (isMounted) setIsLoading(false);
     };
@@ -88,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setIsLoggedIn(false);
     setUserRole(null);
+    router.push('/');
   };
 
   const openAuthModal = () => setIsAuthModalOpen(true);
