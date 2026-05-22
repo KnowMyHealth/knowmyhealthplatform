@@ -10,7 +10,7 @@ import {
   ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, Ticket,
   Microscope, Plus, Trash2, AlertCircle, BookOpen, PenTool, Wand2, Tag,
   Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone,
-  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight
+  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight, PhoneCall
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -113,6 +113,16 @@ interface HealthPackage {
   updated_at: string;
 }
 
+interface CallbackRequest {
+  id: string;
+  name: string;
+  phone: string;
+  status: 'PENDING' | 'RESOLVED' | 'IGNORED';
+  admin_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface PartnerApplication {
   id: string;
   company_name: string;
@@ -148,6 +158,7 @@ const navItems = [
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
   { icon: Handshake, label: 'Partners', id: 'partners' },
   { icon: Users, label: 'Patients', id: 'patients' },
+  { icon: PhoneCall, label: 'Callbacks', id: 'callbacks' },
   { icon: BookOpen, label: 'Blogs & Insights', id: 'blogs' },
   { icon: Settings, label: 'Settings', id: 'settings' },
 ];
@@ -244,6 +255,16 @@ export default function AdminPortal() {
   const [isDeletingPartner, setIsDeletingPartner] = useState(false);
   const [confirmDeletePartner, setConfirmDeletePartner] = useState(false);
 
+  // --- CALLBACKS STATES ---
+  const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
+  const [isLoadingCallbacks, setIsLoadingCallbacks] = useState(false);
+  const [callbackStatusFilter, setCallbackStatusFilter] = useState<'ALL' | 'PENDING' | 'RESOLVED' | 'IGNORED'>('ALL');
+  const [callbackCurrentPage, setCallbackCurrentPage] = useState(1);
+  const callbacksPerPage = 15;
+  const [updatingCallbackId, setUpdatingCallbackId] = useState<string | null>(null);
+  const [callbackNotes, setCallbackNotes] = useState<Record<string, string>>({});
+  const [openNotesId, setOpenNotesId] = useState<string | null>(null);
+
   // Health Packages states
   const [healthPackages, setHealthPackages] = useState<HealthPackage[]>([]);
   const [isLoadingHealthPackages, setIsLoadingHealthPackages] = useState(false);
@@ -281,6 +302,9 @@ export default function AdminPortal() {
     }
     if (activeTab === 'partners') {
       fetchPartnerApplications();
+    }
+    if (activeTab === 'callbacks') {
+      fetchCallbacks();
     }
     if (activeTab === 'health-packages') {
       fetchHealthPackages();
@@ -1147,6 +1171,56 @@ export default function AdminPortal() {
       console.error('Failed to delete partner application', err);
     } finally {
       setIsDeletingPartner(false);
+    }
+  };
+
+  const fetchCallbacks = async () => {
+    setIsLoadingCallbacks(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setIsLoadingCallbacks(false); return; }
+    try {
+      const all: CallbackRequest[] = [];
+      let page = 1;
+      while (true) {
+        const res = await fetch(`${BACKEND_URL}/api/v1/callbacks?page=${page}&limit=50`, {
+          headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+        });
+        if (!res.ok) break;
+        const json = await res.json();
+        const items: CallbackRequest[] = json.data?.items || json.data || [];
+        all.push(...items);
+        if (items.length < 50) break;
+        page++;
+      }
+      // Sort newest first
+      all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setCallbacks(all);
+    } catch (err) {
+      console.error('Failed to fetch callbacks', err);
+    } finally {
+      setIsLoadingCallbacks(false);
+    }
+  };
+
+  const updateCallbackStatus = async (id: string, newStatus: 'RESOLVED' | 'IGNORED') => {
+    setUpdatingCallbackId(id);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setUpdatingCallbackId(null); return; }
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/callbacks/${id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ status: newStatus, admin_notes: callbackNotes[id] || null }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setCallbacks(prev => prev.map(c => c.id === id ? json.data : c));
+        setOpenNotesId(null);
+      }
+    } catch (err) {
+      console.error('Failed to update callback', err);
+    } finally {
+      setUpdatingCallbackId(null);
     }
   };
 
@@ -2783,6 +2857,189 @@ export default function AdminPortal() {
     );
   };
 
+  const renderCallbacks = () => {
+    const filtered = callbacks.filter(c => callbackStatusFilter === 'ALL' || c.status === callbackStatusFilter);
+    const totalPages = Math.ceil(filtered.length / callbacksPerPage);
+    const paginated = filtered.slice((callbackCurrentPage - 1) * callbacksPerPage, callbackCurrentPage * callbacksPerPage);
+    const pendingCount = callbacks.filter(c => c.status === 'PENDING').length;
+
+    const STATUS_COLORS: Record<string, string> = {
+      PENDING: 'bg-amber-100 text-amber-700 border-amber-200',
+      RESOLVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      IGNORED: 'bg-slate-100 text-slate-500 border-slate-200',
+    };
+
+    return (
+      <div className="space-y-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+              <PhoneCall className="text-emerald-600" size={28} /> Callback Requests
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+              {pendingCount > 0 ? (
+                <span className="text-amber-600 font-bold">{pendingCount} pending</span>
+              ) : (
+                'All requests handled'
+              )} · {callbacks.length} total
+            </p>
+          </div>
+          <button onClick={fetchCallbacks} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 font-bold text-sm rounded-xl hover:bg-slate-50 transition-colors shadow-sm">
+            <Activity size={16} /> Refresh
+          </button>
+        </div>
+
+        {/* Status filter tabs */}
+        <div className="flex gap-2 flex-wrap">
+          {(['ALL', 'PENDING', 'RESOLVED', 'IGNORED'] as const).map(s => (
+            <button key={s} onClick={() => { setCallbackStatusFilter(s); setCallbackCurrentPage(1); }}
+              className={`px-4 py-2 rounded-xl font-bold text-sm transition-all border ${
+                callbackStatusFilter === s
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300'
+              }`}
+            >
+              {s} {s !== 'ALL' && <span className="ml-1 opacity-70">({callbacks.filter(c => c.status === s).length})</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Table */}
+        {isLoadingCallbacks ? (
+          <div className="flex justify-center items-center py-24">
+            <Loader2 className="animate-spin text-emerald-500" size={40} />
+          </div>
+        ) : paginated.length === 0 ? (
+          <div className="text-center py-20 bg-white border border-slate-200 rounded-3xl">
+            <PhoneCall size={48} className="mx-auto text-slate-200 mb-4" />
+            <h3 className="text-lg font-bold text-slate-700 mb-2">No callback requests</h3>
+            <p className="text-slate-400 text-sm">Requests submitted from the website will appear here.</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    <th className="text-left px-6 py-4 font-black text-slate-500 uppercase tracking-wider text-xs">Name</th>
+                    <th className="text-left px-6 py-4 font-black text-slate-500 uppercase tracking-wider text-xs">Phone</th>
+                    <th className="text-left px-6 py-4 font-black text-slate-500 uppercase tracking-wider text-xs">Status</th>
+                    <th className="text-left px-6 py-4 font-black text-slate-500 uppercase tracking-wider text-xs">Submitted</th>
+                    <th className="text-left px-6 py-4 font-black text-slate-500 uppercase tracking-wider text-xs">Notes</th>
+                    <th className="px-6 py-4" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {paginated.map((cb) => (
+                    <>
+                      <tr key={cb.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 font-bold text-slate-900">{cb.name}</td>
+                        <td className="px-6 py-4">
+                          <a href={`tel:${cb.phone}`} className="flex items-center gap-1.5 text-emerald-700 font-bold hover:text-emerald-900 transition-colors">
+                            <Phone size={14} /> {cb.phone}
+                          </a>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border ${STATUS_COLORS[cb.status]}`}>
+                            {cb.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 font-medium">{formatDate(cb.created_at)}</td>
+                        <td className="px-6 py-4 text-slate-400 text-xs max-w-[180px] truncate">
+                          {cb.admin_notes || <span className="italic">—</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                          {cb.status === 'PENDING' && (
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                onClick={() => setOpenNotesId(openNotesId === cb.id ? null : cb.id)}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-lg transition-colors"
+                              >
+                                + Notes
+                              </button>
+                              <button
+                                onClick={() => updateCallbackStatus(cb.id, 'RESOLVED')}
+                                disabled={updatingCallbackId === cb.id}
+                                className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-600 text-emerald-700 hover:text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {updatingCallbackId === cb.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                Resolved
+                              </button>
+                              <button
+                                onClick={() => updateCallbackStatus(cb.id, 'IGNORED')}
+                                disabled={updatingCallbackId === cb.id}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                Ignore
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                      {/* Inline notes expander */}
+                      {openNotesId === cb.id && (
+                        <tr key={`${cb.id}-notes`} className="bg-slate-50/80">
+                          <td colSpan={6} className="px-6 pb-4 pt-0">
+                            <div className="flex gap-3 items-start">
+                              <textarea
+                                rows={2}
+                                placeholder="Add admin notes (optional)..."
+                                value={callbackNotes[cb.id] || ''}
+                                onChange={(e) => setCallbackNotes(prev => ({ ...prev, [cb.id]: e.target.value }))}
+                                className="flex-1 px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
+                              />
+                              <div className="flex flex-col gap-2 shrink-0">
+                                <button
+                                  onClick={() => updateCallbackStatus(cb.id, 'RESOLVED')}
+                                  disabled={updatingCallbackId === cb.id}
+                                  className="px-4 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {updatingCallbackId === cb.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                  Mark Resolved
+                                </button>
+                                <button
+                                  onClick={() => updateCallbackStatus(cb.id, 'IGNORED')}
+                                  disabled={updatingCallbackId === cb.id}
+                                  className="px-4 py-2 bg-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-300 transition-colors disabled:opacity-50"
+                                >
+                                  Ignore
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                <p className="text-xs text-slate-400 font-medium">
+                  Showing {(callbackCurrentPage - 1) * callbacksPerPage + 1}–{Math.min(callbackCurrentPage * callbacksPerPage, filtered.length)} of {filtered.length}
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setCallbackCurrentPage(p => Math.max(1, p - 1))} disabled={callbackCurrentPage === 1}
+                    className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button onClick={() => setCallbackCurrentPage(p => Math.min(totalPages, p + 1))} disabled={callbackCurrentPage === totalPages}
+                    className="p-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition-colors">
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSettings = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] p-6 sm:p-8 max-w-2xl mx-auto">
       <h2 className="text-xl font-extrabold text-slate-900 mb-6">System Settings</h2>
@@ -2837,7 +3094,12 @@ export default function AdminPortal() {
                   }`}
                 >
                   <item.icon size={20} className={isActive ? 'text-emerald-400' : 'text-slate-500'} />
-                  <span>{item.label}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {item.id === 'callbacks' && callbacks.filter(c => c.status === 'PENDING').length > 0 && (
+                    <span className="ml-auto text-[10px] font-black bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                      {callbacks.filter(c => c.status === 'PENDING').length}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -2895,6 +3157,7 @@ export default function AdminPortal() {
                   {activeTab === 'coupons' && renderCoupons()}
                   {activeTab === 'partners' && renderPartners()}
                   {activeTab === 'patients' && renderPatients()}
+                  {activeTab === 'callbacks' && renderCallbacks()}
                   {activeTab === 'blogs' && renderBlogs()}
                   {activeTab === 'settings' && renderSettings()}
                 </motion.div>
