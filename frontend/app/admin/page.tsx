@@ -122,7 +122,7 @@ interface PartnerApplication {
   partner_type: 'PHARMACY' | 'LABORATORY' | 'HOSPITAL' | 'CLINIC' | 'OTHER';
   address: string;
   website: string | null;
-  status: 'PENDING' | 'CONTACTED' | 'ACCEPTED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
   created_at: string;
   updated_at: string;
 }
@@ -235,7 +235,7 @@ export default function AdminPortal() {
   // --- PARTNER APPLICATIONS STATES ---
   const [partnerApplications, setPartnerApplications] = useState<PartnerApplication[]>([]);
   const [isLoadingPartners, setIsLoadingPartners] = useState(false);
-  const [partnerFilterStatus, setPartnerFilterStatus] = useState<'ALL' | 'PENDING' | 'CONTACTED' | 'ACCEPTED' | 'REJECTED'>('ALL');
+  const [partnerFilterStatus, setPartnerFilterStatus] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED'>('ALL');
   const [partnerCurrentPage, setPartnerCurrentPage] = useState(1);
   const partnersPerPage = 10;
   const [selectedPartner, setSelectedPartner] = useState<PartnerApplication | null>(null);
@@ -1101,6 +1101,28 @@ export default function AdminPortal() {
       }
     } catch (err) {
       console.error('Failed to update partner status', err);
+    } finally {
+      setIsUpdatingPartnerStatus(false);
+    }
+  };
+
+  const approvePartner = async (partnerId: string) => {
+    setIsUpdatingPartnerStatus(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setIsUpdatingPartnerStatus(false); return; }
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/partners/${partnerId}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const updated: PartnerApplication = json.data;
+        setPartnerApplications(prev => prev.map(p => p.id === partnerId ? updated : p));
+        setSelectedPartner(updated);
+      }
+    } catch (err) {
+      console.error('Failed to approve partner', err);
     } finally {
       setIsUpdatingPartnerStatus(false);
     }
@@ -2542,9 +2564,9 @@ export default function AdminPortal() {
   const renderPartners = () => {
     const PARTNER_STATUS_COLORS: Record<PartnerApplication['status'], string> = {
       PENDING:   'bg-yellow-50 text-yellow-700 border-yellow-200',
-      CONTACTED: 'bg-blue-50 text-blue-700 border-blue-200',
-      ACCEPTED:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+      APPROVED:  'bg-emerald-50 text-emerald-700 border-emerald-200',
       REJECTED:  'bg-red-50 text-red-600 border-red-200',
+      SUSPENDED: 'bg-slate-100 text-slate-500 border-slate-200',
     };
     const filtered = partnerFilterStatus === 'ALL'
       ? partnerApplications
@@ -2560,14 +2582,14 @@ export default function AdminPortal() {
             <p className="text-sm text-slate-500 mt-1">Review and manage incoming partnership requests.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(['ALL', 'PENDING', 'CONTACTED', 'ACCEPTED', 'REJECTED'] as const).map(s => (
+            {(['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'] as const).map(s => (
               <button key={s} onClick={() => { setPartnerFilterStatus(s); setPartnerCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wide transition-colors border ${
                   partnerFilterStatus === s
-                    ? s === 'PENDING' ? 'bg-yellow-100 text-yellow-700 border-yellow-300'
-                    : s === 'CONTACTED' ? 'bg-blue-100 text-blue-700 border-blue-300'
-                    : s === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                    : s === 'REJECTED' ? 'bg-red-100 text-red-600 border-red-300'
+                    ? s === 'PENDING'   ? 'bg-yellow-100 text-yellow-700 border-yellow-300'
+                    : s === 'APPROVED'  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                    : s === 'REJECTED'  ? 'bg-red-100 text-red-600 border-red-300'
+                    : s === 'SUSPENDED' ? 'bg-slate-200 text-slate-600 border-slate-300'
                     : 'bg-slate-800 text-white border-slate-800'
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                 }`}>
@@ -2700,17 +2722,34 @@ export default function AdminPortal() {
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Update Status</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {(['ACCEPTED', 'REJECTED'] as const).map(s => (
-                        <button key={s} disabled={isUpdatingPartnerStatus || selectedPartner.status === s}
-                          onClick={() => updatePartnerStatus(selectedPartner.id, s)}
-                          className={`py-2.5 rounded-xl text-sm font-bold transition-colors border disabled:opacity-50 ${
-                            selectedPartner.status === s
-                              ? PARTNER_STATUS_COLORS[s] + ' cursor-default'
-                              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                          }`}>
-                          {isUpdatingPartnerStatus && selectedPartner.status !== s ? <Loader2 size={14} className="animate-spin mx-auto" /> : s.charAt(0) + s.slice(1).toLowerCase()}
-                        </button>
-                      ))}
+                      <button
+                        disabled={isUpdatingPartnerStatus || selectedPartner.status === 'APPROVED'}
+                        onClick={() => approvePartner(selectedPartner.id)}
+                        className={`py-2.5 rounded-xl text-sm font-bold transition-colors border disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                          selectedPartner.status === 'APPROVED'
+                            ? PARTNER_STATUS_COLORS['APPROVED'] + ' cursor-default'
+                            : 'bg-emerald-900 text-white border-emerald-900 hover:bg-emerald-800'
+                        }`}
+                      >
+                        {isUpdatingPartnerStatus && selectedPartner.status !== 'APPROVED'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <CheckCircle2 size={14} />}
+                        Approve
+                      </button>
+                      <button
+                        disabled={isUpdatingPartnerStatus || selectedPartner.status === 'REJECTED'}
+                        onClick={() => updatePartnerStatus(selectedPartner.id, 'REJECTED')}
+                        className={`py-2.5 rounded-xl text-sm font-bold transition-colors border disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                          selectedPartner.status === 'REJECTED'
+                            ? PARTNER_STATUS_COLORS['REJECTED'] + ' cursor-default'
+                            : 'bg-white text-red-600 border-red-200 hover:bg-red-50'
+                        }`}
+                      >
+                        {isUpdatingPartnerStatus && selectedPartner.status !== 'REJECTED'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <XCircle size={14} />}
+                        Reject
+                      </button>
                     </div>
                   </div>
 
