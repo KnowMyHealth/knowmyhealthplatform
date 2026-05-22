@@ -63,6 +63,7 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [mediaNotice, setMediaNotice] = useState<string | null>(null);
 
   useEffect(() => {
     import('agora-rtc-sdk-ng').then((mod) => {
@@ -143,7 +144,8 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
 
   const toggleAudio = () => {
     if (permissionError) {
-      alert("Please allow microphone access in your browser settings to unmute.");
+      setMediaNotice("Allow microphone access in your browser settings to unmute.");
+      setTimeout(() => setMediaNotice(null), 4000);
       return;
     }
     if (localAudioTrack) {
@@ -154,7 +156,8 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
 
   const toggleVideo = () => {
     if (permissionError) {
-      alert("Please allow camera access in your browser settings to turn on video.");
+      setMediaNotice("Allow camera access in your browser settings to enable video.");
+      setTimeout(() => setMediaNotice(null), 4000);
       return;
     }
     if (localVideoTrack) {
@@ -214,6 +217,13 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
         <span className="text-white font-medium">{participantName} Consultation</span>
       </div>
 
+      {/* Media permission notice */}
+      {mediaNotice && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-gray-900/90 text-white text-sm font-medium px-5 py-3 rounded-full shadow-lg border border-gray-700 z-40 flex items-center gap-2">
+          <AlertCircle size={16} className="text-amber-400 shrink-0" /> {mediaNotice}
+        </div>
+      )}
+
       {/* Controls */}
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 bg-gray-900/80 backdrop-blur-xl px-8 py-4 rounded-full border border-gray-700 shadow-2xl z-30">
         <button 
@@ -242,8 +252,15 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
   );
 }
 
+const stableHash = (s: string) => {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) & 0xffffffff;
+  return Math.abs(h);
+};
+
 export default function ConsultationsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [toastError, setToastError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [specialties, setSpecialties] = useState<string[]>(['All']);
 
@@ -346,8 +363,8 @@ export default function ConsultationsPage() {
             name: `Dr. ${doc.first_name} ${doc.last_name}`,
             image: doc.avatar_url || `https://picsum.photos/seed/doc${index + 10}/200/200`,
             city: 'Virtual / Clinic',
-            rating: 4.8 + (Math.random() * 0.2),
-            reviews: Math.floor(Math.random() * 200) + 50,
+            rating: 4.8 + (stableHash(doc.id) % 20) / 100,
+            reviews: 50 + (stableHash(doc.id + 'r') % 200),
             nextAvailable: doc.is_available ? 'Available Now' : 'Check Schedule',
             video_consultation_enabled: doc.video_consultation_enabled !== undefined ? doc.video_consultation_enabled : true,
             offline_consultation_enabled: doc.offline_consultation_enabled ?? false,
@@ -490,11 +507,13 @@ export default function ConsultationsPage() {
           setIsBookingModalOpen(false);
         }, 3000);
       } else {
-        alert(json.message || "Failed to book consultation");
+        setToastError(json.message || "Failed to book consultation. Please try again.");
+        setTimeout(() => setToastError(null), 5000);
       }
     } catch (e) {
       console.error(e);
-      alert("Error booking consultation");
+      setToastError("Network error. Please check your connection and try again.");
+      setTimeout(() => setToastError(null), 5000);
     } finally {
       setIsBooking(false);
     }
@@ -517,14 +536,16 @@ export default function ConsultationsPage() {
       const json = await res.json();
       
       if (res.ok && json.success) {
-        setAgoraInfo(json.data); 
+        setAgoraInfo(json.data);
         setIsVideoCallActive(true);
       } else {
-        alert(json.message || "Failed to join consultation");
+        setToastError(json.message || "Failed to join consultation. Please try again.");
+        setTimeout(() => setToastError(null), 5000);
       }
     } catch (e) {
       console.error(e);
-      alert("Error joining video call");
+      setToastError("Network error. Could not join the call.");
+      setTimeout(() => setToastError(null), 5000);
     } finally {
       setIsJoiningId(null);
     }
@@ -568,6 +589,21 @@ export default function ConsultationsPage() {
   return (
     <ProtectedRoute requiredRole="PATIENT">
       <div className="min-h-screen bg-gray-50/50 pb-24">
+        {/* Global error toast */}
+        <AnimatePresence>
+          {toastError && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, x: '-50%' }}
+              animate={{ opacity: 1, y: 0, x: '-50%' }}
+              exit={{ opacity: 0, y: -50, x: '-50%' }}
+              className="fixed top-24 left-1/2 z-[300] bg-red-950 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border border-red-800"
+            >
+              <AlertCircle size={20} className="text-red-400 shrink-0" />
+              <span className="font-bold text-sm">{toastError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Hero Search Section */}
         <div className="bg-emerald-900 pt-16 pb-32 px-6 relative overflow-hidden">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -716,9 +752,11 @@ export default function ConsultationsPage() {
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
+                    whileHover={{ y: -5 }}
+                    whileTap={{ scale: 0.99 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
                     key={doctor.id}
-                    className="bg-white rounded-[2.5rem] p-6 border border-emerald-100/60 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(5,150,105,0.15)] transition-all group flex flex-col h-full"
+                    className="bg-white rounded-[2.5rem] p-6 border border-emerald-100/60 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(5,150,105,0.15)] transition-shadow group flex flex-col h-full"
                   >
                     <div className="flex gap-5 mb-5">
                       <div className="relative w-24 h-24 rounded-[1.5rem] overflow-hidden shrink-0 shadow-inner">
