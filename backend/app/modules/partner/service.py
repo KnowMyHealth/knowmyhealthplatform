@@ -115,12 +115,32 @@ class PartnerService:
 
             partner.user_id = new_supabase_uid
             partner.status = PartnerStatus.APPROVED
+
+            # 3. AUTO-GENERATE EXCLUSIVE COUPON FOR THIS ORGANIZATION
+            from app.modules.coupon.models import Coupon
+            clean_company_name = "".join(c for c in partner.company_name if c.isalnum()).upper()[:8]
+            coupon_code = f"KMH-{clean_company_name}-{int(partner.discount_percentage)}"
+            
+            # Double-check uniqueness of coupon code
+            existing_coupon = (await db.execute(select(Coupon).where(Coupon.code == coupon_code))).scalar_one_or_none()
+            if existing_coupon:
+                # If collision, append a short random string
+                coupon_code = f"KMH-{clean_company_name}-{secrets.token_hex(2).upper()}"
+
+            new_coupon = Coupon(
+                code=coupon_code,
+                discount_percentage=partner.discount_percentage,
+                partner_id=partner.id,
+                is_active=True
+            )
+            db.add(new_coupon)
+
             await db.commit()
             await db.refresh(partner)
             
-            logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}")
+            logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}. Coupon Code: {coupon_code}")
 
-            # 3. NEW: Trigger Partner Welcome Email Asynchronously
+            # 4. Trigger Partner Welcome Email Asynchronously
             import asyncio
             from app.core.email import send_partner_welcome_email
             
@@ -129,7 +149,8 @@ class PartnerService:
                     send_partner_welcome_email,
                     to_email=partner.email,
                     company_name=partner.company_name,
-                    temp_password=temp_password
+                    temp_password=temp_password,
+                    coupon_code=coupon_code
                 )
             )
 
@@ -152,7 +173,7 @@ class PartnerService:
         new_uid = None
 
         try:
-            # 1. Create Supabase Auth User
+            # 1. Create Patient User Account
             auth_response = supabase_admin.auth.admin.create_user({
                 "email": payload.email,
                 "password": temp_password, 
@@ -161,21 +182,24 @@ class PartnerService:
             })
             new_uid = uuid.UUID(auth_response.user.id)
 
-            # 2. Assign Patient Role
             await db.execute(update(User).where(User.id == new_uid).values(role=Role.PATIENT.value))
 
-            # 3. Create Patient Demographics Profile
+            # 2. Create Patient Profile linked to Partner
             patient_data = payload.model_dump(exclude={"email"})
             new_patient = Patient(user_id=new_uid, partner_id=partner.id, **patient_data)
-            
             db.add(new_patient)
+
+            # 3. Fetch the Partner's Coupon code to send to the Employee
+            from app.modules.coupon.models import Coupon
+            coupon = (await db.execute(select(Coupon).where(Coupon.partner_id == partner.id))).scalar_one_or_none()
+            coupon_code = coupon.code if coupon else "N/A"
+
             await db.commit()
             await db.refresh(new_patient)
             
             logger.info(f"Partner {partner.id} created patient {new_patient.id}.")
 
-            # 4. Trigger onboarding welcome email asynchronously
-            # We import here to avoid potential circular import issues
+            # 4. Trigger employee email with corporate coupon
             import asyncio
             from app.core.email import send_employee_welcome_email
             
@@ -186,7 +210,8 @@ class PartnerService:
                     to_email=payload.email,
                     employee_name=employee_name,
                     company_name=partner.company_name,
-                    temp_password=temp_password
+                    temp_password=temp_password,
+                    coupon_code=coupon_code
                 )
             )
 
@@ -195,12 +220,8 @@ class PartnerService:
         except Exception as e:
             await db.rollback()
             if new_uid:
-                try:
-                    supabase_admin.auth.admin.delete_user(str(new_uid))
-                except Exception as del_err:
-                    logger.warning(f"Failed to rollback/delete Supabase auth: {del_err}")
+                supabase_admin.auth.admin.delete_user(str(new_uid))
             raise PartnerCreateError(f"Failed to create patient: {e}")
-        
 
     async def list_partner_patients(self, db: AsyncSession, partner_user_id: UUID, params: PaginationParams) -> tuple[list[Patient], int]:
         partner = await self.get_partner_by_user_id(db, partner_user_id)
