@@ -61,3 +61,11 @@ class PartnerPatientCreateRequest(BaseModel):
     phone_number: Optional[str] = None
     address: Optional[str] = None
     emergency_contact: Optional[str] = None
+
+class PartnerApproveRequest(BaseModel):
+    discount_percentage: Decimal = Field(
+        ..., 
+        ge=0, 
+        le=100, 
+        description="The final discount percentage assigned by the Admin"
+    )

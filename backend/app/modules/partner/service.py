@@ -91,7 +91,7 @@ class PartnerService:
             raise PartnerUpdateError("Failed to delete partner application.")
 
     # Admin: Approve Partner & Generate Login
-    async def approve_partner_and_create_user(self, db: AsyncSession, partner_id: UUID) -> Partner:
+    async def approve_partner_and_create_user(self, db: AsyncSession, partner_id: UUID, discount_percentage: float) -> Partner:
         partner = await self.get_partner_by_id(db, partner_id)
         if partner.status == PartnerStatus.APPROVED:
             raise PartnerUpdateError("Partner is already approved.")
@@ -110,21 +110,20 @@ class PartnerService:
             })
             new_supabase_uid = uuid.UUID(auth_response.user.id)
 
-            # 2. Update local DB Role
+            # 2. Update local DB Role and SAVE the Admin's final discount rate
             await db.execute(update(User).where(User.id == new_supabase_uid).values(role=Role.PARTNER.value))
 
             partner.user_id = new_supabase_uid
             partner.status = PartnerStatus.APPROVED
+            partner.discount_percentage = discount_percentage # <-- Overwrite with Admin's final rate
 
-            # 3. AUTO-GENERATE EXCLUSIVE COUPON FOR THIS ORGANIZATION
+            # 3. Auto-generate the corporate coupon using the Admin's rate
             from app.modules.coupon.models import Coupon
             clean_company_name = "".join(c for c in partner.company_name if c.isalnum()).upper()[:8]
             coupon_code = f"KMH-{clean_company_name}-{int(partner.discount_percentage)}"
             
-            # Double-check uniqueness of coupon code
             existing_coupon = (await db.execute(select(Coupon).where(Coupon.code == coupon_code))).scalar_one_or_none()
             if existing_coupon:
-                # If collision, append a short random string
                 coupon_code = f"KMH-{clean_company_name}-{secrets.token_hex(2).upper()}"
 
             new_coupon = Coupon(
@@ -140,7 +139,7 @@ class PartnerService:
             
             logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}. Coupon Code: {coupon_code}")
 
-            # 4. Trigger Partner Welcome Email Asynchronously
+            # 4. Trigger welcome email
             import asyncio
             from app.core.email import send_partner_welcome_email
             
