@@ -3,7 +3,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status, Body, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+from fastapi import File, UploadFile
 
+from app.utils.api_error import BadRequestError
 from app.db.deps import get_db
 from app.db.all_models import User
 from app.utils.api_response import ApiResponse
@@ -122,6 +124,33 @@ async def approve_partner(
         discount_percentage=payload.discount_percentage # <-- Pass to service
     )
     return ApiResponse.success(data=PartnerSchema.model_validate(approved_partner), message="Partner approved.")
+
+
+@router.post(
+    "/patients/bulk",
+    status_code=status.HTTP_200_OK,
+    summary="Bulk Upload Patients using CSV (Partner Only)",
+    description="Allows a Partner to upload a CSV template of employees. Returns a summary of successes and failures."
+)
+@limiter.limit("5/minute")
+async def bulk_upload_patients(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user = Depends(RequireRole([Role.PARTNER])),
+    db: AsyncSession = Depends(get_db),
+    service: PartnerService = Depends(get_partner_service)
+):
+    if not file.filename.endswith(".csv"):
+        raise BadRequestError("Only CSV files are allowed.")
+
+    csv_bytes = await file.read()
+    summary = await service.bulk_add_patients_for_partner(db, UUID(str(current_user.id)), csv_bytes)
+    
+    return ApiResponse.success(
+        data=summary,
+        message=f"Bulk upload complete. Successfully imported {summary['success_count']} employees."
+    )
+
 
 # -------------------------------------------------------------------------
 # PARTNER: MANAGE OWN PATIENTS

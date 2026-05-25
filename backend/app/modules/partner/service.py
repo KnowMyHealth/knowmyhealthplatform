@@ -1,4 +1,8 @@
 # app/modules/partner/service.py
+import io
+import csv
+from datetime import date
+
 import uuid
 import string
 import secrets
@@ -8,6 +12,7 @@ from sqlalchemy import update, select, func, delete
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.patient.models import Gender
 from app.utils.pagination import PaginationParams
 from app.db.all_models import User, Patient
 from app.modules.user.schemas import Role
@@ -159,6 +164,93 @@ class PartnerService:
             if new_supabase_uid:
                 supabase_admin.auth.admin.delete_user(str(new_supabase_uid))
             raise PartnerUpdateError(f"Failed to approve partner: {e}")
+
+    async def bulk_add_patients_for_partner(self, db: AsyncSession, partner_user_id: UUID, csv_bytes: bytes) -> dict:
+        """
+        Parses a CSV file and bulk-registers employees under the partner organization.
+        """
+        # 1. Decode CSV bytes
+        try:
+            text_data = csv_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            text_data = csv_bytes.decode("latin-1") # Fallback encoding
+
+        csv_file = io.StringIO(text_data)
+        reader = csv.DictReader(csv_file)
+
+        successful_uploads = []
+        failed_uploads = []
+
+        # 2. Iterate through each row in the CSV
+        for idx, row in enumerate(reader, start=1):
+            email = row.get("email")
+            first_name = row.get("first_name")
+            last_name = row.get("last_name")
+
+            # Basic validation
+            if not email or not first_name or not last_name:
+                failed_uploads.append({
+                    "row": idx,
+                    "email": email or "N/A",
+                    "error": "Missing required fields (email, first_name, last_name are mandatory)."
+                })
+                continue
+
+            try:
+                # Safe date parsing
+                dob = None
+                if row.get("date_of_birth"):
+                    try:
+                        dob = date.fromisoformat(row["date_of_birth"].strip())
+                    except ValueError:
+                        pass # Leave as None if bad format
+
+                # Safe Gender mapping
+                gender = None
+                if row.get("gender"):
+                    gender_str = row["gender"].strip().upper()
+                    if gender_str in ["MALE", "FEMALE", "OTHER"]:
+                        gender = Gender(gender_str)
+
+                # Map row dict to Pydantic validation schema
+                payload = PartnerPatientCreateRequest(
+                    email=email.strip(),
+                    first_name=first_name.strip(),
+                    last_name=last_name.strip(),
+                    date_of_birth=dob,
+                    gender=gender,
+                    blood_group=row.get("blood_group").strip() if row.get("blood_group") else None,
+                    phone_number=row.get("phone_number").strip() if row.get("phone_number") else None,
+                    address=row.get("address").strip() if row.get("address") else None,
+                    emergency_contact=row.get("emergency_contact").strip() if row.get("emergency_contact") else None
+                )
+
+                # Re-use our existing individual patient creator!
+                # This guarantees that logins, passwords, DB schemas, and onboarding emails are sent perfectly!
+                await self.add_patient_for_partner(db, partner_user_id, payload)
+
+                successful_uploads.append({
+                    "row": idx,
+                    "email": payload.email,
+                    "name": f"{payload.first_name} {payload.last_name}"
+                })
+
+            except Exception as e:
+                # Capture any error (Supabase fails, invalid payload, etc.) and keep going
+                failed_uploads.append({
+                    "row": idx,
+                    "email": email,
+                    "error": str(e)
+                })
+
+        return {
+            "total_rows": len(successful_uploads) + len(failed_uploads),
+            "success_count": len(successful_uploads),
+            "failure_count": len(failed_uploads),
+            "successful": successful_uploads,
+            "failed": failed_uploads
+        }
+
 
     # ==========================================
     # PATIENT MANAGEMENT BY PARTNER
