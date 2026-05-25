@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 from app.db.base import Base
 
-# Use TYPE_CHECKING to prevent circular imports
 if TYPE_CHECKING:
     from app.modules.labtest.models import LabTestCategory, LabTest
+    from app.modules.partner.models import Partner
 
 class Coupon(Base):
     __tablename__ = "coupons"
@@ -27,6 +27,10 @@ class Coupon(Base):
         UUID(as_uuid=True), ForeignKey("lab_tests.id", ondelete="CASCADE"), nullable=True
     )
 
+    partner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("partners.id", ondelete="CASCADE"), nullable=True
+    )
+
     valid_until: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
@@ -36,6 +40,7 @@ class Coupon(Base):
     # Relationships
     category: Mapped["LabTestCategory"] = relationship()
     lab_test: Mapped["LabTest"] = relationship()
+    partner: Mapped["Partner"] = relationship()
 
     def __repr__(self):
         return f"<Coupon code={self.code} discount={self.discount_percentage}%>"

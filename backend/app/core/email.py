@@ -10,7 +10,7 @@ def send_doctor_welcome_email(to_email: str, doctor_name: str, temp_password: st
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
 
         # NOTE: In production, change "onboarding@resend.dev" to your verified domain (e.g. "noreply@knowmyhealth.com")
-        from_email = "Know My Health <onboarding@resend.dev>"
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
 
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -52,7 +52,7 @@ def send_doctor_invite_email(to_email: str, doctor_name: str, invite_link: str) 
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
 
         # Change "onboarding@resend.dev" to your domain once verified on Resend
-        from_email = "Know My Health <onboarding@resend.dev>"
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
 
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
@@ -87,3 +87,86 @@ def send_doctor_invite_email(to_email: str, doctor_name: str, invite_link: str) 
     except Exception as e:
         logger.error(f"Failed to send invite email to {to_email}: {str(e)}")
         return False
+    
+
+def send_partner_welcome_email(to_email: str, company_name: str, temp_password: str, coupon_code: str) -> bool:
+    try:
+        resend.api_key = settings.RESEND_API_KEY.get_secret_value()
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
+            <h2 style="color: #2b6cb0;">Welcome to Know My Health, {company_name}!</h2>
+            <p>Your corporate partner application has been <strong>approved</strong> by our administration team.</p>
+            
+            <p>Your portal is now active. You can log in using these temporary credentials:</p>
+            
+            <div style="background-color: #f7fafc; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Portal Email:</strong> {to_email}</p>
+                <p style="margin: 10px 0 0 0;"><strong>Temporary Password:</strong> <code style="background: #edf2f7; padding: 3px 6px; border-radius: 3px; font-weight: bold;">{temp_password}</code></p>
+            </div>
+            
+            <div style="background-color: #ebf8ff; border: 1px dashed #3182ce; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold; color: #2b6cb0;">Your Exclusive Corporate Coupon is Active!</p>
+                <p style="margin: 5px 0 0 0;">Your employees can use this coupon at checkout to receive their corporate discount:</p>
+                <p style="margin: 10px 0 0 0; font-size: 1.2em;"><strong>Coupon Code:</strong> <code style="color: #2b6cb0; font-weight: bold; background: #fff; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 4px;">{coupon_code}</code></p>
+            </div>
+            
+            <p><em>Please log in and update your password immediately to secure your organization's health portal.</em></p>
+            
+            <p>Best Regards,<br/><strong>The Know My Health Corporate Team</strong></p>
+        </div>
+        """
+        response = resend.Emails.send({
+            "from": from_email,
+            "to": [to_email],
+            "subject": "Your Corporate Partner Account is Approved!",
+            "html": html_content
+        })
+        logger.info(f"Partner welcome email sent successfully to {to_email}.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send welcome email to partner {to_email}: {str(e)}")
+        return False
+
+def send_employee_welcome_email(to_email: str, employee_name: str, company_name: str, temp_password: str, coupon_code: str) -> bool:
+    try:
+        resend.api_key = settings.RESEND_API_KEY.get_secret_value()
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
+            <h2 style="color: #2b6cb0;">Welcome to Know My Health, {employee_name}!</h2>
+            <p>We are excited to let you know that your employer, <strong>{company_name}</strong>, has added you to our corporate benefits program.</p>
+            
+            <div style="background-color: #ebf8ff; border-left: 4px solid #3182ce; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold; color: #2b6cb0;">Your Account is Ready!</p>
+                <p style="margin: 5px 0 0 0;">You can log in to your employee health portal using these temporary credentials:</p>
+                <p style="margin: 10px 0 0 0;"><strong>Email:</strong> {to_email}</p>
+                <p style="margin: 5px 0 0 0;"><strong>Temporary Password:</strong> <code style="background: #edf2f7; padding: 3px 6px; border-radius: 3px; font-weight: bold;">{temp_password}</code></p>
+            </div>
+
+            <div style="background-color: #f0fff4; border: 1px dashed #38a169; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="margin: 0; font-weight: bold; color: #38a169;">Exclusive Employee Discount Active!</p>
+                <p style="margin: 5px 0 0 0;">Use your company's private discount coupon code during checkout to save instantly on lab checkups:</p>
+                <p style="margin: 10px 0 0 0; font-size: 1.25em;"><strong>Coupon Code:</strong> <code style="color: #38a169; background: #fff; padding: 3px 8px; border: 1px solid #c6f6d5; border-radius: 3px; font-weight: bold;">{coupon_code}</code></p>
+            </div>
+            
+            <p><em>Please make sure you log in and change your temporary password immediately to keep your health data private.</em></p>
+            
+            <p>Best Regards,<br/><strong>The Know My Health Corporate Team</strong></p>
+        </div>
+        """
+        response = resend.Emails.send({
+            "from": from_email,
+            "to": [to_email],
+            "subject": f"Your Corporate Health Benefits are Active! - {company_name}",
+            "html": html_content
+        })
+        logger.info(f"Employee onboarding email sent successfully to {to_email}.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send employee email to {to_email}: {str(e)}")
+        return False
+    
+    

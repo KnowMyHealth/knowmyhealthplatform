@@ -1,4 +1,5 @@
 # app/modules/partner/schemas.py
+from decimal import Decimal
 from uuid import UUID
 from datetime import datetime, date
 from typing import Optional
@@ -18,6 +19,7 @@ class PartnerSchema(BaseModel):
     address: str
     website: Optional[str] = None
     status: PartnerStatus
+    discount_percentage: Decimal
     created_at: datetime
     updated_at: datetime
 
@@ -32,6 +34,7 @@ class PartnerCreateRequest(BaseModel):
     partner_type: PartnerType
     address: str = Field(..., min_length=5)
     website: Optional[str] = None
+    discount_percentage: Decimal = Field(default=10.0, ge=0, le=100)
 
 class PartnerUpdateRequest(BaseModel):
     company_name: Optional[str] = Field(None, min_length=2, max_length=255)
@@ -39,6 +42,7 @@ class PartnerUpdateRequest(BaseModel):
     phone: Optional[str] = Field(None, min_length=5, max_length=50)
     address: Optional[str] = None
     website: Optional[str] = None
+    discount_percentage: Optional[Decimal] = None
 
     class Config:
         extra = "forbid"

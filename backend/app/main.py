@@ -26,6 +26,7 @@ from app.modules.patient.router import router as patient_router
 from app.modules.consultation.router import router as consultation_router
 from app.modules.partner.router import router as partner_router
 from app.modules.health_package.router import router as health_package_router
+from app.modules.callback.router import router as callback_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -92,6 +93,7 @@ def create_application() -> FastAPI:
     application.include_router(consultation_router, prefix=settings.API_VERSION)
     application.include_router(partner_router, prefix=settings.API_VERSION)
     application.include_router(health_package_router, prefix=settings.API_VERSION)
+    application.include_router(callback_router, prefix=settings.API_VERSION)
 
     return application
 

@@ -101,6 +101,7 @@ class PartnerService:
         new_supabase_uid = None
 
         try:
+            # 1. Create Supabase Auth User
             auth_response = supabase_admin.auth.admin.create_user({
                 "email": partner.email,
                 "password": temp_password, 
@@ -109,14 +110,50 @@ class PartnerService:
             })
             new_supabase_uid = uuid.UUID(auth_response.user.id)
 
+            # 2. Update local DB Role
             await db.execute(update(User).where(User.id == new_supabase_uid).values(role=Role.PARTNER.value))
 
             partner.user_id = new_supabase_uid
             partner.status = PartnerStatus.APPROVED
+
+            # 3. AUTO-GENERATE EXCLUSIVE COUPON FOR THIS ORGANIZATION
+            from app.modules.coupon.models import Coupon
+            clean_company_name = "".join(c for c in partner.company_name if c.isalnum()).upper()[:8]
+            coupon_code = f"KMH-{clean_company_name}-{int(partner.discount_percentage)}"
+            
+            # Double-check uniqueness of coupon code
+            existing_coupon = (await db.execute(select(Coupon).where(Coupon.code == coupon_code))).scalar_one_or_none()
+            if existing_coupon:
+                # If collision, append a short random string
+                coupon_code = f"KMH-{clean_company_name}-{secrets.token_hex(2).upper()}"
+
+            new_coupon = Coupon(
+                code=coupon_code,
+                discount_percentage=partner.discount_percentage,
+                partner_id=partner.id,
+                is_active=True
+            )
+            db.add(new_coupon)
+
             await db.commit()
             await db.refresh(partner)
             
-            logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}")
+            logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}. Coupon Code: {coupon_code}")
+
+            # 4. Trigger Partner Welcome Email Asynchronously
+            import asyncio
+            from app.core.email import send_partner_welcome_email
+            
+            asyncio.create_task(
+                asyncio.to_thread(
+                    send_partner_welcome_email,
+                    to_email=partner.email,
+                    company_name=partner.company_name,
+                    temp_password=temp_password,
+                    coupon_code=coupon_code
+                )
+            )
+
             return partner
         except Exception as e:
             await db.rollback()
@@ -136,6 +173,7 @@ class PartnerService:
         new_uid = None
 
         try:
+            # 1. Create Patient User Account
             auth_response = supabase_admin.auth.admin.create_user({
                 "email": payload.email,
                 "password": temp_password, 
@@ -146,14 +184,37 @@ class PartnerService:
 
             await db.execute(update(User).where(User.id == new_uid).values(role=Role.PATIENT.value))
 
+            # 2. Create Patient Profile linked to Partner
             patient_data = payload.model_dump(exclude={"email"})
             new_patient = Patient(user_id=new_uid, partner_id=partner.id, **patient_data)
-            
             db.add(new_patient)
+
+            # 3. Fetch the Partner's Coupon code to send to the Employee
+            from app.modules.coupon.models import Coupon
+            coupon = (await db.execute(select(Coupon).where(Coupon.partner_id == partner.id))).scalar_one_or_none()
+            coupon_code = coupon.code if coupon else "N/A"
+
             await db.commit()
             await db.refresh(new_patient)
             
-            logger.info(f"Partner {partner.id} created patient {new_patient.id}. Temp PW: {temp_password}")
+            logger.info(f"Partner {partner.id} created patient {new_patient.id}.")
+
+            # 4. Trigger employee email with corporate coupon
+            import asyncio
+            from app.core.email import send_employee_welcome_email
+            
+            employee_name = f"{payload.first_name} {payload.last_name}"
+            asyncio.create_task(
+                asyncio.to_thread(
+                    send_employee_welcome_email,
+                    to_email=payload.email,
+                    employee_name=employee_name,
+                    company_name=partner.company_name,
+                    temp_password=temp_password,
+                    coupon_code=coupon_code
+                )
+            )
+
             return new_patient
 
         except Exception as e:

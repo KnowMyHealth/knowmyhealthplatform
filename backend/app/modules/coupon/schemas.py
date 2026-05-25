@@ -10,6 +10,7 @@ class CouponSchema(BaseModel):
     discount_percentage: Decimal
     category_id: Optional[UUID] = None
     lab_test_id: Optional[UUID] = None
+    partner_id: Optional[UUID] = None
     valid_until: Optional[datetime] = None
     is_active: bool
     created_at: datetime
@@ -22,6 +23,7 @@ class CouponCreateRequest(BaseModel):
     discount_percentage: Decimal = Field(..., gt=0, le=100)
     category_id: Optional[UUID] = Field(None, description="Restrict to a specific category")
     lab_test_id: Optional[UUID] = Field(None, description="Restrict to a specific test")
+    partner_id: Optional[UUID] = None
     valid_until: Optional[datetime] = Field(None, description="Expiration date")
     is_active: bool = True
 

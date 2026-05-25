@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
-from sqlalchemy import String, ForeignKey, Text, Enum, func
+from sqlalchemy import String, ForeignKey, Text, Enum, func, Numeric
 
 from app.db.base import Base
 
@@ -52,6 +52,12 @@ class Partner(Base):
         Enum(PartnerStatus), 
         nullable=False, 
         default=PartnerStatus.PENDING
+    )
+
+    discount_percentage: Mapped[float] = mapped_column(
+        Numeric(5, 2), 
+        default=10.0, 
+        nullable=False
     )
     
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

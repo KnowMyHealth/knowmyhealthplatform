@@ -82,11 +82,17 @@ async def delete_coupon(
 async def validate_coupon(
     request: Request,
     payload: CouponValidateRequest = Body(...),
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_current_user), # Retrieve authorized user
     db: AsyncSession = Depends(get_db),
     service: CouponService = Depends(get_coupon_service)
 ):
-    result = await service.validate_coupon(db, payload.code, payload.lab_test_id)
+    # Pass current_user.id for corporate verification
+    result = await service.validate_coupon(
+        db=db, 
+        code=payload.code, 
+        lab_test_id=payload.lab_test_id,
+        user_id=UUID(str(current_user.id)) 
+    )
     return ApiResponse.success(data=result.model_dump(), message=result.message)
 
 
