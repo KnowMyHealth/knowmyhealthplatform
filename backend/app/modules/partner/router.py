@@ -22,6 +22,7 @@ from app.modules.partner.schemas import (
 )
 from app.modules.partner.service import PartnerService
 from app.modules.partner.dependencies import get_partner_service
+from app.modules.partner.schemas import PartnerApproveRequest
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
 
@@ -110,13 +111,17 @@ async def delete_partner(
 async def approve_partner(
     request: Request,
     partner_id: UUID,
+    payload: PartnerApproveRequest = Body(...), # <-- Added request body
     current_user: User = Depends(RequireRole([Role.ADMIN])),
     db: AsyncSession = Depends(get_db),
     service: PartnerService = Depends(get_partner_service)
 ):
-    approved_partner = await service.approve_partner_and_create_user(db, partner_id)
+    approved_partner = await service.approve_partner_and_create_user(
+        db=db,
+        partner_id=partner_id,
+        discount_percentage=payload.discount_percentage # <-- Pass to service
+    )
     return ApiResponse.success(data=PartnerSchema.model_validate(approved_partner), message="Partner approved.")
-
 
 # -------------------------------------------------------------------------
 # PARTNER: MANAGE OWN PATIENTS
