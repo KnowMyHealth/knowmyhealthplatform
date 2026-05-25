@@ -101,6 +101,7 @@ class PartnerService:
         new_supabase_uid = None
 
         try:
+            # 1. Create Supabase Auth User
             auth_response = supabase_admin.auth.admin.create_user({
                 "email": partner.email,
                 "password": temp_password, 
@@ -109,6 +110,7 @@ class PartnerService:
             })
             new_supabase_uid = uuid.UUID(auth_response.user.id)
 
+            # 2. Update local DB Role
             await db.execute(update(User).where(User.id == new_supabase_uid).values(role=Role.PARTNER.value))
 
             partner.user_id = new_supabase_uid
@@ -117,6 +119,20 @@ class PartnerService:
             await db.refresh(partner)
             
             logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}")
+
+            # 3. NEW: Trigger Partner Welcome Email Asynchronously
+            import asyncio
+            from app.core.email import send_partner_welcome_email
+            
+            asyncio.create_task(
+                asyncio.to_thread(
+                    send_partner_welcome_email,
+                    to_email=partner.email,
+                    company_name=partner.company_name,
+                    temp_password=temp_password
+                )
+            )
+
             return partner
         except Exception as e:
             await db.rollback()
@@ -136,6 +152,7 @@ class PartnerService:
         new_uid = None
 
         try:
+            # 1. Create Supabase Auth User
             auth_response = supabase_admin.auth.admin.create_user({
                 "email": payload.email,
                 "password": temp_password, 
@@ -144,8 +161,10 @@ class PartnerService:
             })
             new_uid = uuid.UUID(auth_response.user.id)
 
+            # 2. Assign Patient Role
             await db.execute(update(User).where(User.id == new_uid).values(role=Role.PATIENT.value))
 
+            # 3. Create Patient Demographics Profile
             patient_data = payload.model_dump(exclude={"email"})
             new_patient = Patient(user_id=new_uid, partner_id=partner.id, **patient_data)
             
@@ -153,14 +172,35 @@ class PartnerService:
             await db.commit()
             await db.refresh(new_patient)
             
-            logger.info(f"Partner {partner.id} created patient {new_patient.id}. Temp PW: {temp_password}")
+            logger.info(f"Partner {partner.id} created patient {new_patient.id}.")
+
+            # 4. Trigger onboarding welcome email asynchronously
+            # We import here to avoid potential circular import issues
+            import asyncio
+            from app.core.email import send_employee_welcome_email
+            
+            employee_name = f"{payload.first_name} {payload.last_name}"
+            asyncio.create_task(
+                asyncio.to_thread(
+                    send_employee_welcome_email,
+                    to_email=payload.email,
+                    employee_name=employee_name,
+                    company_name=partner.company_name,
+                    temp_password=temp_password
+                )
+            )
+
             return new_patient
 
         except Exception as e:
             await db.rollback()
             if new_uid:
-                supabase_admin.auth.admin.delete_user(str(new_uid))
+                try:
+                    supabase_admin.auth.admin.delete_user(str(new_uid))
+                except Exception as del_err:
+                    logger.warning(f"Failed to rollback/delete Supabase auth: {del_err}")
             raise PartnerCreateError(f"Failed to create patient: {e}")
+        
 
     async def list_partner_patients(self, db: AsyncSession, partner_user_id: UUID, params: PaginationParams) -> tuple[list[Patient], int]:
         partner = await self.get_partner_by_user_id(db, partner_user_id)
