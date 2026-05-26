@@ -81,6 +81,11 @@ function DiagnosticsContent() {
   // Checkout States
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [scheduledDate, setScheduledDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  });
 
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -213,7 +218,7 @@ function DiagnosticsContent() {
   };
 
   const handleCheckout = async () => {
-    if (cart.length === 0 || isCheckingOut) return;
+    if (cart.length === 0 || isCheckingOut || !scheduledDate) return;
     setIsCheckingOut(true);
     setCheckoutError(null);
 
@@ -225,11 +230,32 @@ function DiagnosticsContent() {
         return;
       }
 
-      const finalTotal = Math.max(0, cartTotal - couponDiscount);
+      // Step 1: Create a PENDING booking for each cart item
+      const bookingIds: string[] = [];
+      for (const item of cart) {
+        const bookRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests/bookings`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          },
+          body: JSON.stringify({
+            lab_test_id: item.testId,
+            scheduled_date: scheduledDate
+          })
+        });
+        const bookJson = await bookRes.json();
+        if (!bookRes.ok || !bookJson.success) {
+          setCheckoutError(bookJson.message || 'Failed to create booking. Please try again.');
+          setIsCheckingOut(false);
+          return;
+        }
+        bookingIds.push(bookJson.data.id);
+      }
 
-      // Create a payment order for the first cart item (LAB_TEST booking)
-      // The amount covers the full cart total
-      const firstItem = cart[0];
+      // Step 2: Create payment order using the first booking id and the full cart total
+      const finalTotal = Math.max(0, cartTotal - couponDiscount);
       const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
         method: 'POST',
         headers: {
@@ -240,7 +266,7 @@ function DiagnosticsContent() {
         body: JSON.stringify({
           amount: finalTotal,
           booking_type: 'LAB_TEST',
-          booking_id: firstItem.testId
+          booking_id: bookingIds[0]
         })
       });
 
@@ -251,6 +277,7 @@ function DiagnosticsContent() {
         return;
       }
 
+      // Step 3: Load Razorpay and open checkout popup
       const loaded = await loadRazorpayScript();
       if (!loaded) {
         setCheckoutError('Failed to load payment gateway. Please check your connection and try again.');
@@ -267,12 +294,13 @@ function DiagnosticsContent() {
         description: `Diagnostic Tests (${cart.length} item${cart.length > 1 ? 's' : ''})`,
         theme: { color: '#059669' },
         handler: async (response: any) => {
+          // Step 4: Verify payment
           try {
-            const { data: { session: verifySession } } = await supabase.auth.getSession();
+            const { data: { session: vs } } = await supabase.auth.getSession();
             const verifyRes = await fetch(`${BACKEND_URL}/api/v1/payments/verify`, {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${verifySession?.access_token ?? ''}`,
+                'Authorization': `Bearer ${vs?.access_token ?? ''}`,
                 'Content-Type': 'application/json',
                 'ngrok-skip-browser-warning': 'true'
               },
@@ -303,7 +331,7 @@ function DiagnosticsContent() {
         },
         modal: {
           ondismiss: () => {
-            setCheckoutError('Payment was cancelled. Your cart items are still saved.');
+            setCheckoutError('Payment cancelled. Your cart is still saved — please try again.');
             setIsCheckingOut(false);
           }
         }
@@ -761,6 +789,18 @@ function DiagnosticsContent() {
                 {!isCheckoutSuccess && cart.length > 0 && (
                   <div className="p-6 bg-emerald-50/50 border-t border-emerald-100">
                     
+                    {/* Collection Date */}
+                    <div className="mb-4 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Sample Collection Date</label>
+                      <input
+                        type="date"
+                        value={scheduledDate}
+                        min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                        onChange={e => setScheduledDate(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-700"
+                      />
+                    </div>
+
                     {/* Promo Code Section */}
                     <div className="mb-6 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
                       <div className="flex gap-2">
