@@ -2,7 +2,7 @@ from typing import Union
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 
-from app.core.llm import model, groq_model
+from app.core.llm import model
 from app.modules.symptom_checker.schemas import FinalReport
 
 SYSTEM_PROMPT = """
@@ -18,7 +18,7 @@ RULES & WORKFLOW:
 
 def _create_symptom_agent() -> Agent:
     return Agent(
-        model=groq_model,
+        model=model,
         system_prompt=SYSTEM_PROMPT,
         # The magic happens here: AI can return text OR trigger the FinalReport tool
         output_type=Union[str, FinalReport], 
