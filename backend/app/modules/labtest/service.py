@@ -133,12 +133,42 @@ class LabTestService:
             )
             db.add(booking)
             await db.commit()
-            await db.refresh(booking)
-            return booking
+            
+            # FIX: Re-fetch the booking with the nested lab_test and category eagerly loaded
+            fetch_stmt = (
+                select(LabTestBooking)
+                .options(
+                    selectinload(LabTestBooking.lab_test).selectinload(LabTest.category)
+                )
+                .where(LabTestBooking.id == booking.id)
+            )
+            result = await db.execute(fetch_stmt)
+            return result.scalar_one()
+
         except SQLAlchemyError as e:
             await db.rollback()
             logger.error(f"Failed to create lab test booking: {e}")
             raise LabTestError("Failed to schedule lab test booking.")
+
+    async def list_bookings(self, db: AsyncSession, params: PaginationParams, status: LabTestBookingStatus | None = None) -> tuple[list[LabTestBooking], int]:
+        # FIX: Also update the list_bookings to load the category to prevent the same error here!
+        query = (
+            select(LabTestBooking)
+            .options(
+                selectinload(LabTestBooking.lab_test).selectinload(LabTest.category)
+            )
+        )
+        count_query = select(func.count()).select_from(LabTestBooking)
+
+        if status:
+            query = query.where(LabTestBooking.status == status)
+            count_query = count_query.where(LabTestBooking.status == status)
+
+        total_count = (await db.execute(count_query)).scalar() or 0
+        query = query.order_by(LabTestBooking.created_at.desc()).offset(params.offset).limit(params.limit)
+        items = (await db.execute(query)).scalars().all()
+        
+        return list(items), total_count
 
     async def list_bookings(self, db: AsyncSession, params: PaginationParams, status: LabTestBookingStatus | None = None) -> tuple[list[LabTestBooking], int]:
         # Eager load the lab test data so it appears in the JSON output
