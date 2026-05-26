@@ -183,6 +183,8 @@ export default function AdminPortal() {
     partner_labs: { count: number; percentage_change: number; is_positive: boolean };
     pending_verifications: { count: number; percentage_change: number; is_positive: boolean };
   } | null>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { logout } = useAuth();
@@ -350,6 +352,7 @@ export default function AdminPortal() {
     fetchAdminDetails();
     fetchAllDoctors();
     fetchDashboardMetrics();
+    fetchTransactions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -397,6 +400,25 @@ export default function AdminPortal() {
   useEffect(() => {
     setTestCurrentPage(1);
   }, [testFilterStatus, testSearchQuery]);
+
+  const fetchTransactions = async () => {
+    setIsLoadingTransactions(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/payments?limit=10&page=1`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setTransactions(json.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch transactions', e);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
 
   const fetchDashboardMetrics = async () => {
     try {
@@ -1697,6 +1719,78 @@ export default function AdminPortal() {
           </div>
         </motion.div>
       </div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden">
+        <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900">Recent Transactions</h3>
+            <p className="text-sm text-slate-500 mt-0.5">Latest payments across the platform.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {(['SUCCESS', 'PENDING', 'FAILED'] as const).map(s => (
+              <span key={s} className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                s === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' :
+                s === 'PENDING' ? 'bg-amber-50 text-amber-700' :
+                'bg-red-50 text-red-600'
+              }`}>{s}</span>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          {isLoadingTransactions ? (
+            <div className="py-16 flex justify-center"><Loader2 className="animate-spin text-emerald-500" size={28} /></div>
+          ) : transactions.length === 0 ? (
+            <div className="py-16 text-center text-slate-500 font-medium">No transactions yet.</div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                  <th className="p-4 pl-8">Patient</th>
+                  <th className="p-4">Type</th>
+                  <th className="p-4">Amount</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Order ID</th>
+                  <th className="p-4 pr-8">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transactions.map((trx) => {
+                  const name = trx.user?.patient_profile
+                    ? `${trx.user.patient_profile.first_name} ${trx.user.patient_profile.last_name}`
+                    : trx.user?.email ?? '—';
+                  const dateIST = new Date(trx.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <tr key={trx.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-4 pl-8">
+                        <div>
+                          <p className="font-bold text-slate-900 text-sm">{name}</p>
+                          <p className="text-xs text-slate-400">{trx.user?.email}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                          trx.booking_type === 'CONSULTATION' ? 'bg-blue-50 text-blue-700' :
+                          trx.booking_type === 'LAB_TEST' ? 'bg-violet-50 text-violet-700' :
+                          'bg-teal-50 text-teal-700'
+                        }`}>{trx.booking_type?.replace('_', ' ')}</span>
+                      </td>
+                      <td className="p-4 font-black text-slate-900">₹{Number(trx.amount).toLocaleString('en-IN')}</td>
+                      <td className="p-4">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                          trx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' :
+                          trx.status === 'PENDING' ? 'bg-amber-50 text-amber-700' :
+                          'bg-red-50 text-red-600'
+                        }`}>{trx.status}</span>
+                      </td>
+                      <td className="p-4 text-xs text-slate-500 font-mono">{trx.razorpay_order_id ?? '—'}</td>
+                      <td className="p-4 pr-8 text-sm text-slate-500">{dateIST}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </motion.div>
     </div>
     );
   };
