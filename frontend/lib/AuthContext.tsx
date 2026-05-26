@@ -48,6 +48,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     const initAuth = async () => {
+      // If hash contains access_token (OAuth redirect), let onAuthStateChange handle it
+      if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+        // Clear loading once onAuthStateChange fires — don't resolve here
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!isMounted) return;
       if (session) {
@@ -75,9 +81,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoggedIn(true);
         setIsLoading(false);
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          setIsAuthModalOpen(false);
           if (role === 'ADMIN') router.push('/admin');
           else if (role === 'PARTNER') router.push('/partner');
           else if (role === 'DOCTOR') router.push('/doctor');
+          // PATIENT stays on homepage — modal closes, navbar updates
         }
       } else {
         if (!isMounted) return;
