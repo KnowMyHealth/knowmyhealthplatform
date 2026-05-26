@@ -18,6 +18,8 @@ from app.modules.user.service import UsersService
 from app.modules.user.dependencies import get_users_service
 from app.modules.user.schemas import Role
 from app.core.rate_limiter import limiter
+from app.modules.user.schemas import AdminDashboardMetricsResponse
+from app.core.security import RequireRole
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -77,3 +79,24 @@ async def get_my_profile(
         raise UserNotFoundError()
 
     return ApiResponse.success(data=UserSchema.model_validate(user))
+
+
+@router.get(
+    "/admin/dashboard/metrics",
+    response_model=AdminDashboardMetricsResponse, # Helps auto-generate Swagger Docs
+    summary="Get Admin Dashboard Metrics",
+    description="Returns aggregate counts and month-over-month percentage changes for the admin KPI cards."
+)
+@limiter.limit("20/minute")
+async def get_dashboard_metrics(
+    request: Request,
+    current_user = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: UsersService = Depends(get_users_service)
+):
+    metrics = await service.get_admin_dashboard_metrics(db)
+    
+    return ApiResponse.success(
+        data=metrics,
+        message="Dashboard metrics retrieved successfully."
+    )

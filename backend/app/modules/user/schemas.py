@@ -44,3 +44,14 @@ class UserUpdateRequest(BaseModel):
 
 class UserRoleUpdateRequest(BaseModel):
     role: Role
+
+class MetricStatSchema(BaseModel):
+    count: int
+    percentage_change: float
+    is_positive: bool
+
+class AdminDashboardMetricsResponse(BaseModel):
+    total_patients: MetricStatSchema
+    active_doctors: MetricStatSchema
+    partner_labs: MetricStatSchema
+    pending_verifications: MetricStatSchema
