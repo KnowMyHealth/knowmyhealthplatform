@@ -1879,7 +1879,17 @@ export default function AdminPortal() {
                         };
                         return (
                           <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.patient_user_id?.slice(0, 8)}…</td>
+                            <td className="p-4">
+                              {booking.patient_user ? (
+                                <>
+                                  <p className="text-sm font-bold text-slate-900">{booking.patient_user.patient_profile?.first_name} {booking.patient_user.patient_profile?.last_name}</p>
+                                  <p className="text-xs text-slate-400">{booking.patient_user.email}</p>
+                                  {booking.patient_user.patient_profile?.phone_number && <p className="text-xs text-slate-400">{booking.patient_user.patient_profile.phone_number}</p>}
+                                </>
+                              ) : (
+                                <span className="text-sm text-slate-400 font-mono">{booking.patient_user_id?.slice(0, 8)}…</span>
+                              )}
+                            </td>
                             <td className="p-4">
                               <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
                             </td>
