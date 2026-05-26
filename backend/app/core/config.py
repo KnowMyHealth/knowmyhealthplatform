@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     AGORA_APP_ID: SecretStr
     AGORA_APP_CERTIFICATE: SecretStr
 
+    RAZORPAY_KEY_ID: SecretStr
+    RAZORPAY_KEY_SECRET: SecretStr
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), "../../.env"),
         env_file_encoding="utf-8",
