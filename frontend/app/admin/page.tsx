@@ -1974,14 +1974,51 @@ export default function AdminPortal() {
                   <input type="text" value={testForm.clinic_address} onChange={e => setTestForm({...testForm, clinic_address: e.target.value})} placeholder="e.g. 12, MG Road, Bangalore" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Opens <span className="normal-case font-normal text-slate-400">(optional)</span></label>
-                    <input type="time" value={testForm.clinic_open_time} onChange={e => setTestForm({...testForm, clinic_open_time: e.target.value ? e.target.value + ':00' : ''})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Closes <span className="normal-case font-normal text-slate-400">(optional)</span></label>
-                    <input type="time" value={testForm.clinic_close_time} onChange={e => setTestForm({...testForm, clinic_close_time: e.target.value ? e.target.value + ':00' : ''})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
-                  </div>
+                  {(['clinic_open_time', 'clinic_close_time'] as const).map((field, idx) => {
+                    const label = idx === 0 ? 'Clinic Opens' : 'Clinic Closes';
+                    const raw = testForm[field]; // stored as "HH:MM:SS" or ""
+                    const hh = raw ? raw.slice(0, 2) : '';
+                    const mm = raw ? raw.slice(3, 5) : '';
+                    const setTime = (newH: string, newM: string) => {
+                      if (!newH && !newM) { setTestForm({...testForm, [field]: ''}); return; }
+                      setTestForm({...testForm, [field]: `${newH || '00'}:${newM || '00'}:00`});
+                    };
+                    return (
+                      <div key={field}>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                          {label} <span className="normal-case font-normal text-slate-400">(optional)</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={hh}
+                            onChange={e => setTime(e.target.value, mm)}
+                            className="flex-1 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-slate-700 appearance-none text-center"
+                          >
+                            <option value="">HH</option>
+                            {Array.from({length: 24}, (_, i) => String(i).padStart(2, '0')).map(h => (
+                              <option key={h} value={h}>{h}</option>
+                            ))}
+                          </select>
+                          <span className="text-slate-400 font-bold text-lg">:</span>
+                          <select
+                            value={mm}
+                            onChange={e => setTime(hh, e.target.value)}
+                            className="flex-1 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-slate-700 appearance-none text-center"
+                          >
+                            <option value="">MM</option>
+                            {['00','15','30','45'].map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {hh && mm && (
+                          <p className="text-xs text-emerald-600 font-semibold mt-1.5 ml-1">
+                            {parseInt(hh) === 0 ? '12' : parseInt(hh) > 12 ? String(parseInt(hh) - 12).padStart(2,'0') : hh}:{mm} {parseInt(hh) >= 12 ? 'PM' : 'AM'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 <label className="flex items-center gap-3 pt-2 cursor-pointer">
                   <input type="checkbox" checked={testForm.is_active} onChange={e => setTestForm({...testForm, is_active: e.target.checked})} className="w-5 h-5 accent-emerald-600 rounded" />
