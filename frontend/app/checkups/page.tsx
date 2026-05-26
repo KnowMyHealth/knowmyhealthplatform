@@ -651,22 +651,6 @@ export default function CheckupsPage() {
               </p>
             </motion.div>
 
-            {/* Stats */}
-            {!isLoading && packages.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7 }}
-                className="mt-12 inline-flex items-center divide-x divide-white/[0.06] bg-white/[0.04] border border-white/[0.08] rounded-2xl overflow-hidden">
-                {[
-                  { label: 'Packages', value: packages.length },
-                  { label: 'Avg. Discount', value: `${Math.round(packages.reduce((s, p) => s + p.discount_percentage, 0) / packages.length)}%` },
-                  { label: 'Categories', value: CATEGORIES.length },
-                ].map(s => (
-                  <div key={s.label} className="px-8 py-4 text-center">
-                    <p className="text-3xl font-black text-white tabular-nums">{s.value}</p>
-                    <p className="text-emerald-400/60 text-xs font-bold uppercase tracking-[0.12em] mt-1">{s.label}</p>
-                  </div>
-                ))}
-              </motion.div>
-            )}
           </div>
         </section>
 
