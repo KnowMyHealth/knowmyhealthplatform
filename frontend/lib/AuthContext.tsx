@@ -73,7 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         if (role) setUserRole(role);
         setIsLoggedIn(true);
-        if (event === 'SIGNED_IN') {
+        setIsLoading(false);
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (role === 'ADMIN') router.push('/admin');
           else if (role === 'PARTNER') router.push('/partner');
           else if (role === 'DOCTOR') router.push('/doctor');
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         setIsLoggedIn(false);
         setUserRole(null);
+        setIsLoading(false);
       }
     });
 

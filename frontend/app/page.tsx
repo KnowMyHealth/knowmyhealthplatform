@@ -11,6 +11,7 @@ import StickyCallback from '@/components/StickyCallback';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -159,6 +160,18 @@ export default function Home() {
     }
   };
 
+  // Handle OAuth redirect — picks up session from hash fragment or code
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.includes('access_token')) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        // Clear the hash without triggering a reload
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     if (isLoading || !isLoggedIn) return;
     if (userRole === 'ADMIN') router.push('/admin');
@@ -269,34 +282,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Stats Bar ────────────────────────────────────────────────────────── */}
-      <section className="py-20 bg-emerald-950 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(rgba(167,243,208,0.15) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
-        <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[900px] bg-emerald-700/10 blur-[120px] pointer-events-none" />
-        <div className="relative max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 divide-y-2 lg:divide-y-0 lg:divide-x-2 divide-white/[0.06]">
-            {[
-              { to: 50, suffix: 'k+', label: 'Patients Served' },
-              { to: 2, suffix: 'k+', label: 'Registered Doctors' },
-              { to: 500, suffix: '+', label: 'Partner Facilities' },
-              { to: 24, suffix: 'h', label: 'Report Turnaround' },
-            ].map((stat, i) => (
-              <motion.div key={i}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                className="text-center py-10 lg:py-6 px-6"
-              >
-                <p className="text-5xl lg:text-6xl font-black text-white tracking-tight tabular-nums">
-                  <AnimatedCounter to={stat.to} suffix={stat.suffix} />
-                </p>
-                <p className="text-emerald-400/60 text-xs font-bold uppercase tracking-[0.15em] mt-3">{stat.label}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* ── Services Bento Grid ───────────────────────────────────────────────── */}
       <section className="py-28 relative z-10 overflow-hidden bg-white">
