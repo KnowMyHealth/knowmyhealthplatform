@@ -621,7 +621,7 @@ export default function AdminPortal() {
       if (!payload.clinic_open_time) delete payload.clinic_open_time;
       if (!payload.clinic_close_time) delete payload.clinic_close_time;
       const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/${editingTest.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
