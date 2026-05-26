@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from typing import List, Literal
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     API_VERSION: str = "/api/v1"
     PROJECT_NAME: str = "KnowMyHealth API"
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
+    BACKEND_CORS_ORIGINS: List[str] = []
 
     DATABASE_URL: SecretStr
     SUPABASE_JWKS_URL: str
