@@ -21,18 +21,27 @@ class AuthenticatedUser:
 security = HTTPBearer()
 jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL, cache_keys=True, lifespan=300)
 
+def _get_signing_key(token: str):
+    try:
+        return jwks_client.get_signing_key_from_jwt(token)
+    except jwt.PyJWKClientError:
+        # Unknown kid — bust the cache and refetch JWKS (handles new Google OAuth signing keys)
+        if jwks_client.jwk_set_cache is not None:
+            jwks_client.jwk_set_cache.put(None)
+        return jwks_client.get_signing_key_from_jwt(token)
+
 def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security)):
     token = auth.credentials
-    
+
     try:
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        signing_key = _get_signing_key(token)
         payload = jwt.decode(
             token,
             key=signing_key.key,
-            algorithms=["ES256"], 
+            algorithms=["ES256"],
             audience="authenticated",
         )
-        
+
         return AuthenticatedUser(id=payload['sub'], email=payload.get('email'))
 
     except jwt.ExpiredSignatureError:
