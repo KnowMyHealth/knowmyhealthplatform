@@ -250,3 +250,95 @@ def send_health_package_booking_email(to_email: str, patient_name: str, package_
     except Exception as e:
         logger.error(f"Failed to send health package confirmation email to {to_email}: {str(e)}")
         return False
+    
+
+def send_consultation_booking_patient_email(
+    to_email: str, 
+    patient_name: str, 
+    doctor_name: str, 
+    scheduled_date: str, 
+    consultation_type: str, 
+    clinic_address: str | None
+) -> bool:
+    """Sends a booking confirmation email to the Patient."""
+    try:
+        resend.api_key = settings.RESEND_API_KEY.get_secret_value()
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+
+        location_html = f"<p style='margin: 5px 0;'><strong>📍 Clinic Address:</strong> {clinic_address}</p>" if consultation_type == "OFFLINE" and clinic_address else ""
+        link_html = "<p style='margin: 5px 0;'><strong>🔗 Join Link:</strong> Available in your dashboard 5 mins before the call.</p>" if consultation_type == "ONLINE" else ""
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
+            <h2 style="color: #2b6cb0;">Consultation Confirmed!</h2>
+            <p>Hi <strong>{patient_name}</strong>,</p>
+            <p>Your consultation appointment has been successfully booked.</p>
+            
+            <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; font-size: 1.1em;"><strong>Dr. {doctor_name}</strong></p>
+                <p style="margin: 5px 0;"><strong>📅 Date & Time:</strong> {scheduled_date}</p>
+                <p style="margin: 5px 0;"><strong>🩺 Type:</strong> {consultation_type}</p>
+                {location_html}
+                {link_html}
+            </div>
+            
+            <p>If you have any questions or need to reschedule, please visit your dashboard or contact our support team.</p>
+            
+            <p>Best Regards,<br/><strong>The Know My Health Team</strong></p>
+        </div>
+        """
+
+        response = resend.Emails.send({
+            "from": from_email,
+            "to": [to_email],
+            "subject": f"Booking Confirmed: Dr. {doctor_name}",
+            "html": html_content
+        })
+        logger.info(f"Patient consultation confirmation email sent to {to_email}.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send patient consultation email to {to_email}: {str(e)}")
+        return False
+
+
+def send_consultation_booking_doctor_email(
+    to_email: str, 
+    doctor_name: str, 
+    patient_name: str, 
+    scheduled_date: str, 
+    consultation_type: str
+) -> bool:
+    """Sends a new booking notification email to the Doctor."""
+    try:
+        resend.api_key = settings.RESEND_API_KEY.get_secret_value()
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
+            <h2 style="color: #38a169;">New Appointment Booked</h2>
+            <p>Hi <strong>Dr. {doctor_name}</strong>,</p>
+            <p>A new patient has booked a consultation with you.</p>
+            
+            <div style="background-color: #f0fff4; border-left: 4px solid #38a169; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; font-size: 1.1em;"><strong>Patient: {patient_name}</strong></p>
+                <p style="margin: 5px 0;"><strong>📅 Date & Time:</strong> {scheduled_date}</p>
+                <p style="margin: 5px 0;"><strong>🩺 Type:</strong> {consultation_type}</p>
+            </div>
+            
+            <p>Please log in to your provider dashboard to view the patient's full medical profile and history.</p>
+            
+            <p>Best Regards,<br/><strong>The Know My Health Team</strong></p>
+        </div>
+        """
+
+        response = resend.Emails.send({
+            "from": from_email,
+            "to": [to_email],
+            "subject": f"New Appointment: {patient_name}",
+            "html": html_content
+        })
+        logger.info(f"Doctor consultation notification email sent to {to_email}.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send doctor consultation email to {to_email}: {str(e)}")
+        return False

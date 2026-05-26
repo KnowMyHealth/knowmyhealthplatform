@@ -1,6 +1,7 @@
 # app/modules/consultation/service.py
 import uuid
 from uuid import UUID
+import asyncio
 from loguru import logger
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,10 @@ from app.modules.doctor.models import Doctor, DoctorAvailability
 from app.modules.consultation.schemas import BookConsultationRequest, AgoraJoinResponse
 from app.modules.consultation.exceptions import ConsultationError, ConsultationNotFoundError, ConsultationAccessDenied
 from app.core.agora import generate_agora_token
+from app.core.email import (
+    send_consultation_booking_patient_email,
+    send_consultation_booking_doctor_email
+)
 
 # User required for eager loading patient_profile
 from app.db.all_models import User
@@ -49,13 +54,13 @@ class ConsultationService:
             DoctorAvailability.doctor_id == data.doctor_id,
             DoctorAvailability.day_of_week == day_of_week,
             DoctorAvailability.start_time <= booking_time,
-            DoctorAvailability.end_time > booking_time # Must end after the slot starts
+            DoctorAvailability.end_time > booking_time
         )
         is_available = (await db.execute(avail_stmt)).scalar_one_or_none()
         if not is_available:
             raise ConsultationError("Doctor is not available at this time.")
 
-        # 5. Check if slot is already booked (works for both online/offline simultaneously!)
+        # 5. Check if slot is already booked
         conflict_stmt = select(Consultation).where(
             Consultation.doctor_id == data.doctor_id,
             Consultation.scheduled_at == data.scheduled_at,
@@ -78,13 +83,57 @@ class ConsultationService:
         db.add(consultation)
         await db.commit()
         
-        # 8. Eager load relations before returning so Pydantic doesn't crash on the newly added schema fields
+        # 8. Eager load relations before returning
         fetch_stmt = select(Consultation).options(
             selectinload(Consultation.doctor),
             selectinload(Consultation.patient_user).selectinload(User.patient_profile)
         ).where(Consultation.id == consultation.id)
         
-        return (await db.execute(fetch_stmt)).scalar_one()
+        saved_consultation = (await db.execute(fetch_stmt)).scalar_one()
+
+        # -------------------------------------------------------------
+        # 9. TRIGGER CONFIRMATION EMAILS (Background Tasks)
+        # -------------------------------------------------------------
+        try:
+            # Format display strings
+            formatted_date = saved_consultation.scheduled_at.strftime("%d %b %Y, %I:%M %p")
+            doc_name = f"{saved_consultation.doctor.first_name} {saved_consultation.doctor.last_name}"
+            
+            # Safely grab patient info
+            patient_name = "Patient"
+            if saved_consultation.patient_user.patient_profile:
+                patient_name = f"{saved_consultation.patient_user.patient_profile.first_name} {saved_consultation.patient_user.patient_profile.last_name}"
+            
+            # Fire Patient Email
+            asyncio.create_task(
+                asyncio.to_thread(
+                    send_consultation_booking_patient_email,
+                    to_email=saved_consultation.patient_user.email,
+                    patient_name=patient_name,
+                    doctor_name=doc_name,
+                    scheduled_date=formatted_date,
+                    consultation_type=saved_consultation.consultation_type.value,
+                    clinic_address=saved_consultation.doctor.clinic_address
+                )
+            )
+
+            # Fire Doctor Email
+            asyncio.create_task(
+                asyncio.to_thread(
+                    send_consultation_booking_doctor_email,
+                    to_email=saved_consultation.doctor.email,
+                    doctor_name=doc_name,
+                    patient_name=patient_name,
+                    scheduled_date=formatted_date,
+                    consultation_type=saved_consultation.consultation_type.value
+                )
+            )
+        except Exception as e:
+            # We log the error but don't crash the booking flow if email fails
+            logger.error(f"Failed to trigger confirmation emails for consultation {saved_consultation.id}: {e}")
+        # -------------------------------------------------------------
+
+        return saved_consultation
 
     async def list_doctor_patients(self, db: AsyncSession, doctor_user_id: UUID) -> list[dict]:
         """
