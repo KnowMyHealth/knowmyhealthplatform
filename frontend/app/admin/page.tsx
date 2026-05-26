@@ -145,12 +145,6 @@ interface PartnerApplication {
 }
 
 // --- MOCK DATA FOR OTHER TABS ---
-const stats = [
-  { title: 'Total Patients', value: '24,592', trend: '+14.5%', isUp: true },
-  { title: 'Active Doctors', value: '1,843', trend: '+5.2%', isUp: true },
-  { title: 'Partner Labs', value: '428', trend: '+1.2%', isUp: true },
-  { title: 'Pending Verifications', value: '38', trend: '-12%', isUp: false },
-];
 
 const mockLabs = [
   { id: 1, name: 'Apollo Diagnostics', location: 'New York, NY', tests: 145, status: 'Active' },
@@ -183,6 +177,12 @@ export default function AdminPortal() {
   const [bookingsOpen, setBookingsOpen] = useState(false);
   const [bookingSubTab, setBookingSubTab] = useState<'all' | 'test-bookings' | 'package-bookings' | 'consultations'>('all');
   const [adminName, setAdminName] = useState<string>('Admin');
+  const [dashboardMetrics, setDashboardMetrics] = useState<{
+    total_patients: { count: number; percentage_change: number; is_positive: boolean };
+    active_doctors: { count: number; percentage_change: number; is_positive: boolean };
+    partner_labs: { count: number; percentage_change: number; is_positive: boolean };
+    pending_verifications: { count: number; percentage_change: number; is_positive: boolean };
+  } | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { logout } = useAuth();
@@ -349,6 +349,7 @@ export default function AdminPortal() {
   useEffect(() => {
     fetchAdminDetails();
     fetchAllDoctors();
+    fetchDashboardMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -396,6 +397,22 @@ export default function AdminPortal() {
   useEffect(() => {
     setTestCurrentPage(1);
   }, [testFilterStatus, testSearchQuery]);
+
+  const fetchDashboardMetrics = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/users/admin/dashboard/metrics`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setDashboardMetrics(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch dashboard metrics', e);
+    }
+  };
 
   const fetchAdminDetails = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1517,25 +1534,35 @@ export default function AdminPortal() {
   const paginatedBlogs = blogsList.slice((blogCurrentPage - 1) * blogsPerPage, blogCurrentPage * blogsPerPage);
 
   // --- TAB RENDERERS ---
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    const metricCards = dashboardMetrics ? [
+      { title: 'Total Patients', count: dashboardMetrics.total_patients.count, pct: dashboardMetrics.total_patients.percentage_change, isUp: dashboardMetrics.total_patients.is_positive },
+      { title: 'Active Doctors', count: dashboardMetrics.active_doctors.count, pct: dashboardMetrics.active_doctors.percentage_change, isUp: dashboardMetrics.active_doctors.is_positive },
+      { title: 'Partner Labs', count: dashboardMetrics.partner_labs.count, pct: dashboardMetrics.partner_labs.percentage_change, isUp: dashboardMetrics.partner_labs.is_positive },
+      { title: 'Pending Verifications', count: dashboardMetrics.pending_verifications.count, pct: dashboardMetrics.pending_verifications.percentage_change, isUp: dashboardMetrics.pending_verifications.is_positive },
+    ] : null;
+
+    return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => {
-          const value = stat.title === 'Pending Verifications' ? String(pendingDoctors.length) : stat.value;
-          return (
-            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden group">
-              <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
-              <div className="flex items-end gap-3">
-                <h3 className="text-3xl font-black text-slate-900 tracking-tight">{value}</h3>
-                <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
-                  {stat.trend}
-                </span>
-              </div>
-              <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
-            </motion.div>
-          );
-        })}
+        {metricCards ? metricCards.map((stat, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden group">
+            <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
+            <div className="flex items-end gap-3">
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{stat.count.toLocaleString('en-IN')}</h3>
+              <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
+                {stat.isUp ? '+' : ''}{stat.pct}%
+              </span>
+            </div>
+            <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
+          </motion.div>
+        )) : Array.from({ length: 4 }).map((_, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden animate-pulse">
+            <div className="h-4 bg-slate-100 rounded w-2/3 mb-4" />
+            <div className="h-8 bg-slate-100 rounded w-1/2" />
+          </motion.div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -1671,7 +1698,8 @@ export default function AdminPortal() {
         </motion.div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderDoctors = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
