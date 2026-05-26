@@ -1926,7 +1926,38 @@ export default function AdminPortal() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Turnaround Time (Hours)</label>
-                  <input required type="number" min="1" value={testForm.results_in} onChange={e => setTestForm({...testForm, results_in: e.target.value})} placeholder="24" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[2, 4, 6, 12, 24, 48, 72].map(h => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setTestForm({...testForm, results_in: String(h)})}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                          testForm.results_in === String(h)
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600'
+                        }`}
+                      >
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <input
+                      required
+                      type="number"
+                      min="1"
+                      value={testForm.results_in}
+                      onChange={e => setTestForm({...testForm, results_in: e.target.value})}
+                      placeholder="Or type custom hours…"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none pr-16"
+                    />
+                    {testForm.results_in && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-medium pointer-events-none">
+                        hrs
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
