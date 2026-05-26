@@ -10,7 +10,7 @@ import {
   ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, Ticket,
   Microscope, Plus, Trash2, AlertCircle, BookOpen, PenTool, Wand2, Tag,
   Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone,
-  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight, PhoneCall, Copy
+  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight, PhoneCall, Copy, ClipboardList, Video
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -160,6 +160,7 @@ const mockLabs = [
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   { icon: Stethoscope, label: 'Doctors', id: 'doctors' },
+  { icon: ClipboardList, label: 'Consultations', id: 'consultations' },
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
   { icon: CalendarDays, label: 'Test Bookings', id: 'test-bookings' },
   { icon: HeartPulse, label: 'Package Bookings', id: 'package-bookings' },
@@ -305,6 +306,17 @@ export default function AdminPortal() {
   const [isDeletingPartner, setIsDeletingPartner] = useState(false);
   const [confirmDeletePartner, setConfirmDeletePartner] = useState(false);
 
+  // --- CONSULTATIONS STATES ---
+  const [consultations, setConsultations] = useState<any[]>([]);
+  const [isLoadingConsultations, setIsLoadingConsultations] = useState(false);
+  const [consultationPage, setConsultationPage] = useState(1);
+  const [consultationTotalPages, setConsultationTotalPages] = useState(1);
+  const [consultationStatusFilter, setConsultationStatusFilter] = useState<'all' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'>('all');
+  const consultationsPerPage = 10;
+  const [selectedConsultation, setSelectedConsultation] = useState<any | null>(null);
+  const [consultationDetail, setConsultationDetail] = useState<any | null>(null);
+  const [isLoadingConsultationDetail, setIsLoadingConsultationDetail] = useState(false);
+
   // --- CALLBACKS STATES ---
   const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
   const [isLoadingCallbacks, setIsLoadingCallbacks] = useState(false);
@@ -335,6 +347,9 @@ export default function AdminPortal() {
   }, []);
 
   useEffect(() => {
+    if (activeTab === 'consultations') {
+      fetchConsultations(1, consultationStatusFilter);
+    }
     if (activeTab === 'lab-tests') {
       fetchLabCategories();
       fetchLabTests();
@@ -639,6 +654,41 @@ export default function AdminPortal() {
       }
     } catch (e) { console.error('Failed to fetch patient package bookings', e); }
     finally { setIsLoadingPatientPkgBookings(false); }
+  };
+
+  const fetchConsultations = async (page = 1, status = consultationStatusFilter) => {
+    setIsLoadingConsultations(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const statusParam = status !== 'all' ? `&status=${status}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations?page=${page}&limit=${consultationsPerPage}${statusParam}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setConsultations(Array.isArray(json.data) ? json.data : []);
+        setConsultationTotalPages(json.meta?.total_pages ?? 1);
+      }
+    } catch (e) { console.error('Failed to fetch consultations', e); }
+    finally { setIsLoadingConsultations(false); }
+  };
+
+  const fetchConsultationDetail = async (id: string) => {
+    setIsLoadingConsultationDetail(true);
+    setConsultationDetail(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${id}/details`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setConsultationDetail(json.data);
+      }
+    } catch (e) { console.error('Failed to fetch consultation detail', e); }
+    finally { setIsLoadingConsultationDetail(false); }
   };
 
   const executeDeleteTest = async (id: string) => {
@@ -4025,6 +4075,220 @@ export default function AdminPortal() {
     );
   };
 
+  const renderConsultations = () => {
+    const statusColors: Record<string, string> = {
+      SCHEDULED: 'bg-sky-100 text-sky-700',
+      COMPLETED: 'bg-emerald-100 text-emerald-700',
+      CANCELLED: 'bg-red-100 text-red-700',
+    };
+    const typeColors: Record<string, string> = {
+      ONLINE: 'bg-violet-50 text-violet-700 border border-violet-100',
+      OFFLINE: 'bg-amber-50 text-amber-700 border border-amber-100',
+    };
+    return (
+      <>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
+          <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                <ClipboardList className="text-emerald-600" size={22} />
+                Consultations
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">All doctor consultations across the platform. Click a row for details.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'SCHEDULED', 'COMPLETED', 'CANCELLED'] as const).map(s => (
+                <button key={s} onClick={() => { setConsultationStatusFilter(s); setConsultationPage(1); fetchConsultations(1, s); }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${consultationStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 flex flex-col p-6 sm:p-8">
+            {isLoadingConsultations ? (
+              <div className="flex justify-center py-20"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                      <th className="p-4">Patient</th>
+                      <th className="p-4">Doctor</th>
+                      <th className="p-4">Type</th>
+                      <th className="p-4">Scheduled At</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Booked On</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {consultations.length === 0 ? (
+                      <tr><td colSpan={6} className="p-8 text-center text-slate-400">No consultations found.</td></tr>
+                    ) : consultations.map((c: any) => (
+                      <tr key={c.id} onClick={() => { setSelectedConsultation(c); fetchConsultationDetail(c.id); }}
+                        className="hover:bg-emerald-50/40 cursor-pointer transition-colors">
+                        <td className="p-4">
+                          {c.patient_user ? (
+                            <>
+                              <p className="text-sm font-bold text-slate-900">{c.patient_user.patient_profile?.first_name} {c.patient_user.patient_profile?.last_name}</p>
+                              <p className="text-xs text-slate-400">{c.patient_user.email}</p>
+                            </>
+                          ) : <span className="text-sm text-slate-400 font-mono">{c.patient_user_id?.slice(0,8)}…</span>}
+                        </td>
+                        <td className="p-4">
+                          {c.doctor ? (
+                            <>
+                              <p className="text-sm font-bold text-slate-900">Dr. {c.doctor.first_name} {c.doctor.last_name}</p>
+                              <p className="text-xs text-slate-400">{c.doctor.specialization}</p>
+                            </>
+                          ) : <span className="text-sm text-slate-400 font-mono">{c.doctor_id?.slice(0,8)}…</span>}
+                        </td>
+                        <td className="p-4">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit ${typeColors[c.consultation_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                            {c.consultation_type === 'ONLINE' ? <Video size={10} /> : <MapPin size={10} />}
+                            {c.consultation_type}
+                          </span>
+                        </td>
+                        <td className="p-4 text-sm text-slate-700 font-medium">
+                          {c.scheduled_at ? new Date(c.scheduled_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                        <td className="p-4">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[c.status] ?? 'bg-slate-100 text-slate-600'}`}>{c.status}</span>
+                        </td>
+                        <td className="p-4 text-xs text-slate-400">{new Date(c.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {consultationTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-xs text-slate-500 font-bold">Page {consultationPage} of {consultationTotalPages}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { const p = Math.max(1, consultationPage-1); setConsultationPage(p); fetchConsultations(p, consultationStatusFilter); }} disabled={consultationPage===1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16}/></button>
+                  <button onClick={() => { const p = Math.min(consultationTotalPages, consultationPage+1); setConsultationPage(p); fetchConsultations(p, consultationStatusFilter); }} disabled={consultationPage===consultationTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16}/></button>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Consultation Detail Panel */}
+        <AnimatePresence>
+          {selectedConsultation && (
+            <div className="fixed inset-0 z-[110] flex justify-end">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setSelectedConsultation(null)}
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+              <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col overflow-y-auto">
+
+                <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/60 shrink-0">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Consultation</p>
+                    <h3 className="text-lg font-extrabold text-slate-900">
+                      {selectedConsultation.doctor ? `Dr. ${selectedConsultation.doctor.first_name} ${selectedConsultation.doctor.last_name}` : 'Doctor Consultation'}
+                    </h3>
+                    <p className="text-sm text-slate-500">{selectedConsultation.doctor?.specialization ?? '—'}</p>
+                  </div>
+                  <button onClick={() => setSelectedConsultation(null)} className="p-2 rounded-xl hover:bg-slate-200 text-slate-500 shrink-0"><X size={20}/></button>
+                </div>
+
+                <div className="flex-1 p-6 space-y-5">
+                  {/* Status + Type */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${statusColors[selectedConsultation.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {selectedConsultation.status}
+                    </span>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 ${typeColors[selectedConsultation.consultation_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {selectedConsultation.consultation_type === 'ONLINE' ? <Video size={11}/> : <MapPin size={11}/>}
+                      {selectedConsultation.consultation_type}
+                    </span>
+                  </div>
+
+                  {/* Patient */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Patient</p>
+                    {isLoadingConsultationDetail ? (
+                      <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 size={14} className="animate-spin"/> Loading details…</div>
+                    ) : consultationDetail?.patient ? (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                            <span className="text-emerald-700 font-bold text-sm">{consultationDetail.patient.first_name?.[0]}{consultationDetail.patient.last_name?.[0]}</span>
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900">{consultationDetail.patient.first_name} {consultationDetail.patient.last_name}</p>
+                            {selectedConsultation.patient_user?.email && <p className="text-xs text-slate-500">{selectedConsultation.patient_user.email}</p>}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1 text-sm">
+                          {consultationDetail.patient.phone_number && <div className="flex gap-1.5 items-center text-slate-600"><Phone size={12} className="text-slate-400"/>{consultationDetail.patient.phone_number}</div>}
+                          {consultationDetail.patient.gender && <div className="text-slate-600"><span className="text-slate-400 text-xs">Gender </span>{consultationDetail.patient.gender}</div>}
+                          {consultationDetail.patient.blood_group && <div className="text-slate-600"><span className="text-slate-400 text-xs">Blood </span>{consultationDetail.patient.blood_group}</div>}
+                          {consultationDetail.patient.date_of_birth && <div className="text-slate-600"><span className="text-slate-400 text-xs">DOB </span>{consultationDetail.patient.date_of_birth}</div>}
+                        </div>
+                      </>
+                    ) : selectedConsultation.patient_user ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                          <span className="text-emerald-700 font-bold text-sm">{selectedConsultation.patient_user.patient_profile?.first_name?.[0]}{selectedConsultation.patient_user.patient_profile?.last_name?.[0]}</span>
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{selectedConsultation.patient_user.patient_profile?.first_name} {selectedConsultation.patient_user.patient_profile?.last_name}</p>
+                          <p className="text-xs text-slate-500">{selectedConsultation.patient_user.email}</p>
+                          {selectedConsultation.patient_user.patient_profile?.phone_number && <p className="text-xs text-slate-400">{selectedConsultation.patient_user.patient_profile.phone_number}</p>}
+                        </div>
+                      </div>
+                    ) : <p className="text-sm text-slate-400 font-mono">{selectedConsultation.patient_user_id}</p>}
+                  </div>
+
+                  {/* Doctor */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Doctor</p>
+                    {isLoadingConsultationDetail ? (
+                      <div className="flex items-center gap-2 text-slate-400 text-sm"><Loader2 size={14} className="animate-spin"/> Loading details…</div>
+                    ) : consultationDetail?.doctor ? (
+                      <>
+                        <p className="font-bold text-slate-900">Dr. {consultationDetail.doctor.first_name} {consultationDetail.doctor.last_name}</p>
+                        <p className="text-sm text-emerald-700 font-semibold">{consultationDetail.doctor.specialization}</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm pt-1">
+                          {consultationDetail.doctor.consultation_fee && <div className="text-slate-600"><span className="text-slate-400 text-xs">Fee </span>₹{consultationDetail.doctor.consultation_fee}</div>}
+                          {consultationDetail.doctor.license_id && <div className="text-slate-600"><span className="text-slate-400 text-xs">License </span>{consultationDetail.doctor.license_id}</div>}
+                          {consultationDetail.doctor.clinic_address && (
+                            <div className="col-span-2 flex gap-1.5 items-start text-slate-600"><MapPin size={12} className="text-slate-400 mt-0.5 shrink-0"/>{consultationDetail.doctor.clinic_address}</div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="font-bold text-slate-900">Dr. {selectedConsultation.doctor?.first_name} {selectedConsultation.doctor?.last_name} <span className="text-xs text-slate-400 font-normal">· {selectedConsultation.doctor?.specialization}</span></p>
+                    )}
+                  </div>
+
+                  {/* Booking details */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-2 text-sm">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Booking Details</p>
+                    <div className="flex justify-between"><span className="text-slate-500">Scheduled</span><span className="font-bold text-slate-900">{selectedConsultation.scheduled_at ? new Date(selectedConsultation.scheduled_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Booked On</span><span className="font-semibold text-slate-700">{new Date(selectedConsultation.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
+                    {selectedConsultation.channel_name && <div className="flex justify-between"><span className="text-slate-500">Channel</span><span className="font-mono text-xs text-slate-600">{selectedConsultation.channel_name}</span></div>}
+                    {selectedConsultation.prescription_url && (
+                      <a href={selectedConsultation.prescription_url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1.5 text-emerald-600 font-bold text-xs mt-1 hover:underline">
+                        <FileText size={13}/> View Prescription
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  };
+
   const renderSettings = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] p-6 sm:p-8 max-w-2xl mx-auto">
       <h2 className="text-xl font-extrabold text-slate-900 mb-6">System Settings</h2>
@@ -4158,6 +4422,7 @@ export default function AdminPortal() {
                 <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                   {activeTab === 'dashboard' && renderDashboard()}
                   {activeTab === 'doctors' && renderDoctors()}
+                  {activeTab === 'consultations' && renderConsultations()}
                   {activeTab === 'lab-tests' && renderLabTests()}
                   {activeTab === 'test-bookings' && renderTestBookings()}
                   {activeTab === 'package-bookings' && renderPackageBookings()}
