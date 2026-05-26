@@ -19,7 +19,7 @@ class AuthenticatedUser:
         self.email = email
 
 security = HTTPBearer()
-jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL, cache_keys=True)
+jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL, cache_keys=True, lifespan=300)
 
 def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security)):
     token = auth.credentials

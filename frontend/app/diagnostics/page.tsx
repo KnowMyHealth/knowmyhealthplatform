@@ -1035,4 +1035,10 @@ function DiagnosticsContent() {
     </ProtectedRoute>
   );
 }
-export default DiagnosticsContent;
+export default function DiagnosticsPage() {
+  return (
+    <Suspense>
+      <DiagnosticsContent />
+    </Suspense>
+  );
+}
