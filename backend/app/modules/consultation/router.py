@@ -23,6 +23,8 @@ from app.modules.consultation.service import ConsultationService
 from app.modules.consultation.dependencies import get_consultation_service
 from app.modules.consultation.models import Consultation, ConsultationStatus
 from app.modules.consultation.schemas import DoctorPatientResponse
+from app.modules.consultation.schemas import ConsultationDetailResponse
+from app.utils.pagination import PaginationParams
 
 router = APIRouter(prefix="/consultations", tags=["Video Consultations"])
 
@@ -225,4 +227,58 @@ async def upload_prescription(
     return ApiResponse.success(
         data=ConsultationSchema.model_validate(updated_consultation),
         message="Prescription uploaded successfully."
+    )
+
+
+@router.get(
+    "",
+    summary="List All Consultations (Admin)",
+    description="Allows admin to view all consultations across all doctors. Optionally filter by status or doctor_id."
+)
+@limiter.limit("30/minute")
+async def list_all_consultations(
+    request: Request,
+    params: PaginationParams = Depends(),
+    status: ConsultationStatus | None = None,
+    doctor_id: UUID | None = None,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: ConsultationService = Depends(get_consultation_service)
+):
+    items, total = await service.list_all_consultations(db, params, status, doctor_id)
+    validated_items = [ConsultationSchema.model_validate(i) for i in items]
+    
+    return ApiResponse.paginated(
+        items=validated_items,
+        total_items=total,
+        params=params,
+        message="Consultations retrieved successfully."
+    )
+
+@router.get(
+    "/{consultation_id}/details",
+    summary="Get Consultation Details (Admin/Doctor/Patient)",
+    description="View the full details of a consultation, including complete doctor and patient profiles."
+)
+@limiter.limit("60/minute")
+async def get_consultation_details(
+    request: Request,
+    consultation_id: UUID,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: ConsultationService = Depends(get_consultation_service)
+):
+    # Fetch User to get their role for authorization logic
+    user = await db.get(User, UUID(str(current_user.id)))
+    
+    data = await service.get_consultation_details(
+        db=db, 
+        consultation_id=consultation_id, 
+        user_id=user.id, 
+        role=user.role.value
+    )
+    
+    return ApiResponse.success(
+        data=ConsultationDetailResponse.model_validate(data),
+        message="Consultation details retrieved successfully."
     )

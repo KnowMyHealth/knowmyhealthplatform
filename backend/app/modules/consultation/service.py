@@ -16,6 +16,9 @@ from app.core.agora import generate_agora_token
 from datetime import datetime, timedelta, timezone, date
 from app.modules.doctor.models import DoctorAvailability
 
+from app.db.all_models import User
+from app.utils.pagination import PaginationParams
+
 class ConsultationService:
     async def book_consultation(self, db: AsyncSession, patient_user_id: UUID, data: BookConsultationRequest) -> Consultation:
         # 1. Align to 15-minute boundary
@@ -278,6 +281,78 @@ class ConsultationService:
 
         return slots
     
+    async def list_all_consultations(
+        self,
+        db: AsyncSession,
+        params: PaginationParams,
+        status: ConsultationStatus | None = None,
+        doctor_id: UUID | None = None
+    ) -> tuple[list[Consultation], int]:
+        """
+        ADMIN USE ONLY: Lists all consultations across all doctors.
+        Supports pagination, and filtering by status or specific doctor_id.
+        """
+        query = select(Consultation).options(
+            selectinload(Consultation.doctor),
+            selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+        )
+        count_query = select(func.count()).select_from(Consultation)
+
+        # Apply Filters
+        if status:
+            query = query.where(Consultation.status == status)
+            count_query = count_query.where(Consultation.status == status)
+
+        if doctor_id:
+            query = query.where(Consultation.doctor_id == doctor_id)
+            count_query = count_query.where(Consultation.doctor_id == doctor_id)
+
+        # Execute Count
+        total_count = (await db.execute(count_query)).scalar() or 0
+        
+        # Execute Paginated Query
+        query = query.order_by(Consultation.scheduled_at.desc()).offset(params.offset).limit(params.limit)
+        items = (await db.execute(query)).scalars().all()
+        
+        return list(items), total_count
+
+    async def get_consultation_details(
+        self, 
+        db: AsyncSession, 
+        consultation_id: UUID, 
+        user_id: UUID, 
+        role: str
+    ) -> dict:
+        # 1. Fetch consultation with Eager Loading for Doctor and Patient Profile
+        stmt = select(Consultation).options(
+            selectinload(Consultation.doctor),
+            selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+        ).where(Consultation.id == consultation_id)
+        
+        consultation = (await db.execute(stmt)).scalar_one_or_none()
+        if not consultation:
+            raise ConsultationNotFoundError("Consultation not found.")
+            
+        # 2. Authorization / Privacy Check
+        # Admins bypass this. Doctors and Patients must be explicitly linked to the consultation.
+        if role != "ADMIN":
+            if consultation.patient_user_id != user_id and consultation.doctor.user_id != user_id:
+                raise ConsultationAccessDenied("You do not have permission to view this consultation.")
+                
+        # 3. Format Response Dictionary
+        return {
+            "id": consultation.id,
+            "patient_user_id": consultation.patient_user_id,
+            "doctor_id": consultation.doctor_id,
+            "scheduled_at": consultation.scheduled_at,
+            "status": consultation.status,
+            "consultation_type": consultation.consultation_type,
+            "channel_name": consultation.channel_name,
+            "prescription_url": consultation.prescription_url,
+            "created_at": consultation.created_at,
+            "doctor": consultation.doctor,
+            "patient": consultation.patient_user.patient_profile if consultation.patient_user else None
+        }
 
     async def upload_prescription(self, db: AsyncSession, consultation_id: UUID, doctor_user_id: UUID, pdf_bytes: bytes) -> Consultation:
         # 1. Fetch consultation and the doctor's profile
