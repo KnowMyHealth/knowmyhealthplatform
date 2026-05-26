@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, X, Send, Bot, Loader2 } from 'lucide-react';
 import Markdown from 'react-markdown';
+import { supabase } from '@/lib/supabase';
 
 export default function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,9 +32,9 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('supabase_access_token');
-      
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+      const { data: { session } } = await supabase.auth.getSession();
+
       // Concatenate the last few messages to give the stateless backend some context
       const contextText = messages.slice(-5).map(m => `${m.role === 'model' ? 'AI' : 'User'}: ${m.text}`).join('\n');
       const promptWithContext = `${contextText}\nUser: ${userMessage}\nAI:`;
@@ -42,7 +43,8 @@ export default function Chatbot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          'ngrok-skip-browser-warning': 'true',
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
         },
         body: JSON.stringify({ prompt: promptWithContext })
       });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, User, Mail, Lock, Loader2, AlertCircle, 
@@ -17,11 +16,11 @@ interface AuthModalProps {
   onClose: () => void;
 }
 
-type ViewState = 'auth' | 'doctor-apply' | 'doctor-success';
+type ViewState = 'auth' | 'forgot-password' | 'doctor-apply' | 'doctor-success';
 
 const slideVariants = {
   enter: (direction: number) => ({ x: direction > 0 ? 30 : -30, opacity: 0, scale: 0.98 }),
-  center: { x: 0, opacity: 1, scale: 1, transition: { duration: 0.4, ease: [0.32, 0.72, 0, 1] } },
+  center: { x: 0, opacity: 1, scale: 1, transition: { duration: 0.4, ease: [0.32, 0.72, 0, 1] as [number, number, number, number] } },
   exit: (direction: number) => ({ x: direction < 0 ? 30 : -30, opacity: 0, scale: 0.98, transition: { duration: 0.3 } })
 };
 
@@ -31,8 +30,7 @@ const PHONE_REGEX = /^\+?[\d\s-]{10,15}$/;
 
 export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const { login } = useAuth();
-  const router = useRouter();
-  
+
   // Navigation States
   const [view, setView] = useState<ViewState>('auth');
   const [docStep, setDocStep] = useState(1);
@@ -45,6 +43,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [errors, setErrors] = useState({ name: '', email: '', password: '' });
+
+  // Forgot Password States
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
   // Doctor Application States
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -75,6 +78,9 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         education: '', consultation_fee: '', bio: '', video_consultation_enabled: false
       });
       setDocErrors({});
+      setForgotEmail('');
+      setForgotSent(false);
+      setForgotError(null);
     }
   }, [isOpen]);
 
@@ -193,6 +199,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true);
     setAuthError(null);
     setAuthSuccess(null);
+    let isMounted = true;
 
     try {
       let sessionData;
@@ -215,15 +222,19 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         sessionData = data;
       }
 
+      if (!isMounted) return;
+
       if (sessionData?.session) {
         const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
         const res = await fetch(`${BACKEND_URL}/api/v1/users/me`, {
-          headers: { 
+          headers: {
             Authorization: `Bearer ${sessionData.session.access_token}`,
             'ngrok-skip-browser-warning': 'true'
           }
         });
-        
+
+        if (!isMounted) return;
+
         let role = 'PATIENT';
         if (res.ok) {
           const profileData = await res.json();
@@ -235,19 +246,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         login(role);
         onClose();
 
-        // Role-based redirection
-        if (role === 'ADMIN') router.push('/admin');
-        else if (role === 'PARTNER') router.push('/partner');
-        else if (role === 'DOCTOR') router.push('/doctor');
-
       } else if (!isSignIn) {
-        setAuthSuccess('Success! Please check your email to verify your account.'); 
+        setAuthSuccess('Success! Please check your email to verify your account.');
         setFormData({ name: '', email: '', password: '' });
       }
     } catch (error: any) {
-      setAuthError(error.message || 'Authentication failed. Please try again.');
+      if (isMounted) setAuthError(error.message || 'Authentication failed. Please try again.');
     } finally {
-      setIsLoading(false);
+      if (isMounted) setIsLoading(false);
+      isMounted = false;
     }
   };
 
@@ -267,11 +274,12 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (!validateDoctorStep(3)) return;
     setIsLoading(true);
     setAuthError(null);
+    let isMounted = true;
 
     try {
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
       const payload = new FormData();
-      
+
       payload.append('first_name', docFormData.first_name);
       payload.append('last_name', docFormData.last_name);
       payload.append('email', docFormData.email);
@@ -287,27 +295,48 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
       const response = await fetch(`${BACKEND_URL}/api/v1/doctors/apply`, {
         method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: { 'ngrok-skip-browser-warning': 'true' },
         body: payload
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to submit application');
 
-      // Smooth transition to success screen
+      if (!isMounted) return;
       setDirection(1);
       setView('doctor-success');
 
     } catch (error: any) {
-      setAuthError(error.message || 'Failed to submit application. Please try again later.');
+      if (isMounted) setAuthError(error.message || 'Failed to submit application. Please try again later.');
     } finally {
-      setIsLoading(false);
+      if (isMounted) setIsLoading(false);
+      isMounted = false;
     }
   };
 
-  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleForgotPassword = async () => {
+    if (isLoading) return;
+    setForgotError(null);
+    if (!forgotEmail.trim() || !EMAIL_REGEX.test(forgotEmail)) {
+      setForgotError('Please enter a valid email address.');
+      return;
+    }
+    setIsLoading(true);
+    let isMounted = true;
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), { redirectTo });
+      if (error) throw error;
+      if (isMounted) setForgotSent(true);
+    } catch (err: any) {
+      if (isMounted) setForgotError(err.message || 'Failed to send reset email. Please try again.');
+    } finally {
+      if (isMounted) setIsLoading(false);
+      isMounted = false;
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -450,6 +479,17 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                           />
                         </div>
                         {errors.password ? <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.password}</p> : <p className="text-xs text-gray-400 mt-1.5 font-medium">Must be at least 8 characters long</p>}
+                        {isSignIn && (
+                          <div className="text-right mt-2">
+                            <button
+                              type="button"
+                              onClick={() => { setDirection(1); setView('forgot-password'); setAuthError(null); }}
+                              className="text-xs text-emerald-600 font-bold hover:text-emerald-700 transition-colors"
+                            >
+                              Forgot password?
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -492,6 +532,87 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         </motion.div>
                       )}
                     </div>
+                  </motion.div>
+                )}
+
+                {/* ======================= FORGOT PASSWORD VIEW ======================= */}
+                {view === 'forgot-password' && (
+                  <motion.div
+                    key="forgot-view"
+                    custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
+                    className="p-8"
+                  >
+                    <button
+                      onClick={() => { setDirection(-1); setView('auth'); setForgotEmail(''); setForgotSent(false); setForgotError(null); }}
+                      className="flex items-center gap-1.5 text-sm font-bold text-gray-400 hover:text-emerald-700 transition-colors mb-8 -ml-1"
+                    >
+                      <ChevronLeft size={18} /> Back to sign in
+                    </button>
+
+                    {!forgotSent ? (
+                      <>
+                        <div className="text-center mb-8">
+                          <div className="w-16 h-16 bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-600 rounded-[1.25rem] flex items-center justify-center mx-auto mb-6 shadow-sm border border-emerald-100/50">
+                            <Mail size={28} />
+                          </div>
+                          <h2 className="text-3xl font-extrabold text-emerald-950 mb-3 tracking-tight">Forgot Password?</h2>
+                          <p className="text-emerald-900/60 font-medium text-sm leading-relaxed">
+                            Enter your email and we&apos;ll send you a link to reset your password.
+                          </p>
+                        </div>
+
+                        <div className="space-y-5">
+                          <div>
+                            <label className="block text-xs font-bold text-emerald-950 mb-2 uppercase tracking-wide">Email Address</label>
+                            <div className="relative group">
+                              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+                              <input
+                                type="email"
+                                placeholder="name@example.com"
+                                value={forgotEmail}
+                                onChange={e => { setForgotEmail(e.target.value); setForgotError(null); }}
+                                onKeyDown={e => e.key === 'Enter' && handleForgotPassword()}
+                                className="w-full pl-12 pr-4 py-4 bg-gray-50/50 hover:bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-medium text-gray-900 placeholder:text-gray-400"
+                              />
+                            </div>
+                            {forgotError && (
+                              <p className="text-xs text-red-500 mt-1.5 font-medium flex items-center gap-1">
+                                <AlertCircle size={12} /> {forgotError}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleForgotPassword}
+                          disabled={isLoading}
+                          className="w-full mt-8 py-4 bg-emerald-950 text-white rounded-2xl font-bold text-lg shadow-[0_8px_20px_-6px_rgba(2,44,34,0.4)] hover:bg-emerald-900 transition-all active:scale-[0.98] flex justify-center items-center disabled:opacity-70 hover:-translate-y-0.5"
+                        >
+                          {isLoading ? <Loader2 size={24} className="animate-spin" /> : 'Send Reset Link'}
+                        </button>
+                      </>
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                        className="flex flex-col items-center text-center py-8 gap-5"
+                      >
+                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center">
+                          <CheckCircle2 size={40} className="text-emerald-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-extrabold text-emerald-950 mb-2">Check your inbox</h3>
+                          <p className="text-emerald-900/60 font-medium text-sm leading-relaxed max-w-xs mx-auto">
+                            We sent a password reset link to <strong className="text-emerald-800">{forgotEmail}</strong>. It expires in 1 hour.
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-2">
+                          Didn&apos;t receive it?{' '}
+                          <button onClick={() => setForgotSent(false)} className="text-emerald-600 font-bold hover:text-emerald-700">
+                            Resend
+                          </button>
+                        </p>
+                      </motion.div>
+                    )}
                   </motion.div>
                 )}
 

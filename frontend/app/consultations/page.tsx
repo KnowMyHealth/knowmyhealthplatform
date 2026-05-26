@@ -5,13 +5,14 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, MapPin, Video, Calendar as CalendarIcon, Star, Clock,
-  ChevronRight, ChevronLeft, Phone, MessageSquare, X, CheckCircle2,
+  ChevronRight, ChevronLeft, Phone, X, CheckCircle2,
   Loader2, Mic, MicOff, VideoOff, Users, AlertCircle,
   Sun, Sunrise, Moon, MoonStar
 } from 'lucide-react';
 import Image from 'next/image';
 
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { supabase } from '@/lib/supabase';
 
 interface Doctor {
   id: string;
@@ -53,16 +54,18 @@ const RemoteVideo = ({ user }: { user: any }) => {
 
 function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraInfo: any, onEndCall: () => void, participantName: string }) {
   const localVideoRef = useRef<HTMLDivElement>(null);
+  const audioTrackRef = useRef<any>(null);
+  const videoTrackRef = useRef<any>(null);
+  const mediaNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [AgoraRTC, setAgoraRTC] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
-  const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
-  const [localAudioTrack, setLocalAudioTrack] = useState<any>(null);
   const [remoteUsers, setRemoteUsers] = useState<any[]>([]);
-  
+
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [mediaNotice, setMediaNotice] = useState<string | null>(null);
 
   useEffect(() => {
     import('agora-rtc-sdk-ng').then((mod) => {
@@ -73,9 +76,6 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
 
   useEffect(() => {
     if (!client || !AgoraRTC) return;
-    
-    let audioTrack: any = null;
-    let videoTrack: any = null;
 
     const initAgora = async () => {
       try {
@@ -100,18 +100,16 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
         });
 
         const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID || "96b6fdb94ffb4ab9ac1fe7c7d358ee71";
-        
         await client.join(appId, agoraInfo.channel_name, agoraInfo.token, agoraInfo.uid);
-        
+
         try {
           const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-          audioTrack = tracks[0];
-          videoTrack = tracks[1];
-          
-          setLocalAudioTrack(audioTrack);
-          setLocalVideoTrack(videoTrack);
-          
-          await client.publish([audioTrack, videoTrack]);
+          audioTrackRef.current = tracks[0];
+          videoTrackRef.current = tracks[1];
+          await client.publish([audioTrackRef.current, videoTrackRef.current]);
+          if (localVideoRef.current) {
+            videoTrackRef.current.play(localVideoRef.current);
+          }
         } catch (mediaErr: any) {
           console.error("Media Error:", mediaErr);
           setPermissionError("Camera/Microphone access denied by browser.");
@@ -129,37 +127,44 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
     initAgora();
 
     return () => {
-      if (audioTrack) { audioTrack.stop(); audioTrack.close(); }
-      if (videoTrack) { videoTrack.stop(); videoTrack.close(); }
-      client.leave();
+      if (mediaNoticeTimerRef.current) clearTimeout(mediaNoticeTimerRef.current);
+      if (audioTrackRef.current) { audioTrackRef.current.stop(); audioTrackRef.current.close(); audioTrackRef.current = null; }
+      if (videoTrackRef.current) { videoTrackRef.current.stop(); videoTrackRef.current.close(); videoTrackRef.current = null; }
+      if (client) client.leave();
     };
   }, [client, AgoraRTC, agoraInfo]);
 
   useEffect(() => {
-    if (localVideoTrack && localVideoRef.current && !isVideoOff && !permissionError) {
-      localVideoTrack.play(localVideoRef.current);
+    if (videoTrackRef.current && localVideoRef.current && !isVideoOff && !permissionError) {
+      videoTrackRef.current.play(localVideoRef.current);
     }
-  }, [localVideoTrack, isVideoOff, permissionError]);
+  }, [isVideoOff, permissionError]);
+
+  const showMediaNotice = (msg: string) => {
+    if (mediaNoticeTimerRef.current) clearTimeout(mediaNoticeTimerRef.current);
+    setMediaNotice(msg);
+    mediaNoticeTimerRef.current = setTimeout(() => setMediaNotice(null), 4000);
+  };
 
   const toggleAudio = () => {
     if (permissionError) {
-      alert("Please allow microphone access in your browser settings to unmute.");
+      showMediaNotice("Allow microphone access in your browser settings to unmute.");
       return;
     }
-    if (localAudioTrack) {
-      localAudioTrack.setMuted(!isMuted);
-      setIsMuted(!isMuted);
+    if (audioTrackRef.current) {
+      audioTrackRef.current.setMuted(!isMuted);
+      setIsMuted(v => !v);
     }
   };
 
   const toggleVideo = () => {
     if (permissionError) {
-      alert("Please allow camera access in your browser settings to turn on video.");
+      showMediaNotice("Allow camera access in your browser settings to enable video.");
       return;
     }
-    if (localVideoTrack) {
-      localVideoTrack.setMuted(!isVideoOff);
-      setIsVideoOff(!isVideoOff);
+    if (videoTrackRef.current) {
+      videoTrackRef.current.setMuted(!isVideoOff);
+      setIsVideoOff(v => !v);
     }
   };
 
@@ -173,7 +178,7 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
             <p className="text-white font-medium">Connecting to secure server...</p>
           </div>
         ) : remoteUsers.length > 0 ? (
-          remoteUsers[0].hasVideo ? (
+          remoteUsers[0].videoTrack ? (
             <RemoteVideo user={remoteUsers[0]} />
           ) : (
             <div className="flex flex-col items-center justify-center z-10 relative">
@@ -193,7 +198,7 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-transparent pointer-events-none" />
       </div>
-      
+
       {/* Self Video (Patient) */}
       <div className="absolute top-6 right-6 w-32 h-48 md:w-48 md:h-64 bg-gray-800 rounded-2xl overflow-hidden border-2 border-gray-700 shadow-2xl flex items-center justify-center z-20">
         {permissionError ? (
@@ -214,24 +219,28 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
         <span className="text-white font-medium">{participantName} Consultation</span>
       </div>
 
+      {/* Media permission notice */}
+      {mediaNotice && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-gray-900/90 text-white text-sm font-medium px-5 py-3 rounded-full shadow-lg border border-gray-700 z-40 flex items-center gap-2">
+          <AlertCircle size={16} className="text-amber-400 shrink-0" /> {mediaNotice}
+        </div>
+      )}
+
       {/* Controls */}
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 bg-gray-900/80 backdrop-blur-xl px-8 py-4 rounded-full border border-gray-700 shadow-2xl z-30">
-        <button 
+        <button
           onClick={toggleAudio}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
         >
           {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
         </button>
-        <button 
+        <button
           onClick={toggleVideo}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
         >
           {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
         </button>
-        <button className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-white hover:bg-gray-700 transition-colors">
-          <MessageSquare size={20} />
-        </button>
-        <button 
+        <button
           onClick={onEndCall}
           className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/30"
         >
@@ -242,8 +251,17 @@ function VideoCallInterface({ agoraInfo, onEndCall, participantName }: { agoraIn
   );
 }
 
+const stableHash = (s: string) => {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) & 0xffffffff;
+  return Math.abs(h);
+};
+
 export default function ConsultationsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [toastError, setToastError] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bookingCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [specialties, setSpecialties] = useState<string[]>(['All']);
 
@@ -306,11 +324,12 @@ export default function ConsultationsPage() {
 
   const fetchMyConsultations = async () => {
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const consRes = await fetch(`${BACKEND_URL}/api/v1/consultations/me`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
@@ -327,12 +346,12 @@ export default function ConsultationsPage() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const token = localStorage.getItem('supabase_access_token');
+        const { data: { session } } = await supabase.auth.getSession();
         const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-        
+
         const res = await fetch(`${BACKEND_URL}/api/v1/doctors/approved?limit=50`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${session?.access_token ?? ''}`,
             'ngrok-skip-browser-warning': 'true'
           }
         });
@@ -346,8 +365,8 @@ export default function ConsultationsPage() {
             name: `Dr. ${doc.first_name} ${doc.last_name}`,
             image: doc.avatar_url || `https://picsum.photos/seed/doc${index + 10}/200/200`,
             city: 'Virtual / Clinic',
-            rating: 4.8 + (Math.random() * 0.2),
-            reviews: Math.floor(Math.random() * 200) + 50,
+            rating: 4.8 + (stableHash(doc.id) % 20) / 100,
+            reviews: 50 + (stableHash(doc.id + 'r') % 200),
             nextAvailable: doc.is_available ? 'Available Now' : 'Check Schedule',
             video_consultation_enabled: doc.video_consultation_enabled !== undefined ? doc.video_consultation_enabled : true,
             offline_consultation_enabled: doc.offline_consultation_enabled ?? false,
@@ -426,15 +445,13 @@ export default function ConsultationsPage() {
       if (!selectedDoctor || !selectedDate) return;
       setIsLoadingSlots(true);
       try {
-        const token = localStorage.getItem('supabase_access_token');
+        const { data: { session } } = await supabase.auth.getSession();
         const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-        
-        // Calculate the timezone offset in minutes and invert the sign to match backend expectations if needed
         const tzOffset = new Date().getTimezoneOffset() * -1;
 
         const res = await fetch(`${BACKEND_URL}/api/v1/consultations/doctors/${selectedDoctor.id}/slots?date=${selectedDate}&timezone_offset=${tzOffset}`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${session?.access_token ?? ''}`,
             'ngrok-skip-browser-warning': 'true'
           }
         });
@@ -462,15 +479,16 @@ export default function ConsultationsPage() {
   const handleConfirmBooking = async () => {
     if (!selectedDoctor || !selectedDate || !selectedTime) return;
     setIsBooking(true);
-    
+
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setIsBooking(false); return; }
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      
+
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/book`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
         },
@@ -485,16 +503,19 @@ export default function ConsultationsPage() {
       const json = await res.json();
       if (json.success) {
         setMyConsultations(prev => [json.data, ...prev]);
-        setBookingStep(2);
-        setTimeout(() => {
-          setIsBookingModalOpen(false);
-        }, 3000);
+        setBookingStep(3);
+        if (bookingCloseTimerRef.current) clearTimeout(bookingCloseTimerRef.current);
+        bookingCloseTimerRef.current = setTimeout(() => setIsBookingModalOpen(false), 3000);
       } else {
-        alert(json.message || "Failed to book consultation");
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToastError(json.message || "Failed to book consultation. Please try again.");
+        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
       }
     } catch (e) {
       console.error(e);
-      alert("Error booking consultation");
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToastError("Network error. Please check your connection and try again.");
+      toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
     } finally {
       setIsBooking(false);
     }
@@ -504,27 +525,38 @@ export default function ConsultationsPage() {
     setIsJoiningId(consultationId);
     setCurrentDoctorName(doctorName);
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToastError('Your session has expired. Please log in again.');
+        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
+        setIsJoiningId(null);
+        return;
+      }
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      
+
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/join`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
       const json = await res.json();
       
       if (res.ok && json.success) {
-        setAgoraInfo(json.data); 
+        setAgoraInfo(json.data);
         setIsVideoCallActive(true);
       } else {
-        alert(json.message || "Failed to join consultation");
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToastError(json.message || "Failed to join consultation. Please try again.");
+        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
       }
     } catch (e) {
       console.error(e);
-      alert("Error joining video call");
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToastError("Network error. Could not join the call.");
+      toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
     } finally {
       setIsJoiningId(null);
     }
@@ -568,6 +600,21 @@ export default function ConsultationsPage() {
   return (
     <ProtectedRoute requiredRole="PATIENT">
       <div className="min-h-screen bg-gray-50/50 pb-24">
+        {/* Global error toast */}
+        <AnimatePresence>
+          {toastError && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, x: '-50%' }}
+              animate={{ opacity: 1, y: 0, x: '-50%' }}
+              exit={{ opacity: 0, y: -50, x: '-50%' }}
+              className="fixed top-24 left-1/2 z-[300] bg-red-950 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border border-red-800"
+            >
+              <AlertCircle size={20} className="text-red-400 shrink-0" />
+              <span className="font-bold text-sm">{toastError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Hero Search Section */}
         <div className="bg-emerald-900 pt-16 pb-32 px-6 relative overflow-hidden">
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -716,9 +763,11 @@ export default function ConsultationsPage() {
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
+                    whileHover={{ y: -5 }}
+                    whileTap={{ scale: 0.99 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
                     key={doctor.id}
-                    className="bg-white rounded-[2.5rem] p-6 border border-emerald-100/60 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(5,150,105,0.15)] transition-all group flex flex-col h-full"
+                    className="bg-white rounded-[2.5rem] p-6 border border-emerald-100/60 shadow-sm hover:shadow-[0_20px_40px_-15px_rgba(5,150,105,0.15)] transition-shadow group flex flex-col h-full"
                   >
                     <div className="flex gap-5 mb-5">
                       <div className="relative w-24 h-24 rounded-[1.5rem] overflow-hidden shrink-0 shadow-inner">
@@ -1002,7 +1051,7 @@ export default function ConsultationsPage() {
                       </div>
                     </div>
                   </div>
-                ) : (
+                ) : bookingStep === 2 ? (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 text-center">
                     <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                       <CheckCircle2 size={40} className="text-emerald-600" />
@@ -1028,9 +1077,17 @@ export default function ConsultationsPage() {
                       {isBooking && <Loader2 size={20} className="animate-spin" />}
                       Confirm Appointment
                     </button>
-                    <button onClick={() => setBookingStep(1)} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm">
+                    <button onClick={() => setBookingStep(1)} disabled={isBooking} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm disabled:opacity-30">
                       ← Change date or time
                     </button>
+                  </motion.div>
+                ) : (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-10 text-center">
+                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <CheckCircle2 size={40} className="text-emerald-600" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Booking Confirmed!</h3>
+                    <p className="text-slate-500 text-sm">Your appointment has been booked successfully. You'll receive a confirmation shortly.</p>
                   </motion.div>
                 )}
               </motion.div>

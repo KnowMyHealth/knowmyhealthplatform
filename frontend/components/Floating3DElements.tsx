@@ -3,90 +3,129 @@
 import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 
+function CapsulePill() {
+  return (
+    <div style={{ width: 50, height: 120, borderRadius: 25, boxShadow: '5px 14px 28px rgba(2,44,34,0.55)', position: 'relative' }}>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: 25, overflow: 'hidden' }}>
+        {/* Green top half */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: '50%',
+          background: 'radial-gradient(ellipse at 35% 22%, #bbf7d0 0%, #4ade80 28%, #16a34a 62%, #052e16 100%)',
+        }} />
+        {/* White bottom half */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%',
+          background: 'radial-gradient(ellipse at 35% 22%, #ffffff 0%, #f1f5f9 45%, #cbd5e1 100%)',
+        }} />
+        {/* Seam groove */}
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 'calc(50% - 2px)', height: 4, background: 'rgba(0,0,0,0.2)' }} />
+        <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 1.5, background: 'rgba(255,255,255,0.5)' }} />
+        {/* Specular glow */}
+        <div style={{ position: 'absolute', top: 8, left: 6, width: 22, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', filter: 'blur(6px)' }} />
+        {/* Specular soft */}
+        <div style={{ position: 'absolute', top: 11, left: 8, width: 10, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.7)', filter: 'blur(2px)' }} />
+        {/* Specular hot spot */}
+        <div style={{ position: 'absolute', top: 13, left: 9, width: 5, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.95)' }} />
+        {/* Rim shadow */}
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 25, boxShadow: 'inset -3px -6px 14px rgba(0,0,0,0.28), inset 1px 1px 3px rgba(255,255,255,0.1)' }} />
+      </div>
+    </div>
+  );
+}
+
+function Sphere3D({ tint }: { tint: 'teal' | 'emerald' | 'amber' }) {
+  const cfg = {
+    teal:    { bg: 'radial-gradient(ellipse at 34% 28%, #ccfbf1 0%, #2dd4bf 30%, #0f766e 70%, #042f2e 100%)', sh: '4px 10px 22px rgba(4,47,46,0.62)' },
+    emerald: { bg: 'radial-gradient(ellipse at 34% 28%, #d1fae5 0%, #34d399 30%, #059669 70%, #022c22 100%)', sh: '4px 10px 22px rgba(2,44,34,0.62)' },
+    amber:   { bg: 'radial-gradient(ellipse at 34% 28%, #fef3c7 0%, #fbbf24 30%, #b45309 70%, #431407 100%)', sh: '4px 10px 22px rgba(67,20,7,0.62)' },
+  }[tint];
+
+  return (     
+    <div style={{ width: 78, height: 78, borderRadius: '50%',boxShadow: cfg.sh, position: 'relative' }}>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: cfg.bg }}>
+        {/* Specular glow */}
+        <div style={{ position: 'absolute', top: 7, left: 9, width: 28, height: 28, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 45%, transparent 72%)', filter: 'blur(1.5px)' }} />
+        {/* Hot spot */}
+        <div style={{ position: 'absolute', top: 11, left: 14, width: 10, height: 10, borderRadius: '50%', background: 'rgba(255,255,255,0.96)' }} />
+        {/* Rim shadow */}
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset -4px -6px 14px rgba(0,0,0,0.22)' }} />
+      </div>
+    </div>
+  );
+}
+
+function RoundTablet() {
+  return (
+    <div style={{ width: 84, height: 84, borderRadius: '50%', boxShadow: '3px 8px 18px rgba(71,85,105,0.38)', position: 'relative' }}>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: 'radial-gradient(ellipse at 30% 24%, #ffffff 0%, #f8fafc 35%, #e2e8f0 72%, #94a3b8 100%)' }}>
+        {/* Score groove */}
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: 'calc(50% - 1px)', width: 2, background: 'rgba(0,0,0,0.18)' }} />
+        <div style={{ position: 'absolute', top: 0, bottom: 0, left: 'calc(50% + 1.5px)', width: 1.5, background: 'rgba(255,255,255,0.6)' }} />
+        {/* Specular glow */}
+        <div style={{ position: 'absolute', top: 7, left: 9, width: 26, height: 30, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(255,255,255,0.88) 0%, rgba(255,255,255,0.3) 50%, transparent 75%)', filter: 'blur(2px)' }} />
+        {/* Hot spot */}
+        <div style={{ position: 'absolute', top: 11, left: 13, width: 9, height: 9, borderRadius: '50%', background: 'rgba(255,255,255,0.95)' }} />
+        {/* Rim shadow */}
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset -3px -5px 12px rgba(0,0,0,0.14), inset 2px 2px 5px rgba(255,255,255,0.6)' }} />
+      </div>
+    </div>
+  );
+}
+
+const elements: Array<{
+  type: 'capsule' | 'sphere-teal' | 'sphere-emerald' | 'sphere-amber' | 'tablet';
+  top: string; left: string; scale: number; delay: number; rot: number;
+}> = [
+  { type: 'capsule',        top: '7%',  left: '10%', scale: 0.82, delay: 0,   rot: -28 },
+  { type: 'sphere-teal',    top: '12%', left: '77%', scale: 0.70, delay: 0.7, rot: 0   },
+  { type: 'tablet',         top: '55%', left: '5%',  scale: 0.56, delay: 1.4, rot: 18  },
+  { type: 'capsule',        top: '48%', left: '80%', scale: 0.64, delay: 0.3, rot: 22  },
+  { type: 'sphere-emerald', top: '28%', left: '66%', scale: 0.44, delay: 1.1, rot: 0   },
+  { type: 'sphere-amber',   top: '78%', left: '58%', scale: 0.48, delay: 2.1, rot: 0   },
+  { type: 'tablet',         top: '40%', left: '20%', scale: 0.46, delay: 2.6, rot: -14 },
+];
+
 export default function Floating3DElements() {
   const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-  }, []);
-
+  useEffect(() => { setMounted(true); }, []);
   if (!mounted) return null;
 
-  const elements = [
-    { type: 'pill-two-tone', top: '10%', left: '15%', scale: 0.7, delay: 0 },
-    { type: 'tablet', top: '20%', left: '80%', scale: 0.6, delay: 1 },
-    { type: 'capsule', top: '60%', left: '8%', scale: 0.8, delay: 2 },
-    { type: 'tablet', top: '75%', left: '85%', scale: 0.7, delay: 0.5 },
-    { type: 'pill-two-tone', top: '35%', left: '65%', scale: 0.6, delay: 1.5 },
-    { type: 'capsule', top: '85%', left: '40%', scale: 0.5, delay: 2.5 },
-    { type: 'tablet', top: '45%', left: '25%', scale: 0.5, delay: 3 },
-  ];
-
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 [perspective:1000px]">
+    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
       {elements.map((el, i) => (
         <motion.div
           key={i}
-          className="absolute [transform-style:preserve-3d]"
-          style={{ top: el.top, left: el.left, scale: el.scale }}
+          className="absolute"
+          style={{ top: el.top, left: el.left, scale: el.scale, rotate: el.rot }}
           animate={{
-            y: [0, -30, 0],
-            x: [0, 10, 0],
-            rotate: [0, 15, -5, 0],
-            rotateX: [0, 10, -10, 0],
-            rotateY: [0, 15, -15, 0],
+            y:      [0, -22, 5, 0],
+            x:      [0,  7, -3, 0],
+            rotate: [el.rot, el.rot + 12, el.rot - 5, el.rot],
           }}
           transition={{
-            duration: 8 + (i % 3) * 3,
+            duration: 9 + (i % 4) * 2.5,
             repeat: Infinity,
             ease: 'easeInOut',
             delay: el.delay,
           }}
         >
-          {el.type === 'pill-two-tone' && (
-            <div className="relative w-12 h-28 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.3),_0_0_20px_rgba(16,185,129,0.4)] overflow-hidden">
-              {/* Top Half */}
-              <div className="absolute top-0 left-0 w-full h-1/2 bg-[radial-gradient(ellipse_at_30%_30%,_#6ee7b7,_#10b981,_#047857)] shadow-[inset_-5px_-5px_15px_rgba(0,0,0,0.5),_inset_5px_5px_15px_rgba(255,255,255,0.9)]" />
-              {/* Bottom Half */}
-              <div className="absolute bottom-0 left-0 w-full h-1/2 bg-[radial-gradient(ellipse_at_30%_70%,_#ffffff,_#e5e7eb,_#9ca3af)] shadow-[inset_-5px_-5px_15px_rgba(0,0,0,0.3),_inset_5px_5px_15px_rgba(255,255,255,1)]" />
-              {/* Center Line */}
-              <div className="absolute top-1/2 left-0 w-full h-[2px] bg-emerald-900/40 shadow-[0_1px_2px_rgba(255,255,255,0.9)] z-10" />
-              {/* Specular Highlight */}
-              <div className="absolute top-3 left-2 w-4 h-20 bg-white/70 blur-[4px] rounded-full transform -rotate-6 z-20" />
-              <div className="absolute bottom-3 right-2 w-3 h-10 bg-black/20 blur-[3px] rounded-full transform -rotate-6 z-20" />
-            </div>
-          )}
-
-          {el.type === 'capsule' && (
-            <div className="relative w-14 h-14 rounded-full bg-[radial-gradient(circle_at_30%_30%,_#5eead4,_#14b8a6,_#0f766e)] shadow-[0_15px_30px_rgba(0,0,0,0.3),_inset_-6px_-6px_15px_rgba(0,0,0,0.5),_inset_6px_6px_15px_rgba(255,255,255,0.9)] overflow-hidden">
-              {/* Specular Highlight */}
-              <div className="absolute top-2 left-2 w-5 h-5 bg-white/90 blur-[3px] rounded-full z-20" />
-              <div className="absolute bottom-2 right-2 w-7 h-7 bg-black/30 blur-[5px] rounded-full z-20" />
-            </div>
-          )}
-
-          {el.type === 'tablet' && (
-            <div className="relative w-20 h-20 rounded-full bg-[radial-gradient(circle_at_30%_30%,_#ffffff,_#f3f4f6,_#d1d5db)] shadow-[0_15px_35px_rgba(0,0,0,0.2),_inset_-5px_-5px_15px_rgba(0,0,0,0.2),_inset_5px_5px_15px_rgba(255,255,255,1)] overflow-hidden">
-               {/* Score Line */}
-               <div className="absolute top-0 left-1/2 w-[2px] h-full bg-gray-400/60 shadow-[1px_0_2px_rgba(255,255,255,1),_inset_1px_0_2px_rgba(0,0,0,0.2)] z-10 transform -translate-x-1/2" />
-               {/* Specular Highlight */}
-               <div className="absolute top-3 left-3 w-8 h-5 bg-white/90 blur-[3px] rounded-full transform -rotate-12 z-20" />
-               <div className="absolute bottom-3 right-3 w-10 h-10 bg-black/10 blur-[5px] rounded-full z-20" />
-            </div>
-          )}
+          {el.type === 'capsule'        && <CapsulePill />}
+          {el.type === 'sphere-teal'    && <Sphere3D tint="teal" />}
+          {el.type === 'sphere-emerald' && <Sphere3D tint="emerald" />}
+          {el.type === 'sphere-amber'   && <Sphere3D tint="amber" />}
+          {el.type === 'tablet'         && <RoundTablet />}
         </motion.div>
       ))}
-      {/* Soft radial gradients */}
-      <motion.div 
-        className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-emerald-300/20 blur-[120px]"
-        animate={{ scale: [1, 1.2, 1], opacity: [0.4, 0.6, 0.4] }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+
+      <motion.div
+        className="absolute -top-[10%] -left-[10%] w-[55vw] h-[55vw] rounded-full bg-emerald-300/20 blur-[130px]"
+        animate={{ scale: [1, 1.18, 1], opacity: [0.35, 0.55, 0.35] }}
+        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
       />
-      <motion.div 
-        className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] rounded-full bg-teal-200/20 blur-[140px]"
-        animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.7, 0.3] }}
-        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+      <motion.div
+        className="absolute -bottom-[10%] -right-[10%] w-[65vw] h-[65vw] rounded-full bg-teal-200/20 blur-[150px]"
+        animate={{ scale: [1, 1.25, 1], opacity: [0.25, 0.50, 0.25] }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
       />
     </div>
   );

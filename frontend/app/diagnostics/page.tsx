@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -64,7 +64,7 @@ function DiagnosticsContent() {
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
   useEffect(() => {
     fetchData();
@@ -236,9 +236,11 @@ function DiagnosticsContent() {
           totalDiscount += json.data.discount_amount * item.quantity;
         } else {
           lastErrMsg = json.message || "Invalid coupon";
+          if (res.status === 400) break;
         }
       } catch (err: any) {
         lastErrMsg = "Network error while validating coupon.";
+        break;
       }
     }
 
@@ -261,7 +263,7 @@ function DiagnosticsContent() {
       const availableTestsList = diagnostics.map(t => `{ id: "${t.id}", name: "${t.name}", category: "${t.category}" }`).join('\n');
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-2.0-flash',
         contents: `A patient is experiencing the following symptoms: "${symptoms}". 
         Based on these symptoms, recommend the most relevant diagnostic tests ONLY from the following available list:
         ${availableTestsList}
@@ -377,13 +379,18 @@ function DiagnosticsContent() {
                 <>
                   {/* 2-Column Test Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredTests.map((test) => {
+                    {filteredTests.map((test, idx) => {
                       const inCart = cart.some(item => item.testId === test.id);
                       return (
-                        <motion.div 
+                        <motion.div
                           key={test.id}
                           layout
-                          className="bg-white border border-emerald-100/80 rounded-[2.5rem] p-7 shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-all group flex flex-col relative overflow-hidden"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.05, duration: 0.35 }}
+                          whileHover={{ y: -4 }}
+                          whileTap={{ scale: 0.99 }}
+                          className="bg-white border border-emerald-100/80 rounded-[2.5rem] p-7 shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-shadow group flex flex-col relative overflow-hidden"
                         >
                           {test.popular && (
                             <div className="absolute top-0 right-10 bg-amber-400 text-amber-950 text-[10px] font-black uppercase px-3 py-1.5 rounded-b-xl flex items-center gap-1 shadow-sm">
@@ -455,7 +462,7 @@ function DiagnosticsContent() {
                 {/* AI Recommender Ad/Widget */}
                 <motion.div 
                   whileHover={{ y: -5 }}
-                  className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-emerald-900/20 relative overflow-hidden"
+                  className="bg-linear-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-emerald-900/20 relative overflow-hidden"
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-3xl rounded-full" />
                   <div className="relative z-10">
@@ -484,7 +491,7 @@ function DiagnosticsContent() {
                 <div className="bg-white border-2 border-emerald-100 border-dashed rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center gap-8 group cursor-pointer hover:border-emerald-300 transition-colors">
                   <div className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-48 bg-emerald-50 rounded-3xl flex items-center justify-center border border-emerald-100 relative overflow-hidden shrink-0">
                     <Activity size={64} className="text-emerald-200 group-hover:scale-110 transition-transform" />
-                    <div className="absolute inset-0 bg-gradient-to-tr from-emerald-200/50 to-transparent" />
+                    <div className="absolute inset-0 bg-linear-to-tr from-emerald-200/50 to-transparent" />
                   </div>
                   <div className="text-center md:text-left flex-1">
                     <div className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-widest rounded-lg mb-3">

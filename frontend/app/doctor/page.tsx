@@ -7,9 +7,9 @@ import {
   LayoutDashboard, Users, Calendar, Wallet,
   Settings, Menu, X, Video, Clock, TrendingUp,
   LogOut, Star, FileText, Search,
-  ChevronRight, Phone, MessageSquare, Mic, MicOff, VideoOff, XCircle,
+  ChevronRight, Phone, Mic, MicOff, VideoOff, XCircle,
   Sparkles, CheckCircle2, ShieldCheck, Stethoscope, Loader2, AlertCircle, Save, MapPin,
-  Upload, ExternalLink
+  Upload
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -115,28 +115,30 @@ const RemoteVideo = ({ user }: { user: any }) => {
   return <div ref={ref} className="w-full h-full object-cover" />;
 };
 
-function VideoCallInterface({ 
-  agoraInfo, 
-  consultationId, 
-  onEndCall, 
-  participantName 
-}: { 
-  agoraInfo: any, 
-  consultationId: string, 
-  onEndCall: (id: string) => void, 
-  participantName: string 
+function VideoCallInterface({
+  agoraInfo,
+  consultationId,
+  onEndCall,
+  participantName
+}: {
+  agoraInfo: any,
+  consultationId: string,
+  onEndCall: (id: string) => void,
+  participantName: string
 }) {
   const localVideoRef = useRef<HTMLDivElement>(null);
+  const audioTrackRef = useRef<any>(null);
+  const videoTrackRef = useRef<any>(null);
+  const mediaNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [AgoraRTC, setAgoraRTC] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
-  const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
-  const [localAudioTrack, setLocalAudioTrack] = useState<any>(null);
   const [remoteUsers, setRemoteUsers] = useState<any[]>([]);
-  
+
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [mediaNotice, setMediaNotice] = useState<string | null>(null);
 
   useEffect(() => {
     import('agora-rtc-sdk-ng').then((mod) => {
@@ -147,9 +149,6 @@ function VideoCallInterface({
 
   useEffect(() => {
     if (!client || !AgoraRTC) return;
-    
-    let audioTrack: any = null;
-    let videoTrack: any = null;
 
     const initAgora = async () => {
       try {
@@ -174,18 +173,16 @@ function VideoCallInterface({
         });
 
         const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID || "96b6fdb94ffb4ab9ac1fe7c7d358ee71";
-        
         await client.join(appId, agoraInfo.channel_name, agoraInfo.token, agoraInfo.uid);
-        
+
         try {
           const tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-          audioTrack = tracks[0];
-          videoTrack = tracks[1];
-          
-          setLocalAudioTrack(audioTrack);
-          setLocalVideoTrack(videoTrack);
-          
-          await client.publish([audioTrack, videoTrack]);
+          audioTrackRef.current = tracks[0];
+          videoTrackRef.current = tracks[1];
+          await client.publish([audioTrackRef.current, videoTrackRef.current]);
+          if (localVideoRef.current) {
+            videoTrackRef.current.play(localVideoRef.current);
+          }
         } catch (mediaErr: any) {
           console.error("Media Error:", mediaErr);
           setPermissionError("Camera/Microphone access denied by browser.");
@@ -203,37 +200,44 @@ function VideoCallInterface({
     initAgora();
 
     return () => {
-      if (audioTrack) { audioTrack.stop(); audioTrack.close(); }
-      if (videoTrack) { videoTrack.stop(); videoTrack.close(); }
-      client.leave();
+      if (mediaNoticeTimerRef.current) clearTimeout(mediaNoticeTimerRef.current);
+      if (audioTrackRef.current) { audioTrackRef.current.stop(); audioTrackRef.current.close(); audioTrackRef.current = null; }
+      if (videoTrackRef.current) { videoTrackRef.current.stop(); videoTrackRef.current.close(); videoTrackRef.current = null; }
+      if (client) client.leave();
     };
   }, [client, AgoraRTC, agoraInfo]);
 
   useEffect(() => {
-    if (localVideoTrack && localVideoRef.current && !isVideoOff && !permissionError) {
-      localVideoTrack.play(localVideoRef.current);
+    if (videoTrackRef.current && localVideoRef.current && !isVideoOff && !permissionError) {
+      videoTrackRef.current.play(localVideoRef.current);
     }
-  }, [localVideoTrack, isVideoOff, permissionError]);
+  }, [isVideoOff, permissionError]);
+
+  const showMediaNotice = (msg: string) => {
+    if (mediaNoticeTimerRef.current) clearTimeout(mediaNoticeTimerRef.current);
+    setMediaNotice(msg);
+    mediaNoticeTimerRef.current = setTimeout(() => setMediaNotice(null), 4000);
+  };
 
   const toggleAudio = () => {
     if (permissionError) {
-      alert("Please allow microphone access in your browser settings to unmute.");
+      showMediaNotice("Allow microphone access in your browser settings to unmute.");
       return;
     }
-    if (localAudioTrack) {
-      localAudioTrack.setMuted(!isMuted);
-      setIsMuted(!isMuted);
+    if (audioTrackRef.current) {
+      audioTrackRef.current.setMuted(!isMuted);
+      setIsMuted(v => !v);
     }
   };
 
   const toggleVideo = () => {
     if (permissionError) {
-      alert("Please allow camera access in your browser settings to turn on video.");
+      showMediaNotice("Allow camera access in your browser settings to enable video.");
       return;
     }
-    if (localVideoTrack) {
-      localVideoTrack.setMuted(!isVideoOff);
-      setIsVideoOff(!isVideoOff);
+    if (videoTrackRef.current) {
+      videoTrackRef.current.setMuted(!isVideoOff);
+      setIsVideoOff(v => !v);
     }
   };
 
@@ -246,7 +250,7 @@ function VideoCallInterface({
             <p className="text-white font-medium">Connecting to secure server...</p>
           </div>
         ) : remoteUsers.length > 0 ? (
-          remoteUsers[0].hasVideo ? (
+          remoteUsers[0].videoTrack ? (
             <RemoteVideo user={remoteUsers[0]} />
           ) : (
             <div className="flex flex-col items-center justify-center z-10 relative">
@@ -266,7 +270,7 @@ function VideoCallInterface({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-transparent pointer-events-none" />
       </div>
-      
+
       <div className="absolute top-6 right-6 w-32 h-48 md:w-48 md:h-64 bg-gray-800 rounded-2xl overflow-hidden border-2 border-gray-700 shadow-2xl flex items-center justify-center z-20">
         {permissionError ? (
           <div className="flex flex-col items-center justify-center p-4 text-center">
@@ -285,23 +289,26 @@ function VideoCallInterface({
         <span className="text-white font-medium">{participantName} Consultation</span>
       </div>
 
+      {mediaNotice && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-gray-900/90 text-white text-sm font-medium px-5 py-3 rounded-full shadow-lg border border-gray-700 z-40 flex items-center gap-2">
+          <AlertCircle size={16} className="text-amber-400 shrink-0" /> {mediaNotice}
+        </div>
+      )}
+
       <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 bg-gray-900/80 backdrop-blur-xl px-8 py-4 rounded-full border border-gray-700 shadow-2xl z-30">
-        <button 
+        <button
           onClick={toggleAudio}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
         >
           {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
         </button>
-        <button 
+        <button
           onClick={toggleVideo}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500/20 text-red-500' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
         >
           {isVideoOff ? <VideoOff size={20} /> : <Video size={20} />}
         </button>
-        <button className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center text-white hover:bg-gray-700 transition-colors">
-          <MessageSquare size={20} />
-        </button>
-        <button 
+        <button
           onClick={() => onEndCall(consultationId)}
           className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 transition-colors shadow-lg shadow-red-600/30"
         >
@@ -315,10 +322,10 @@ function VideoCallInterface({
 export default function DoctorDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [doctorName, setDoctorName] = useState<string | null>(null); 
+  const [doctorName, setDoctorName] = useState<string | null>(null);
   const { logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [appointments, setAppointments] = useState<Consultation[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
@@ -326,6 +333,10 @@ export default function DoctorDashboard() {
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [agoraInfo, setAgoraInfo] = useState<any>(null);
   const [currentPatientName, setCurrentPatientName] = useState<string>('Patient');
+  const [toastError, setToastError] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const availabilityMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Availability States
   const [availability, setAvailability] = useState<DayAvailability[]>(
@@ -418,10 +429,10 @@ export default function DoctorDashboard() {
     }
 
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
-      const headers = { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true', 'Content-Type': 'application/json' };
+      const headers = { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true', 'Content-Type': 'application/json' };
 
       // PATCH /me with empty body — backend uses exclude_unset=True so nothing changes,
       // but we get the full DoctorSchema back (no GET /doctors/me exists).
@@ -463,7 +474,8 @@ export default function DoctorDashboard() {
     setProfileMsg(null);
 
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setIsSavingProfile(false); return; }
       const payload = {
         first_name: profileForm.first_name,
         last_name: profileForm.last_name,
@@ -477,7 +489,7 @@ export default function DoctorDashboard() {
       const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
         },
@@ -497,18 +509,19 @@ export default function DoctorDashboard() {
       setProfileMsg({ type: 'error', text: 'Network error occurred.' });
     } finally {
       setIsSavingProfile(false);
-      setTimeout(() => setProfileMsg(null), 3000);
+      if (profileMsgTimerRef.current) clearTimeout(profileMsgTimerRef.current);
+      profileMsgTimerRef.current = setTimeout(() => setProfileMsg(null), 3000);
     }
   };
 
   const fetchAvailability = async () => {
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) return;
-      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me/availability`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
@@ -537,10 +550,10 @@ export default function DoctorDashboard() {
   const fetchPatients = async () => {
     setIsLoadingPatients(true);
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/patients`, {
-        headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
       });
       if (res.ok) {
         const json = await res.json();
@@ -557,10 +570,10 @@ export default function DoctorDashboard() {
     setIsLoadingPatientDetail(true);
     setPatientDetail(null);
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/patients/${userIdParam}`, {
-        headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
       });
       if (res.ok) {
         const json = await res.json();
@@ -588,13 +601,14 @@ export default function DoctorDashboard() {
   const handleUploadPrescription = async (consultationId: string, file: File) => {
     setUploadingPrescriptionId(consultationId);
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/prescription`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true',
         },
         body: formData,
@@ -617,15 +631,15 @@ export default function DoctorDashboard() {
     setIsSavingAvailability(true);
     setAvailabilityMsg(null);
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      
-      // Formatting payload correctly as specified
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setIsSavingAvailability(false); return; }
+
       const payload = {
         schedule: availability
           .filter(d => d.active)
           .map(d => ({
             day_of_week: d.day_of_week,
-            start_time: `${d.start_time}:00`, // Format back to HH:MM:SS
+            start_time: `${d.start_time}:00`,
             end_time: `${d.end_time}:00`
           }))
       };
@@ -633,7 +647,7 @@ export default function DoctorDashboard() {
       const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me/availability`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
         },
@@ -650,7 +664,8 @@ export default function DoctorDashboard() {
       setAvailabilityMsg({ type: 'error', text: 'Network error occurred.' });
     } finally {
       setIsSavingAvailability(false);
-      setTimeout(() => setAvailabilityMsg(null), 3000);
+      if (availabilityMsgTimerRef.current) clearTimeout(availabilityMsgTimerRef.current);
+      availabilityMsgTimerRef.current = setTimeout(() => setAvailabilityMsg(null), 3000);
     }
   };
 
@@ -677,29 +692,35 @@ export default function DoctorDashboard() {
     }
   };
 
-  const handleUpdateStatus = (consultationId: string, newStatus: string) => {
-    const token = localStorage.getItem('supabase_access_token');
-    if (!token) return;
-    
-    // Fire and forget using keepalive so it hits the backend even if unmounted instantly
-    fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true'
-      },
-      body: JSON.stringify({ status: newStatus }),
-      keepalive: true
-    }).then(res => {
+  const handleUpdateStatus = async (consultationId: string, newStatus: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/${consultationId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
       if (res.ok) {
-        fetchAppointments(); 
+        fetchAppointments();
       } else {
-        res.json().then(err => console.error('Failed to update status', err));
+        const err = await res.json();
+        console.error('Failed to update status', err);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToastError('Failed to update consultation status. Please try again.');
+        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
       }
-    }).catch(e => {
+    } catch (e) {
       console.error('Network error updating status:', e);
-    });
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToastError('Network error. Could not update status.');
+      toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
+    }
   };
 
   const handleJoinCall = async (consultationId: string, patientName: string) => {
@@ -708,7 +729,9 @@ export default function DoctorDashboard() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        alert('Your session has expired. Please log in again.');
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToastError('Your session has expired. Please log in again.');
+        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
         setIsJoiningId(null);
         return;
       }
@@ -721,17 +744,21 @@ export default function DoctorDashboard() {
         }
       });
       const json = await res.json();
-      
+
       if (res.ok && json.success) {
-        setAgoraInfo(json.data); 
+        setAgoraInfo(json.data);
         setActiveCallId(consultationId);
         setIsVideoCallActive(true);
       } else {
-        alert(json.message || "Failed to join consultation");
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        setToastError(json.message || "Failed to join consultation. Please try again.");
+        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
       }
     } catch (e) {
       console.error(e);
-      alert("Error joining video call");
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToastError("Network error. Could not join the call.");
+      toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
     } finally {
       setIsJoiningId(null);
     }
@@ -1500,7 +1527,22 @@ export default function DoctorDashboard() {
   return (
     <ProtectedRoute requiredRole="DOCTOR">
       <div className="fixed inset-0 z-[100] flex bg-[#f8fafc] text-slate-900 font-sans overflow-hidden">
-        
+
+        {/* Global error toast */}
+        <AnimatePresence>
+          {toastError && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, x: '-50%' }}
+              animate={{ opacity: 1, y: 0, x: '-50%' }}
+              exit={{ opacity: 0, y: -50, x: '-50%' }}
+              className="fixed top-6 left-1/2 z-[300] bg-red-950 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border border-red-800"
+            >
+              <AlertCircle size={20} className="text-red-400 shrink-0" />
+              <span className="font-bold text-sm">{toastError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* --- SIDEBAR --- */}
         <AnimatePresence>
           {isSidebarOpen && (
@@ -1534,14 +1576,14 @@ export default function DoctorDashboard() {
                 <button
                   key={item.id}
                   onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                    isActive 
-                      ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                    isActive
+                      ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5'
                       : 'hover:bg-white/5 hover:text-white'
                   }`}
                 >
-                  <item.icon size={20} className={isActive ? 'text-emerald-400' : 'text-slate-500'} />
-                  <span>{item.label}</span>
+                  <item.icon size={20} className={`shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span className="text-left">{item.label}</span>
                 </button>
               );
             })}

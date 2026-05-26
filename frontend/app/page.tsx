@@ -3,7 +3,8 @@
 import { motion } from 'motion/react';
 import {
   ArrowRight, Activity, HeartPulse, Stethoscope, FileText, Pill, Brain, Star,
-  Building2, Mail, MapPin, Globe, User, CheckCircle2, Shield, Zap, Lock, Phone
+  Building2, Mail, MapPin, Globe, User, CheckCircle2, Shield, Zap, Lock, Phone,
+  Loader2
 } from 'lucide-react';
 import Floating3DElements from '@/components/Floating3DElements';
 import StickyCallback from '@/components/StickyCallback';
@@ -105,6 +106,35 @@ export default function Home() {
   const [partnerStatus, setPartnerStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [partnerError, setPartnerError] = useState('');
 
+  const [cbName, setCbName] = useState('');
+  const [cbPhone, setCbPhone] = useState('');
+  const [cbStatus, setCbStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+
+  const handleCallbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedPhone = cbPhone.trim().replace(/\D/g, '');
+    if (trimmedPhone.length < 10 || trimmedPhone.length > 15) return;
+    setCbStatus('submitting');
+    try {
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const res = await fetch(`${BACKEND_URL}/api/v1/callbacks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+        body: JSON.stringify({ name: cbName.trim(), phone: trimmedPhone }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCbStatus('success');
+        setCbName('');
+        setCbPhone('');
+      } else {
+        throw new Error(data.message || 'Submission failed.');
+      }
+    } catch {
+      setCbStatus('error');
+    }
+  };
+
   const handlePartnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPartnerStatus('submitting');
@@ -136,8 +166,12 @@ export default function Home() {
     else if (userRole === 'DOCTOR') router.push('/doctor');
   }, [isLoggedIn, userRole, isLoading, router]);
 
-  if (!isLoading && isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR')) {
-    return null;
+  if (isLoading || (isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR'))) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 className="animate-spin text-emerald-600" size={48} />
+      </div>
+    );
   }
 
   const containerVariants = {
@@ -197,14 +231,38 @@ export default function Home() {
                 <h3 className="text-emerald-700 font-semibold text-xl mb-2">Request a Callback</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">Fill in your details to book an appointment. We&apos;ll reach out to you shortly.</p>
               </div>
-              <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input type="text" placeholder="Your Name *" required className="flex-1 min-w-0 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-slate-800 placeholder:text-gray-400" />
-                  <input type="tel" placeholder="Phone Number (10 digits)" required pattern="[0-9]{10}" className="flex-1 min-w-0 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-slate-800 placeholder:text-gray-400" />
-                  <button type="submit" className="shrink-0 px-6 py-3 bg-[#14b8a6] hover:bg-[#0d9488] text-white font-semibold rounded-xl transition-colors whitespace-nowrap">Submit</button>
-                </div>
-                <p className="text-xs text-gray-500 leading-relaxed mt-4">* By submitting, you agree to our T&Cs and Privacy Policy.</p>
-              </form>
+              {cbStatus === 'success' ? (
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                  className="flex items-center gap-3 py-4 text-emerald-700 font-bold"
+                >
+                  <CheckCircle2 size={24} className="text-emerald-600 shrink-0" />
+                  We&apos;ve received your request. We&apos;ll call you shortly!
+                </motion.div>
+              ) : (
+                <form className="space-y-4" onSubmit={handleCallbackSubmit}>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text" placeholder="Your Name *" required
+                      value={cbName} onChange={(e) => setCbName(e.target.value)}
+                      className="flex-1 min-w-0 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-slate-800 placeholder:text-gray-400"
+                    />
+                    <input
+                      type="tel" placeholder="Phone Number (10 digits)" required
+                      value={cbPhone} onChange={(e) => setCbPhone(e.target.value)}
+                      className="flex-1 min-w-0 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-slate-800 placeholder:text-gray-400"
+                    />
+                    <button type="submit" disabled={cbStatus === 'submitting'}
+                      className="shrink-0 px-6 py-3 bg-[#14b8a6] hover:bg-[#0d9488] text-white font-semibold rounded-xl transition-colors whitespace-nowrap disabled:opacity-70 flex items-center gap-2"
+                    >
+                      {cbStatus === 'submitting' ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Submitting</> : 'Submit'}
+                    </button>
+                  </div>
+                  {cbStatus === 'error' && (
+                    <p className="text-xs text-red-500 font-medium">Something went wrong. Please try again.</p>
+                  )}
+                  <p className="text-xs text-gray-500 leading-relaxed mt-4">* By submitting, you agree to our T&Cs and Privacy Policy.</p>
+                </form>
+              )}
             </motion.div>
           </motion.div>
           <div className="hidden lg:block h-full w-full relative" />

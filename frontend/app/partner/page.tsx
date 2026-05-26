@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, Users, Menu, X, Loader2, Plus, Search,
   Edit2, Trash2, Eye, Building2, ChevronLeft, ChevronRight,
   Phone, MapPin, CalendarDays, Droplets, AlertCircle,
-  CheckCircle2, UserCircle2, LogOut, Activity, TrendingUp,
-  UserPlus, ArrowUpRight,
+  CheckCircle2, UserCircle2, LogOut, Activity,
+  UserPlus, ArrowUpRight, Upload, Download, FileText,
+  XCircle, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
@@ -51,6 +53,16 @@ type FormData = {
   emergency_contact: string;
 };
 
+interface BulkSuccessRow { row: number; email: string; name: string; }
+interface BulkFailedRow  { row: number; email: string; error: string; }
+interface BulkResult {
+  total_rows: number;
+  success_count: number;
+  failure_count: number;
+  successful: BulkSuccessRow[];
+  failed: BulkFailedRow[];
+}
+
 const EMPTY_FORM: FormData = {
   email: '', first_name: '', last_name: '', date_of_birth: '',
   gender: '', blood_group: '', phone_number: '', address: '', emergency_contact: '',
@@ -61,16 +73,22 @@ const navItems = [
   { icon: Users,           label: 'My Employees', id: 'patients' },
 ];
 
-/* ─── Helpers ────────────────────────────────────────────────────────────────── */
+const CSV_TEMPLATE_HEADER = 'email,first_name,last_name,date_of_birth,gender,blood_group,phone_number,address,emergency_contact';
+const CSV_TEMPLATE_EXAMPLE = 'alex@corp.com,Alex,Smith,1990-04-12,MALE,A+,+12345678,123 West Street,John: 555';
 
-function authHeaders() {
-  const token = localStorage.getItem('supabase_access_token');
-  return {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
+/* ─── Auth helper ────────────────────────────────────────────────────────────── */
+
+async function getAuthHeaders(includeContentType = true): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session?.access_token ?? ''}`,
     'ngrok-skip-browser-warning': 'true',
   };
+  if (includeContentType) headers['Content-Type'] = 'application/json';
+  return headers;
 }
+
+/* ─── Helpers ────────────────────────────────────────────────────────────────── */
 
 function initials(p: Patient) {
   return `${p.first_name[0] ?? ''}${p.last_name[0] ?? ''}`.toUpperCase();
@@ -79,6 +97,297 @@ function initials(p: Patient) {
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function downloadCSVTemplate() {
+  const content = `${CSV_TEMPLATE_HEADER}\n${CSV_TEMPLATE_EXAMPLE}`;
+  const blob = new Blob([content], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'employee_bulk_upload_template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ─── Bulk Upload Modal ──────────────────────────────────────────────────────── */
+
+function BulkUploadModal({ onClose, onComplete }: {
+  onClose: () => void;
+  onComplete: (count: number) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [result, setResult] = useState<BulkResult | null>(null);
+  const [error, setError] = useState('');
+  const [showFailed, setShowFailed] = useState(true);
+  const [showSuccessful, setShowSuccessful] = useState(false);
+
+  const handleFile = (f: File) => {
+    if (f.type !== 'text/csv' && !f.name.endsWith('.csv')) {
+      setError('Please upload a valid CSV file.');
+      return;
+    }
+    if (f.size > 5 * 1024 * 1024) {
+      setError('File size must be under 5 MB.');
+      return;
+    }
+    setError('');
+    setFile(f);
+    setResult(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setIsUploading(true);
+    setError('');
+    try {
+      const headers = await getAuthHeaders(false);
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${BACKEND_URL}/api/v1/partners/patients/bulk`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.detail ?? json?.message ?? 'Upload failed. Please try again.');
+        return;
+      }
+      setResult(json.data);
+      if (json.data.success_count > 0) {
+        onComplete(json.data.success_count);
+      }
+    } catch {
+      setError('Network error. Please check your connection and try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const reset = () => {
+    setFile(null);
+    setResult(null);
+    setError('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-emerald-950/60 backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+        className="w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="px-6 pt-6 pb-5 bg-emerald-950 relative overflow-hidden shrink-0">
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(rgba(167,243,208,0.3) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+          <div className="relative flex items-center justify-between">
+            <div>
+              <p className="text-emerald-400/70 text-xs font-bold uppercase tracking-widest mb-0.5">Bulk Upload</p>
+              <h2 className="font-extrabold text-white text-xl">Import Employees via CSV</h2>
+            </div>
+            <button onClick={onClose} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+              <X size={18} className="text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+          {/* Template download */}
+          <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                <FileText size={16} className="text-blue-600" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-800">CSV Template</p>
+                <p className="text-xs text-slate-500">Download and fill in your employee data</p>
+              </div>
+            </div>
+            <button onClick={downloadCSVTemplate}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition-colors shrink-0">
+              <Download size={13} /> Download
+            </button>
+          </div>
+
+          {/* Required columns info */}
+          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">CSV Columns</p>
+            <div className="flex flex-wrap gap-2">
+              {['email *', 'first_name *', 'last_name *', 'date_of_birth', 'gender', 'blood_group', 'phone_number', 'address', 'emergency_contact'].map(col => (
+                <span key={col} className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${col.endsWith('*') ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                  {col}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400"><span className="text-emerald-600 font-bold">Green</span> = required · <code className="bg-slate-200 px-1 rounded text-slate-600">date_of_birth</code> format: YYYY-MM-DD · gender: MALE / FEMALE / OTHER</p>
+          </div>
+
+          {/* Drop zone */}
+          {!result && (
+            <div
+              onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                isDragging
+                  ? 'border-emerald-500 bg-emerald-50'
+                  : file
+                    ? 'border-emerald-400 bg-emerald-50/60'
+                    : 'border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40'
+              }`}>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              {file ? (
+                <div className="flex items-center justify-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                    <FileText size={18} className="text-emerald-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-slate-800 text-sm truncate max-w-[260px]">{file.name}</p>
+                    <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(1)} KB · Click to change</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <Upload size={20} className="text-slate-400" />
+                  </div>
+                  <p className="font-bold text-slate-700 text-sm mb-1">Drop your CSV here, or click to browse</p>
+                  <p className="text-xs text-slate-400">Accepts .csv files up to 5 MB</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm">
+              <AlertCircle size={15} className="shrink-0 mt-0.5" /> {error}
+            </div>
+          )}
+
+          {/* Results */}
+          {result && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-center">
+                  <p className="text-2xl font-black text-slate-800">{result.total_rows}</p>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mt-0.5">Total Rows</p>
+                </div>
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-center">
+                  <p className="text-2xl font-black text-emerald-700">{result.success_count}</p>
+                  <p className="text-[11px] font-bold text-emerald-500 uppercase tracking-wide mt-0.5">Imported</p>
+                </div>
+                <div className={`p-4 rounded-2xl text-center ${result.failure_count > 0 ? 'bg-red-50 border border-red-100' : 'bg-slate-50 border border-slate-100'}`}>
+                  <p className={`text-2xl font-black ${result.failure_count > 0 ? 'text-red-600' : 'text-slate-400'}`}>{result.failure_count}</p>
+                  <p className={`text-[11px] font-bold uppercase tracking-wide mt-0.5 ${result.failure_count > 0 ? 'text-red-400' : 'text-slate-400'}`}>Failed</p>
+                </div>
+              </div>
+
+              {/* Failed rows */}
+              {result.failed.length > 0 && (
+                <div className="border border-red-100 rounded-2xl overflow-hidden">
+                  <button
+                    onClick={() => setShowFailed(v => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-red-50 hover:bg-red-100 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <XCircle size={15} className="text-red-500" />
+                      <span className="text-sm font-bold text-red-700">{result.failed.length} Failed Row{result.failed.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {showFailed ? <ChevronUp size={15} className="text-red-400" /> : <ChevronDown size={15} className="text-red-400" />}
+                  </button>
+                  {showFailed && (
+                    <div className="divide-y divide-red-50 max-h-48 overflow-y-auto">
+                      {result.failed.map(row => (
+                        <div key={row.row} className="px-4 py-3 bg-white flex items-start gap-3">
+                          <span className="text-[10px] font-black text-red-400 bg-red-50 px-2 py-0.5 rounded-md shrink-0 mt-0.5">Row {row.row}</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-700 truncate">{row.email}</p>
+                            <p className="text-xs text-red-500 mt-0.5 leading-snug">{row.error}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Successful rows */}
+              {result.successful.length > 0 && (
+                <div className="border border-emerald-100 rounded-2xl overflow-hidden">
+                  <button
+                    onClick={() => setShowSuccessful(v => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 hover:bg-emerald-100 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={15} className="text-emerald-600" />
+                      <span className="text-sm font-bold text-emerald-700">{result.successful.length} Imported Successfully</span>
+                    </div>
+                    {showSuccessful ? <ChevronUp size={15} className="text-emerald-400" /> : <ChevronDown size={15} className="text-emerald-400" />}
+                  </button>
+                  {showSuccessful && (
+                    <div className="divide-y divide-emerald-50 max-h-48 overflow-y-auto">
+                      {result.successful.map(row => (
+                        <div key={row.row} className="px-4 py-3 bg-white flex items-center gap-3">
+                          <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-md shrink-0">Row {row.row}</span>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-700">{row.name}</p>
+                            <p className="text-[11px] text-slate-400">{row.email}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex gap-3">
+          {result ? (
+            <>
+              <button onClick={reset}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+                <Upload size={15} /> Upload Another
+              </button>
+              <button onClick={onClose}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm text-white bg-emerald-900 hover:bg-emerald-800 transition-colors">
+                Done
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onClose} className="flex-1 py-3 rounded-2xl font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleUpload} disabled={!file || isUploading}
+                className="flex-1 py-3 rounded-2xl font-bold text-sm text-white bg-emerald-900 hover:bg-emerald-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                {isUploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                {isUploading ? 'Uploading…' : 'Upload & Import'}
+              </button>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 /* ─── Add / Edit Modal ──────────────────────────────────────────────────────── */
@@ -103,6 +412,7 @@ function PatientModal({ mode, patient, onClose, onSaved }: {
     e.preventDefault();
     setIsSaving(true); setError('');
     try {
+      const headers = await getAuthHeaders();
       const body: Record<string, string> = {};
       (Object.keys(form) as (keyof FormData)[]).forEach(k => { if (form[k]) body[k] = form[k]; });
       const url = mode === 'add'
@@ -110,7 +420,7 @@ function PatientModal({ mode, patient, onClose, onSaved }: {
         : `${BACKEND_URL}/api/v1/partners/patients/${patient!.id}`;
       const res = await fetch(url, {
         method: mode === 'add' ? 'POST' : 'PATCH',
-        headers: authHeaders(), body: JSON.stringify(body),
+        headers, body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) { setError(json?.detail ?? json?.message ?? 'Something went wrong.'); return; }
@@ -202,8 +512,9 @@ function DeleteConfirm({ patient, onClose, onDeleted }: {
   const handleDelete = async () => {
     setIsDeleting(true); setError('');
     try {
+      const headers = await getAuthHeaders(false);
       const res = await fetch(`${BACKEND_URL}/api/v1/partners/patients/${patient.id}`, {
-        method: 'DELETE', headers: authHeaders(),
+        method: 'DELETE', headers,
       });
       if (res.status === 204 || res.ok) { onDeleted(); }
       else { const j = await res.json().catch(() => ({})); setError(j?.detail ?? 'Failed to delete.'); }
@@ -319,18 +630,22 @@ function PartnerContent() {
   const [selected, setSelected]         = useState<Patient | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isPanelOpen, setIsPanelOpen]   = useState(false);
+  const [isBulkOpen, setIsBulkOpen]     = useState(false);
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    toastTimerRef.current = setTimeout(() => setToast(null), 4000);
   };
 
   const fetchPatients = useCallback(async (pg = 1) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/v1/partners/patients/list?page=${pg}&limit=9`, { headers: authHeaders() });
+      const headers = await getAuthHeaders(false);
+      const res = await fetch(`${BACKEND_URL}/api/v1/partners/patients/list?page=${pg}&limit=9`, { headers });
       const json = await res.json();
       if (res.ok && json.success) {
         setPatients(json.data ?? []);
@@ -343,7 +658,8 @@ function PartnerContent() {
   /* Fetch a larger set for dashboard stats */
   const fetchAllPatients = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/v1/partners/patients/list?page=1&limit=100`, { headers: authHeaders() });
+      const headers = await getAuthHeaders(false);
+      const res = await fetch(`${BACKEND_URL}/api/v1/partners/patients/list?page=1&limit=100`, { headers });
       const json = await res.json();
       if (res.ok && json.success) setAllPatients(json.data ?? []);
     } catch { /* silent */ }
@@ -368,6 +684,11 @@ function PartnerContent() {
     setIsDeleteOpen(false); setIsPanelOpen(false); setSelected(null);
     fetchPatients(page); fetchAllPatients();
     showToast('Employee deleted.');
+  };
+
+  const onBulkComplete = (count: number) => {
+    fetchPatients(page); fetchAllPatients();
+    showToast(`${count} employee${count !== 1 ? 's' : ''} imported successfully.`);
   };
 
   /* ── Dashboard stats ── */
@@ -451,11 +772,15 @@ function PartnerContent() {
               <span className="text-emerald-200 text-[11px] font-bold uppercase tracking-wider">Quick Actions</span>
             </div>
             <h3 className="text-white font-extrabold text-xl mb-2 leading-tight">Manage Your Employees</h3>
-            <p className="text-emerald-300/60 text-sm mb-8 leading-relaxed">Add new corporate employees or browse the full employee list.</p>
+            <p className="text-emerald-300/60 text-sm mb-8 leading-relaxed">Add employees one by one or import your entire team at once via CSV.</p>
             <div className="space-y-3 mt-auto">
               <button onClick={() => { setSelected(null); setModal('add'); }}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm bg-white text-emerald-950 hover:bg-emerald-50 transition-colors flex items-center justify-center gap-2 shadow-md">
                 <UserPlus size={15} /> Add New Employee
+              </button>
+              <button onClick={() => setIsBulkOpen(true)}
+                className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-700/60 border border-emerald-600/40 text-white hover:bg-emerald-700/80 transition-colors flex items-center justify-center gap-2">
+                <Upload size={15} /> Bulk Upload via CSV
               </button>
               <button onClick={() => setActiveTab('patients')}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm bg-white/10 border border-white/10 text-white hover:bg-white/20 transition-colors flex items-center justify-center gap-2">
@@ -477,6 +802,10 @@ function PartnerContent() {
           <input type="text" placeholder="Search by name or phone…" value={search} onChange={e => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent shadow-sm" />
         </div>
+        <button onClick={() => setIsBulkOpen(true)}
+          className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl font-bold text-sm hover:bg-slate-50 hover:border-emerald-300 transition-colors shadow-sm shrink-0">
+          <Upload size={16} className="text-emerald-600" /> Bulk Upload
+        </button>
         <button onClick={() => { setSelected(null); setModal('add'); }}
           className="flex items-center gap-2 px-6 py-3 bg-emerald-900 text-white rounded-2xl font-bold text-sm hover:bg-emerald-800 transition-colors shadow-sm shrink-0">
           <Plus size={16} /> Add Employee
@@ -499,7 +828,13 @@ function PartnerContent() {
             <Users size={36} className="text-slate-300" />
           </div>
           <p className="font-extrabold text-slate-700 text-xl mb-2">{search ? 'No results found' : 'No employees yet'}</p>
-          <p className="text-slate-400 text-sm max-w-xs">{search ? 'Try a different name or phone.' : 'Click "Add Employee" to register your first corporate employee.'}</p>
+          <p className="text-slate-400 text-sm max-w-xs mb-6">{search ? 'Try a different name or phone.' : 'Add employees one by one or import your team via CSV.'}</p>
+          {!search && (
+            <button onClick={() => setIsBulkOpen(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-900 text-white rounded-2xl font-bold text-sm hover:bg-emerald-800 transition-colors shadow-sm">
+              <Upload size={16} /> Bulk Upload CSV
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -599,8 +934,8 @@ function PartnerContent() {
             const isActive = activeTab === item.id;
             return (
               <button key={item.id} onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium ${isActive ? 'bg-emerald-900/50 text-white border border-white/5 shadow-inner' : 'hover:bg-white/5 hover:text-white'}`}>
-                <item.icon size={18} className={isActive ? 'text-emerald-400' : ''} />
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-medium text-left ${isActive ? 'bg-emerald-900/50 text-white border border-white/5 shadow-inner' : 'hover:bg-white/5 hover:text-white'}`}>
+                <item.icon size={18} className={`shrink-0 ${isActive ? 'text-emerald-400' : ''}`} />
                 {item.label}
                 {item.id === 'patients' && meta && (
                   <span className="ml-auto text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">
@@ -640,10 +975,16 @@ function PartnerContent() {
           </div>
           <div className="flex items-center gap-3">
             {activeTab === 'patients' && (
-              <button onClick={() => { setSelected(null); setModal('add'); }}
-                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-900 text-white rounded-xl font-bold text-xs hover:bg-emerald-800 transition-colors shadow-sm">
-                <Plus size={14} /> Add Employee
-              </button>
+              <>
+                <button onClick={() => setIsBulkOpen(true)}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-50 hover:border-emerald-300 transition-colors shadow-sm">
+                  <Upload size={13} className="text-emerald-600" /> Bulk Upload
+                </button>
+                <button onClick={() => { setSelected(null); setModal('add'); }}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 bg-emerald-900 text-white rounded-xl font-bold text-xs hover:bg-emerald-800 transition-colors shadow-sm">
+                  <Plus size={14} /> Add Employee
+                </button>
+              </>
             )}
             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
               <Building2 size={16} className="text-emerald-700" />
@@ -660,6 +1001,11 @@ function PartnerContent() {
 
       {/* ── Modals ── */}
       <AnimatePresence>
+        {isBulkOpen && (
+          <BulkUploadModal key="bulk"
+            onClose={() => setIsBulkOpen(false)}
+            onComplete={onBulkComplete} />
+        )}
         {modal && (
           <PatientModal key="modal" mode={modal} patient={selected ?? undefined}
             onClose={() => { setModal(null); setSelected(null); }}
@@ -680,7 +1026,7 @@ function PartnerContent() {
       <AnimatePresence>
         {toast && (
           <motion.div key="toast" initial={{ opacity: 0, y: 24, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: 24, x: '-50%' }}
-            className="fixed bottom-8 left-1/2 z-100 flex items-center gap-2.5 px-5 py-3.5 rounded-2xl shadow-xl font-semibold text-sm"
+            className="fixed bottom-8 left-1/2 z-[200] flex items-center gap-2.5 px-5 py-3.5 rounded-2xl shadow-xl font-semibold text-sm"
             style={{ background: toast.type === 'success' ? '#022c22' : '#7f1d1d', color: toast.type === 'success' ? '#6ee7b7' : '#fca5a5' }}>
             {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
             {toast.msg}

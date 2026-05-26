@@ -1,4 +1,4 @@
-// frontend/app/complaints/page.tsx
+﻿// frontend/app/complaints/page.tsx
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -80,7 +80,7 @@ export default function ComplaintsPage() {
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const reportContainerRef = useRef<HTMLDivElement>(null);
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
   const filteredSymptoms = quickSymptoms.filter(s => {
     const matchesCat = activeCategory === 'All' || s.category === activeCategory;
@@ -100,7 +100,7 @@ export default function ComplaintsPage() {
     setIsLoadingReports(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || localStorage.getItem('supabase_access_token');
+      const token = session?.access_token;
       if (!token) return;
 
       const res = await fetch(`${BACKEND_URL}/api/v1/symptom-checker`, {
@@ -128,7 +128,7 @@ export default function ComplaintsPage() {
     setIsFetchingReportId(id);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || localStorage.getItem('supabase_access_token');
+      const token = session?.access_token;
       
       const res = await fetch(`${BACKEND_URL}/api/v1/symptom-checker/${id}`, {
         headers: {
@@ -181,13 +181,13 @@ export default function ComplaintsPage() {
   // --- API INTERACTION (CHAT) ---
   const sendSymptomToAPI = async (message: string, currentHistory: HistoryItem[]) => {
     const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || localStorage.getItem('supabase_access_token');
-    
+    const token = session?.access_token;
+
     const res = await fetch(`${BACKEND_URL}/api/v1/symptom-checker`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${token ?? ''}`,
         'ngrok-skip-browser-warning': 'true'
       },
       body: JSON.stringify({
@@ -285,45 +285,56 @@ export default function ComplaintsPage() {
   // --- RENDERERS ---
 
   const renderIdleState = () => (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-7xl mx-auto px-6 py-12"
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: -20 }}
+      className="w-full"
     >
-      <div className="text-center mb-12">
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 font-bold uppercase tracking-widest text-[10px] rounded-full mb-6 border border-emerald-200">
-          <Activity size={14} /> AI-Powered Analysis
+      {/* Dark Emerald Hero */}
+      <div className="bg-emerald-950 pt-28 pb-28 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(52,211,153,0.07) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none" />
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-900/80 text-emerald-400 font-bold uppercase tracking-widest text-[10px] rounded-full mb-8 border border-emerald-800">
+              <Activity size={12} /> AI-Powered Symptom Analysis
+            </div>
+            <h1 className="text-5xl md:text-6xl font-black text-white mb-5 tracking-tight leading-tight">
+              What are you <br /><span className="text-emerald-400">experiencing?</span>
+            </h1>
+            <p className="text-emerald-100/60 max-w-2xl mx-auto text-lg font-medium leading-relaxed mb-10">
+              Describe your symptoms. Our medical AI will ask targeted follow-up questions and generate a clinical assessment report.
+            </p>
+          </motion.div>
+
+          {/* Search Input (in hero) */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="relative">
+            <div className="flex items-center bg-white/10 backdrop-blur-md border border-white/20 p-2.5 rounded-2xl shadow-2xl focus-within:border-emerald-400/60 transition-colors">
+              <Search className="ml-4 text-emerald-300/60 shrink-0" size={22} />
+              <input
+                type="text"
+                placeholder="e.g., sharp pain in lower back since yesterday..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleStartAnalysis(searchQuery); }}
+                className="w-full px-5 py-4 bg-transparent border-none focus:outline-none text-lg text-white placeholder:text-emerald-300/40 font-medium"
+              />
+              <motion.button
+                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => handleStartAnalysis(searchQuery)}
+                disabled={!searchQuery.trim()}
+                className="px-7 py-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-400 transition-colors whitespace-nowrap disabled:opacity-40 shadow-lg flex items-center gap-2"
+              >
+                Analyse <ArrowRight size={18} />
+              </motion.button>
+            </div>
+          </motion.div>
         </div>
-        <h1 className="text-4xl md:text-5xl font-black text-emerald-950 mb-4 tracking-tight">Symptom Checker</h1>
-        <p className="text-emerald-900/60 max-w-2xl mx-auto text-lg font-medium leading-relaxed">
-          Describe what you&apos;re experiencing. Our medical AI will ask targeted follow-up questions to understand your condition and provide a clinical assessment.
-        </p>
       </div>
 
-      {/* Search Input */}
-      <div className="max-w-3xl mx-auto mb-12 relative">
-        <div className="absolute inset-0 bg-emerald-300/20 blur-2xl rounded-full" />
-        <div className="relative flex items-center bg-white border border-emerald-100 p-2.5 rounded-full shadow-xl shadow-emerald-900/5">
-          <Search className="ml-5 text-emerald-600/40 shrink-0" size={24} />
-          <input 
-            type="text" 
-            placeholder="Describe your symptom... (e.g., sharp pain in lower back since yesterday)" 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => { if(e.key === 'Enter') handleStartAnalysis(searchQuery); }}
-            className="w-full px-5 py-4 bg-transparent border-none focus:outline-none text-lg text-emerald-950 placeholder:text-emerald-900/40 font-medium"
-          />
-          <button 
-            onClick={() => handleStartAnalysis(searchQuery)}
-            disabled={!searchQuery.trim()}
-            className="px-8 py-4 bg-emerald-600 text-white font-bold rounded-full hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-md flex items-center gap-2"
-          >
-            Start Analysis <ArrowRight size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* Categories */}
-      <div className="flex flex-wrap justify-center gap-3 mb-12">
+      {/* Content Area */}
+      <div className="max-w-7xl mx-auto px-6 py-14 space-y-14">
+        {/* Categories */}
+        <div className="flex flex-wrap justify-center gap-3">
         {categories.map(cat => (
           <button
             key={cat}
@@ -342,10 +353,15 @@ export default function ComplaintsPage() {
       {/* Symptom Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-20">
         {filteredSymptoms.map((symptom, i) => (
-          <div 
+          <motion.div
             key={i}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06, duration: 0.4 }}
+            whileHover={{ y: -6, scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => handleStartAnalysis(`${symptom.title}. ${symptom.desc}`)}
-            className="p-8 bg-white border border-emerald-100/50 rounded-[2rem] shadow-sm hover:shadow-xl hover:shadow-emerald-900/10 hover:border-emerald-200 transition-all group cursor-pointer flex flex-col relative overflow-hidden"
+            className="p-8 bg-white border border-emerald-100/50 rounded-[2rem] shadow-sm hover:shadow-xl hover:shadow-emerald-900/10 hover:border-emerald-200 transition-shadow group cursor-pointer flex flex-col relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 blur-[40px] rounded-full group-hover:bg-emerald-100 transition-colors" />
             <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 bg-emerald-50 w-fit px-3 py-1 rounded-md border border-emerald-100">
@@ -353,12 +369,12 @@ export default function ComplaintsPage() {
             </span>
             <h3 className="text-xl font-bold text-emerald-950 mb-3 relative z-10 group-hover:text-emerald-700 transition-colors">{symptom.title}</h3>
             <p className="text-sm text-emerald-900/60 mb-8 flex-1 relative z-10 leading-relaxed">{symptom.desc}</p>
-            
+
             <div className="flex items-center text-emerald-600 font-bold text-sm mt-auto relative z-10">
               <span>Start Analysis</span>
               <ArrowRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
@@ -415,6 +431,7 @@ export default function ComplaintsPage() {
           </div>
         )}
       </div>
+      </div>{/* end Content Area */}
     </motion.div>
   );
 
@@ -552,7 +569,7 @@ export default function ComplaintsPage() {
             animate={{ opacity: 1, y: 0 }} 
             className="bg-white border border-emerald-200 rounded-[2.5rem] shadow-xl overflow-hidden shrink-0 mb-10"
           >
-            <div className="bg-gradient-to-r from-emerald-950 to-teal-900 p-6 sm:px-10 text-white flex items-center gap-4">
+            <div className="bg-linear-to-r from-emerald-950 to-teal-900 p-6 sm:px-10 text-white flex items-center gap-4">
               <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl">
                 <CheckCircle2 size={32} className="text-emerald-100" />
               </div>
@@ -650,7 +667,7 @@ export default function ComplaintsPage() {
 
       {report && (
         <div className="bg-white border border-emerald-200 rounded-[2.5rem] shadow-xl overflow-hidden flex-1">
-          <div className="bg-gradient-to-r from-emerald-950 to-teal-900 p-6 sm:px-10 text-white flex items-center gap-4">
+          <div className="bg-linear-to-r from-emerald-950 to-teal-900 p-6 sm:px-10 text-white flex items-center gap-4">
             <div className="p-3 bg-white/20 backdrop-blur-md rounded-2xl">
               <History size={32} className="text-emerald-100" />
             </div>
