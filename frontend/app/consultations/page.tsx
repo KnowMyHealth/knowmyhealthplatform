@@ -285,6 +285,7 @@ export default function ConsultationsPage() {
   const [myConsultations, setMyConsultations] = useState<any[]>([]);
   const [selectedConsultationType, setSelectedConsultationType] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
   const [isBooking, setIsBooking] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [agoraInfo, setAgoraInfo] = useState<any>(null); 
@@ -297,6 +298,14 @@ export default function ConsultationsPage() {
     // Update the 'now' state every 30 seconds to refresh join buttons dynamically
     const interval = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) return;
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    document.head.appendChild(script);
   }, []);
 
   const getJoinStatus = (scheduledAt: string) => {
@@ -479,13 +488,15 @@ export default function ConsultationsPage() {
   const handleConfirmBooking = async () => {
     if (!selectedDoctor || !selectedDate || !selectedTime) return;
     setIsBooking(true);
+    setPaymentError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setIsBooking(false); return; }
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
-      const res = await fetch(`${BACKEND_URL}/api/v1/consultations/book`, {
+      // Step 1: Create the consultation booking to get a booking_id
+      const bookRes = await fetch(`${BACKEND_URL}/api/v1/consultations/book`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -494,29 +505,96 @@ export default function ConsultationsPage() {
         },
         body: JSON.stringify({
           doctor_id: selectedDoctor.id,
-          // selectedTime is already the full ISO string returned from the backend ('2026-04-21T09:00:00+05:30')
           scheduled_at: selectedTime,
           consultation_type: selectedConsultationType
         })
       });
 
-      const json = await res.json();
-      if (json.success) {
-        setMyConsultations(prev => [json.data, ...prev]);
-        setBookingStep(3);
-        if (bookingCloseTimerRef.current) clearTimeout(bookingCloseTimerRef.current);
-        bookingCloseTimerRef.current = setTimeout(() => setIsBookingModalOpen(false), 3000);
-      } else {
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-        setToastError(json.message || "Failed to book consultation. Please try again.");
-        toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
+      const bookJson = await bookRes.json();
+      if (!bookJson.success) {
+        setPaymentError(bookJson.message || 'Failed to initiate booking. Please try again.');
+        setIsBooking(false);
+        return;
       }
+
+      const consultation = bookJson.data;
+
+      // Step 2: Create a Razorpay order
+      const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({
+          amount: selectedDoctor.consultation_fee,
+          booking_type: 'CONSULTATION',
+          booking_id: consultation.id
+        })
+      });
+
+      const orderJson = await orderRes.json();
+      if (!orderRes.ok || !orderJson.razorpay_order_id) {
+        setPaymentError(orderJson.message || 'Payment initiation failed. Please try again.');
+        setIsBooking(false);
+        return;
+      }
+
+      // Step 3: Open Razorpay checkout
+      const rzp = new (window as any).Razorpay({
+        key: 'rzp_test_o9nYggdmmCOUap',
+        amount: orderJson.amount,
+        currency: orderJson.currency || 'INR',
+        order_id: orderJson.razorpay_order_id,
+        name: 'Know My Health',
+        description: `Consultation with ${selectedDoctor.name}`,
+        theme: { color: '#059669' },
+        handler: async (response: any) => {
+          // Step 4: Verify payment
+          try {
+            const { data: { session: verifySession } } = await supabase.auth.getSession();
+            const verifyRes = await fetch(`${BACKEND_URL}/api/v1/payments/verify`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${verifySession?.access_token ?? ''}`,
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            const verifyJson = await verifyRes.json();
+            if (verifyJson.success) {
+              setMyConsultations(prev => [consultation, ...prev]);
+              setBookingStep(3);
+              if (bookingCloseTimerRef.current) clearTimeout(bookingCloseTimerRef.current);
+              bookingCloseTimerRef.current = setTimeout(() => setIsBookingModalOpen(false), 3000);
+            } else {
+              setPaymentError(verifyJson.message || 'Payment verification failed. Contact support.');
+            }
+          } catch {
+            setPaymentError('Payment verification failed due to a network error.');
+          } finally {
+            setIsBooking(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentError('Payment was cancelled. Your booking slot is held — please complete payment.');
+            setIsBooking(false);
+          }
+        }
+      });
+      rzp.open();
     } catch (e) {
       console.error(e);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       setToastError("Network error. Please check your connection and try again.");
       toastTimerRef.current = setTimeout(() => setToastError(null), 5000);
-    } finally {
       setIsBooking(false);
     }
   };
@@ -1056,28 +1134,36 @@ export default function ConsultationsPage() {
                     <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                       <CheckCircle2 size={40} className="text-emerald-600" />
                     </div>
-                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Confirm Booking</h3>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Confirm & Pay</h3>
                     <p className="text-slate-500 mb-2 text-sm">
                       {selectedConsultationType === 'OFFLINE' ? 'In-Clinic Visit' : 'Video Consultation'} with
                     </p>
                     <p className="text-xl font-extrabold text-slate-900 mb-1">{selectedDoctor.name}</p>
-                    <p className="text-emerald-600 font-bold mb-6">
+                    <p className="text-emerald-600 font-bold mb-2">
                       {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                       {' at '}
                       {selectedTime && new Date(selectedTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                     </p>
-                    <div className="flex items-center justify-center gap-2 text-sm text-slate-400 mb-8">
+                    <p className="text-2xl font-black text-slate-900 mb-6">₹{selectedDoctor.consultation_fee}</p>
+                    <div className="flex items-center justify-center gap-2 text-sm text-slate-400 mb-4">
                       {selectedConsultationType === 'OFFLINE'
                         ? <><MapPin size={14} className="text-amber-500" /> {selectedDoctor.clinic_address || 'Clinic location TBD'}</>
                         : <><Video size={14} className="text-blue-500" /> Link will be shared before the call</>
                       }
                     </div>
+                    {paymentError && (
+                      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                        className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium mb-4 text-left">
+                        <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
+                        {paymentError}
+                      </motion.div>
+                    )}
                     <button onClick={handleConfirmBooking} disabled={isBooking}
                       className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mb-3">
-                      {isBooking && <Loader2 size={20} className="animate-spin" />}
-                      Confirm Appointment
+                      {isBooking ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
+                      {isBooking ? 'Processing...' : 'Pay & Confirm Appointment'}
                     </button>
-                    <button onClick={() => setBookingStep(1)} disabled={isBooking} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm disabled:opacity-30">
+                    <button onClick={() => { setBookingStep(1); setPaymentError(null); }} disabled={isBooking} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm disabled:opacity-30">
                       ← Change date or time
                     </button>
                   </motion.div>
@@ -1086,8 +1172,8 @@ export default function ConsultationsPage() {
                     <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                       <CheckCircle2 size={40} className="text-emerald-600" />
                     </div>
-                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Booking Confirmed!</h3>
-                    <p className="text-slate-500 text-sm">Your appointment has been booked successfully. You'll receive a confirmation shortly.</p>
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2">Payment & Booking Confirmed!</h3>
+                    <p className="text-slate-500 text-sm">Your payment was successful and appointment is confirmed. You'll receive a confirmation shortly.</p>
                   </motion.div>
                 )}
               </motion.div>
