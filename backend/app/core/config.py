@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: SecretStr
 
     GOOGLE_API_KEY: SecretStr
-    GROQ_API_KEY: SecretStr
 
     PEXELS_API_KEY: SecretStr
 

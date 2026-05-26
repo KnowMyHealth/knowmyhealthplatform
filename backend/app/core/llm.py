@@ -9,16 +9,7 @@ provider = GoogleProvider(
     api_key=settings.GOOGLE_API_KEY.get_secret_value(),
 )
 
-groq_provider = GroqProvider(
-    api_key=settings.GROQ_API_KEY.get_secret_value()
-)
-
 model = GoogleModel(
     model_name="gemini-2.5-flash",
     provider=provider,
-)
-
-groq_model = GroqModel(
-    model_name="llama-3.3-70b-versatile",
-    provider=groq_provider
 )
