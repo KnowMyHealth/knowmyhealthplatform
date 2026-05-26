@@ -157,7 +157,7 @@ function PackageCard({ pkg, onEnquire, index }: {
         viewport={{ once: true, margin: '-30px' }}
         transition={{ delay: index * 0.06, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         whileHover={{ y: -8, transition: { duration: 0.22 } }}
-        className="relative flex flex-col rounded-3xl overflow-hidden border border-emerald-700/60 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 shadow-[0_32px_64px_-20px_rgba(2,44,34,0.6)] group"
+        className="relative flex flex-col h-full rounded-3xl overflow-hidden border border-emerald-700/60 bg-gradient-to-br from-emerald-900 via-emerald-800 to-teal-900 shadow-[0_32px_64px_-20px_rgba(2,44,34,0.6)] group"
       >
         {/* Glows */}
         <div className="absolute top-0 right-0 w-72 h-72 bg-teal-400/10 blur-[90px] rounded-full pointer-events-none" />
@@ -241,7 +241,7 @@ function PackageCard({ pkg, onEnquire, index }: {
       viewport={{ once: true, margin: '-30px' }}
       transition={{ delay: index * 0.06, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ y: -6, transition: { duration: 0.2 } }}
-      className="relative flex flex-col rounded-3xl overflow-hidden border border-slate-200/80 bg-white shadow-[0_4px_20px_-6px_rgba(0,0,0,0.07)] hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.13)] transition-shadow duration-300 group"
+      className="relative flex flex-col h-full rounded-3xl overflow-hidden border border-slate-200/80 bg-white shadow-[0_4px_20px_-6px_rgba(0,0,0,0.07)] hover:shadow-[0_24px_48px_-12px_rgba(0,0,0,0.13)] transition-shadow duration-300 group"
     >
       {/* Badge ribbon */}
       {badge && (
@@ -679,6 +679,7 @@ export default function CheckupsPage() {
                       initial={{ opacity: 0, scale: 0.96 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.96 }}
+                      className="h-full"
                     >
                       <PackageCard pkg={pkg} onEnquire={setEnquiringPkg} index={i} />
                     </motion.div>
