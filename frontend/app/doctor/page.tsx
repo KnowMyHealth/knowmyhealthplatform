@@ -361,7 +361,7 @@ export default function DoctorDashboard() {
   const prescriptionInputRef = useRef<HTMLInputElement>(null);
 
   // Revenue analytics states
-  const [revenueData, setRevenueData] = useState<{ total_earnings: number; monthly_earnings: { month: string; amount: number }[]; recent_transactions: { transaction_id: string; patient_name: string; date_label: string; amount: number; status: string }[] } | null>(null);
+  const [revenueData, setRevenueData] = useState<{ total_earnings: number; monthly_earnings: { month: string; amount: number }[]; recent_transactions: { transaction_id: string; patient_name: string; date_label: string; created_at?: string; amount: number; status: string }[] } | null>(null);
   const [isLoadingRevenue, setIsLoadingRevenue] = useState(false);
 
   // Real-time tracker for join buttons
@@ -781,6 +781,38 @@ export default function DoctorDashboard() {
     } finally {
       setIsJoiningId(null);
     }
+  };
+
+  const formatTrxDateIST = (trx: { date_label: string; created_at?: string }) => {
+    if (trx.created_at) {
+      const d = new Date(trx.created_at);
+      const today = new Date();
+      const todayIST = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const dIST = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const isToday = dIST.toDateString() === todayIST.toDateString();
+      const timeStr = dIST.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+      if (isToday) return `Today, ${timeStr}`;
+      const yesterday = new Date(todayIST);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (dIST.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
+      return dIST.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + `, ${timeStr}`;
+    }
+    // Fallback: parse UTC time from date_label and shift +5:30
+    const match = trx.date_label.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return trx.date_label;
+    let hours = parseInt(match[1]);
+    const mins = parseInt(match[2]);
+    const ampm = match[3].toUpperCase();
+    if (ampm === 'PM' && hours !== 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    let totalMins = hours * 60 + mins + 330; // +5:30 IST
+    if (totalMins >= 1440) totalMins -= 1440;
+    const istH = Math.floor(totalMins / 60) % 24;
+    const istM = totalMins % 60;
+    const istAmpm = istH >= 12 ? 'PM' : 'AM';
+    const istH12 = istH % 12 === 0 ? 12 : istH % 12;
+    const istStr = `${istH12.toString().padStart(2, '0')}:${istM.toString().padStart(2, '0')} ${istAmpm}`;
+    return trx.date_label.replace(/\d{1,2}:\d{2}\s*(AM|PM)/i, istStr);
   };
 
   const getInitials = (name: string | null) => {
@@ -1388,7 +1420,7 @@ export default function DoctorDashboard() {
                   <div key={i} className="flex items-center justify-between p-3 border-b border-slate-100 last:border-0">
                     <div>
                       <p className="font-bold text-slate-900 text-sm">{trx.patient_name}</p>
-                      <p className="text-xs text-slate-500 font-medium">{trx.transaction_id} • {trx.date_label}</p>
+                      <p className="text-xs text-slate-500 font-medium">{trx.transaction_id} • {formatTrxDateIST(trx)}</p>
                     </div>
                     <div className="text-right">
                       <span className="font-black text-emerald-600">₹{trx.amount.toLocaleString('en-IN')}</span>
