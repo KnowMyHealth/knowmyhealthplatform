@@ -436,68 +436,68 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
                 {/* ======================= STANDARD AUTH VIEW ======================= */}
                 {view === 'auth' && (
-                  <motion.div 
-                    key="auth-view" 
-                    custom={direction} 
-                    variants={slideVariants} 
-                    initial="enter" 
-                    animate="center" 
-                    exit="exit" 
-                    className="p-8"
+                  <motion.div
+                    key="auth-view"
+                    custom={direction}
+                    variants={slideVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    className="px-7 py-6"
                   >
-                    <div className="text-center mb-8 mt-2">
-                      <div className="w-16 h-16 bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-600 rounded-[1.25rem] flex items-center justify-center mx-auto mb-6 shadow-sm border border-emerald-100/50">
-                        {isSignIn ? <Lock size={28} /> : <User size={28} />}
+                    <div className="text-center mb-5">
+                      <div className="w-12 h-12 bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm border border-emerald-100/50">
+                        {isSignIn ? <Lock size={22} /> : <User size={22} />}
                       </div>
-                      <h2 className="text-3xl font-extrabold text-emerald-950 mb-3 tracking-tight">
+                      <h2 className="text-2xl font-extrabold text-emerald-950 mb-1 tracking-tight">
                         {isSignIn ? 'Welcome Back' : 'Create Account'}
                       </h2>
-                      <p className="text-emerald-900/60 font-medium">
-                        {isSignIn ? 'Sign in to access your healthcare dashboard' : 'Join Know My Health to manage your healthcare'}
+                      <p className="text-emerald-900/60 font-medium text-sm">
+                        {isSignIn ? 'Sign in to your healthcare dashboard' : 'Manage your healthcare with us'}
                       </p>
                     </div>
 
-                    <div className="space-y-5">
+                    <div className="space-y-3">
                       <AnimatePresence>
                         {!isSignIn && (
                           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                            <label className="block text-xs font-bold text-emerald-950 mb-2 uppercase tracking-wide">Full Name *</label>
+                            <label className="block text-[11px] font-bold text-emerald-950 mb-1.5 uppercase tracking-wide">Full Name *</label>
                             <div className="relative group">
-                              <User className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-red-400' : 'text-gray-400 group-focus-within:text-emerald-500'}`} size={20} />
+                              <User className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${errors.name ? 'text-red-400' : 'text-gray-400 group-focus-within:text-emerald-500'}`} size={18} />
                               <input
                                 type="text" placeholder="John Doe" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                className={`w-full pl-12 pr-4 py-4 bg-gray-50/50 hover:bg-gray-50 border rounded-2xl outline-none transition-all font-medium text-gray-900 placeholder:text-gray-400 ${errors.name ? 'border-red-300 focus:ring-4 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500'}`}
+                                className={`w-full pl-10 pr-3 py-3 bg-gray-50/50 hover:bg-gray-50 border rounded-xl outline-none transition-all font-medium text-gray-900 placeholder:text-gray-400 text-sm ${errors.name ? 'border-red-300 focus:ring-4 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500'}`}
                               />
                             </div>
-                            {errors.name && <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.name}</p>}
+                            {errors.name && <p className="text-xs text-red-500 mt-1 font-medium">{errors.name}</p>}
                           </motion.div>
                         )}
                       </AnimatePresence>
 
                       <div>
-                        <label className="block text-xs font-bold text-emerald-950 mb-2 uppercase tracking-wide">Email Address *</label>
+                        <label className="block text-[11px] font-bold text-emerald-950 mb-1.5 uppercase tracking-wide">Email Address *</label>
                         <div className="relative group">
-                          <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${errors.email ? 'text-red-400' : 'text-gray-400 group-focus-within:text-emerald-500'}`} size={20} />
+                          <Mail className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${errors.email ? 'text-red-400' : 'text-gray-400 group-focus-within:text-emerald-500'}`} size={18} />
                           <input
                             type="email" placeholder="name@example.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            className={`w-full pl-12 pr-4 py-4 bg-gray-50/50 hover:bg-gray-50 border rounded-2xl outline-none transition-all font-medium text-gray-900 placeholder:text-gray-400 ${errors.email ? 'border-red-300 focus:ring-4 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500'}`}
+                            className={`w-full pl-10 pr-3 py-3 bg-gray-50/50 hover:bg-gray-50 border rounded-xl outline-none transition-all font-medium text-gray-900 placeholder:text-gray-400 text-sm ${errors.email ? 'border-red-300 focus:ring-4 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500'}`}
                           />
                         </div>
-                        {errors.email && <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.email}</p>}
+                        {errors.email && <p className="text-xs text-red-500 mt-1 font-medium">{errors.email}</p>}
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-emerald-950 mb-2 uppercase tracking-wide">Password *</label>
+                        <label className="block text-[11px] font-bold text-emerald-950 mb-1.5 uppercase tracking-wide">Password *</label>
                         <div className="relative group">
-                          <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${errors.password ? 'text-red-400' : 'text-gray-400 group-focus-within:text-emerald-500'}`} size={20} />
+                          <Lock className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${errors.password ? 'text-red-400' : 'text-gray-400 group-focus-within:text-emerald-500'}`} size={18} />
                           <input
                             type="password" placeholder="••••••••" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            className={`w-full pl-12 pr-4 py-4 bg-gray-50/50 hover:bg-gray-50 border rounded-2xl outline-none transition-all font-medium text-gray-900 placeholder:text-gray-400 ${errors.password ? 'border-red-300 focus:ring-4 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500'}`}
+                            className={`w-full pl-10 pr-3 py-3 bg-gray-50/50 hover:bg-gray-50 border rounded-xl outline-none transition-all font-medium text-gray-900 placeholder:text-gray-400 text-sm ${errors.password ? 'border-red-300 focus:ring-4 focus:ring-red-500/10 focus:border-red-500' : 'border-gray-200 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500'}`}
                           />
                         </div>
-                        {errors.password ? <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.password}</p> : <p className="text-xs text-gray-400 mt-1.5 font-medium">Must be at least 8 characters long</p>}
+                        {errors.password ? <p className="text-xs text-red-500 mt-1 font-medium">{errors.password}</p> : !isSignIn && <p className="text-[11px] text-gray-400 mt-1 font-medium">At least 8 characters</p>}
                         {isSignIn && (
-                          <div className="text-right mt-2">
+                          <div className="text-right mt-1.5">
                             <button
                               type="button"
                               onClick={() => { setDirection(1); setView('forgot-password'); setAuthError(null); }}
@@ -513,15 +513,15 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     <button
                       onClick={handleStandardSubmit}
                       disabled={isLoading}
-                      className="w-full mt-8 py-4 bg-emerald-950 text-white rounded-2xl font-bold text-lg shadow-[0_8px_20px_-6px_rgba(2,44,34,0.4)] hover:bg-emerald-900 hover:shadow-[0_12px_25px_-6px_rgba(2,44,34,0.5)] transition-all active:scale-[0.98] flex justify-center items-center disabled:opacity-70 hover:-translate-y-0.5"
+                      className="w-full mt-5 py-3 bg-emerald-950 text-white rounded-xl font-bold shadow-[0_8px_20px_-6px_rgba(2,44,34,0.4)] hover:bg-emerald-900 transition-all active:scale-[0.98] flex justify-center items-center disabled:opacity-70"
                     >
-                      {isLoading ? <Loader2 size={24} className="animate-spin" /> : isSignIn ? 'Sign In' : 'Create Account'}
+                      {isLoading ? <Loader2 size={20} className="animate-spin" /> : isSignIn ? 'Sign In' : 'Create Account'}
                     </button>
 
                     {/* Divider */}
-                    <div className="flex items-center gap-4 mt-6">
+                    <div className="flex items-center gap-3 my-3">
                       <div className="flex-1 h-px bg-gray-100" />
-                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">or</span>
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">or</span>
                       <div className="flex-1 h-px bg-gray-100" />
                     </div>
 
@@ -529,11 +529,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                     <button
                       onClick={handleGoogleAuth}
                       disabled={isLoading}
-                      className="w-full py-3.5 bg-white border border-gray-200 rounded-2xl font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98] flex justify-center items-center gap-3 shadow-sm disabled:opacity-60 mt-1"
+                      className="w-full py-3 bg-white border border-gray-200 rounded-xl font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98] flex justify-center items-center gap-2.5 shadow-sm disabled:opacity-60 text-sm"
                     >
-                      {isLoading ? <Loader2 size={20} className="animate-spin text-gray-400" /> : (
+                      {isLoading ? <Loader2 size={18} className="animate-spin text-gray-400" /> : (
                         <>
-                          <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M47.532 24.552c0-1.636-.132-3.208-.382-4.728H24.48v9.02h12.958c-.558 2.942-2.252 5.44-4.8 7.118v5.918h7.776c4.546-4.186 7.118-10.348 7.118-17.328z" fill="#4285F4"/>
                             <path d="M24.48 48c6.49 0 11.936-2.152 15.914-5.832l-7.776-5.918c-2.152 1.44-4.904 2.29-8.138 2.29-6.258 0-11.558-4.228-13.452-9.908H3.02v6.108C6.98 42.938 15.164 48 24.48 48z" fill="#34A853"/>
                             <path d="M11.028 28.632A14.47 14.47 0 0 1 10.21 24c0-1.608.276-3.168.818-4.632V13.26H3.02A23.952 23.952 0 0 0 .48 24c0 3.876.928 7.546 2.54 10.74l8.008-6.108z" fill="#FBBC05"/>
@@ -544,10 +544,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       )}
                     </button>
 
-                    <div className="mt-6 pt-6 border-t border-gray-100 text-center flex flex-col space-y-6">
-                      <p className="text-gray-500 font-medium">
+                    <div className="mt-4 pt-4 border-t border-gray-100 text-center space-y-3">
+                      <p className="text-gray-500 font-medium text-sm">
                         {isSignIn ? "Don't have an account? " : "Already have an account? "}
-                        <button 
+                        <button
                           onClick={() => { setIsSignIn(!isSignIn); setErrors({ name: '', email: '', password: '' }); setAuthError(null); setAuthSuccess(null); }}
                           disabled={isLoading}
                           className="text-emerald-600 font-bold hover:text-emerald-700 transition-colors underline underline-offset-4 decoration-2 decoration-emerald-600/30 hover:decoration-emerald-600"
@@ -557,22 +557,18 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       </p>
 
                       {!isSignIn && (
-                        <motion.div 
-                          whileHover={{ scale: 1.02 }}
-                          className="p-5 bg-gradient-to-br from-emerald-50/80 to-teal-50/40 border border-emerald-100/80 rounded-2xl relative overflow-hidden group cursor-pointer transition-all hover:shadow-lg hover:shadow-emerald-500/10" 
+                        <button
                           onClick={() => setView('doctor-apply')}
+                          className="w-full px-4 py-2.5 bg-gradient-to-br from-emerald-50 to-teal-50/40 border border-emerald-100 rounded-xl group hover:border-emerald-300 hover:shadow-md transition-all flex items-center justify-between gap-2"
                         >
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-300/30 blur-[30px] rounded-full group-hover:scale-150 transition-transform duration-700" />
-                          <div className="relative z-10 flex flex-col items-center justify-center text-center">
-                            <span className="flex items-center text-emerald-950 font-bold mb-1.5 text-base">
-                              <Sparkles size={18} className="mr-2 text-emerald-500" />
-                              Medical Professional?
-                            </span>
-                            <span className="text-emerald-600 font-bold text-sm group-hover:text-emerald-700 flex items-center">
-                              Apply to join our network <ChevronRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
-                            </span>
-                          </div>
-                        </motion.div>
+                          <span className="flex items-center text-emerald-950 font-bold text-sm">
+                            <Sparkles size={15} className="mr-1.5 text-emerald-500" />
+                            Medical Professional?
+                          </span>
+                          <span className="text-emerald-600 font-bold text-xs flex items-center group-hover:text-emerald-700">
+                            Apply <ChevronRight size={14} className="ml-0.5 group-hover:translate-x-0.5 transition-transform" />
+                          </span>
+                        </button>
                       )}
                     </div>
                   </motion.div>
