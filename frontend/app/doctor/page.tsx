@@ -66,12 +66,6 @@ interface PatientDetail {
   history: PatientConsultationHistory[];
 }
 
-const stats = [
-  { title: 'Total Patients', value: '1,248', trend: '+12%', isUp: true },
-  { title: "Today's Consults", value: '14', trend: '+2', isUp: true },
-  { title: 'Monthly Earnings', value: '₹1,45,000', trend: '+8.5%', isUp: true },
-  { title: 'Total Consultations', value: '3,842', trend: '+5%', isUp: true },
-];
 
 const recentPatients = [
   { id: 1, name: 'Alice Cooper', lastVisit: 'Oct 12, 2023', condition: 'Hypertension', status: 'Stable' },
@@ -363,6 +357,12 @@ export default function DoctorDashboard() {
   // Revenue analytics states
   const [revenueData, setRevenueData] = useState<{ total_earnings: number; monthly_earnings: { month: string; amount: number }[]; recent_transactions: { transaction_id: string; patient_name: string; date_label: string; created_at?: string; amount: number; status: string }[] } | null>(null);
   const [isLoadingRevenue, setIsLoadingRevenue] = useState(false);
+  const [kpiMetrics, setKpiMetrics] = useState<{
+    total_patients: { value: number; percentage_change: number; is_positive: boolean };
+    todays_consults: { value: number; percentage_change: number; is_positive: boolean };
+    monthly_earnings: { value: number; percentage_change: number; is_positive: boolean };
+    total_consultations: { value: number; percentage_change: number; is_positive: boolean };
+  } | null>(null);
 
   // Real-time tracker for join buttons
   const [now, setNow] = useState(new Date());
@@ -405,6 +405,7 @@ export default function DoctorDashboard() {
     fetchAppointments();
     fetchAvailability();
     fetchPatients();
+    fetchKpiMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -414,6 +415,22 @@ export default function DoctorDashboard() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  const fetchKpiMetrics = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me/dashboard-metrics`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setKpiMetrics(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch KPI metrics', e);
+    }
+  };
 
   const fetchDoctorProfile = async () => {
     let fetchedFirstName = '';
@@ -878,16 +895,30 @@ export default function DoctorDashboard() {
       </motion.div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
+        {(kpiMetrics ? [
+          { title: 'Total Patients', value: kpiMetrics.total_patients.value, pct: kpiMetrics.total_patients.percentage_change, isUp: kpiMetrics.total_patients.is_positive, prefix: '' },
+          { title: "Today's Consults", value: kpiMetrics.todays_consults.value, pct: kpiMetrics.todays_consults.percentage_change, isUp: kpiMetrics.todays_consults.is_positive, prefix: '' },
+          { title: 'Monthly Earnings', value: kpiMetrics.monthly_earnings.value, pct: kpiMetrics.monthly_earnings.percentage_change, isUp: kpiMetrics.monthly_earnings.is_positive, prefix: '₹' },
+          { title: 'Total Consultations', value: kpiMetrics.total_consultations.value, pct: kpiMetrics.total_consultations.percentage_change, isUp: kpiMetrics.total_consultations.is_positive, prefix: '' },
+        ] : Array.from({ length: 4 }).map(() => null)).map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] relative overflow-hidden group">
-            <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
-            <div className="flex items-end gap-3">
-              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{stat.value}</h3>
-              <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-                {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
-                {stat.trend}
-              </span>
-            </div>
+            {stat ? (
+              <>
+                <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
+                <div className="flex items-end gap-3">
+                  <h3 className="text-3xl font-black text-slate-900 tracking-tight">{stat.prefix}{stat.value.toLocaleString('en-IN')}</h3>
+                  <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
+                    {stat.isUp ? '+' : ''}{stat.pct}%
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="animate-pulse space-y-3">
+                <div className="h-4 bg-slate-100 rounded w-2/3" />
+                <div className="h-8 bg-slate-100 rounded w-1/2" />
+              </div>
+            )}
             <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
           </motion.div>
         ))}
