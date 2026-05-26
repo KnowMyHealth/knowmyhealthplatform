@@ -18,7 +18,6 @@ class PaymentError(BaseDomainException):
 
 class PaymentService:
     def __init__(self):
-        # Initialize Razorpay Client
         self.client = razorpay.Client(
             auth=(
                 settings.RAZORPAY_KEY_ID.get_secret_value(),
@@ -28,19 +27,17 @@ class PaymentService:
 
     async def create_order(self, db: AsyncSession, user_id: UUID, payload: OrderCreateRequest) -> Payment:
         try:
-            # 1. Razorpay expects amount in PAISE (1 INR = 100 Paise)
+            # Razorpay expects amount in PAISE (1 INR = 100 Paise)
             amount_in_paise = int(payload.amount * 100)
 
-            # 2. Call Razorpay API to generate the Order
             order_data = {
                 "amount": amount_in_paise,
                 "currency": "INR",
                 "receipt": f"receipt_pb_{secrets.token_hex(4)}",
-                "payment_capture": 1  # Auto-capture payment upon checkout
+                "payment_capture": 1
             }
             rzp_order = self.client.order.create(data=order_data)
             
-            # 3. Save Pending Transaction to DB
             payment = Payment(
                 user_id=user_id,
                 amount=payload.amount,
@@ -68,7 +65,6 @@ class PaymentService:
         }
 
         try:
-            # This raises an Exception if the signature is invalid (fraudulent)
             self.client.utility.verify_payment_signature(params_dict)
         except Exception as e:
             logger.warning(f"Fraudulent payment attempt / invalid signature: {e}")
@@ -90,17 +86,24 @@ class PaymentService:
         if not payment:
             raise PaymentError("Transaction reference not found in database.")
 
-        # 3. UPDATE THE RELEVANT BOOKING TO COMPLETED/PAID STATUS
-        # (This is where you bridge payment to your appointments, lab tests, etc.)
+        # 3. ROUTE COMPLETED PAYMENT TO THE CORRECT BOOKING TYPE
         if payment.booking_type == BookingType.CONSULTATION:
             from app.modules.consultation.models import Consultation, ConsultationStatus
             await db.execute(
                 update(Consultation)
                 .where(Consultation.id == payment.booking_id)
-                .values(status=ConsultationStatus.SCHEDULED) # Set to scheduled after payment
+                .values(status=ConsultationStatus.SCHEDULED)
             )
         
-        # Add similar update statements for LAB_TEST or HEALTH_PACKAGE bookings here!
+        elif payment.booking_type == BookingType.LAB_TEST:
+            from app.modules.labtest.models import LabTestBooking, LabTestBookingStatus
+            await db.execute(
+                update(LabTestBooking)
+                .where(LabTestBooking.id == payment.booking_id)
+                .values(status=LabTestBookingStatus.PAID) # <--- Triggers Paid status!
+            )
+
+        # Add HEALTH_PACKAGE handling here when that module incorporates booking!
 
         await db.commit()
         await db.refresh(payment)
