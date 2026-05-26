@@ -201,7 +201,7 @@ export default function AdminPortal() {
   const [labCategories, setLabCategories] = useState<LabCategory[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [isLoadingLabTests, setIsLoadingLabTests] = useState(false);
-  const [labTab, setLabTab] = useState<'tests' | 'categories'>('tests');
+  const [labTab, setLabTab] = useState<'tests' | 'categories' | 'bookings'>('tests');
   const [testCurrentPage, setTestCurrentPage] = useState(1);
   const [testFilterStatus, setTestFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [testSearchQuery, setTestSearchQuery] = useState('');
@@ -214,9 +214,18 @@ export default function AdminPortal() {
   
   const [isAddTestOpen, setIsAddTestOpen] = useState(false);
   const [testForm, setTestForm] = useState({
-    name: '', category_id: '', organization: '', results_in: '', 
-    price: '', discount_percentage: '', is_active: true
+    name: '', category_id: '', organization: '', results_in: '',
+    price: '', discount_percentage: '', is_active: true,
+    clinic_address: '', clinic_open_time: '', clinic_close_time: ''
   });
+
+  // Lab Bookings States
+  const [labBookings, setLabBookings] = useState<any[]>([]);
+  const [isLoadingLabBookings, setIsLoadingLabBookings] = useState(false);
+  const [labBookingPage, setLabBookingPage] = useState(1);
+  const [labBookingTotalPages, setLabBookingTotalPages] = useState(1);
+  const [labBookingStatusFilter, setLabBookingStatusFilter] = useState<'all' | 'PENDING' | 'PAID' | 'CANCELLED' | 'COMPLETED'>('all');
+  const labBookingsPerPage = 10;
   const [testError, setTestError] = useState<string | null>(null);
   const [testToDelete, setTestToDelete] = useState<string | null>(null);
 
@@ -501,15 +510,18 @@ export default function AdminPortal() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     try {
-      const payload = {
+      const payload: any = {
         ...testForm,
         results_in: parseInt(testForm.results_in, 10),
         price: parseFloat(testForm.price),
-        discount_percentage: parseFloat(testForm.discount_percentage)
+        discount_percentage: parseFloat(testForm.discount_percentage) || 0,
       };
+      if (!payload.clinic_address) delete payload.clinic_address;
+      if (!payload.clinic_open_time) delete payload.clinic_open_time;
+      if (!payload.clinic_close_time) delete payload.clinic_close_time;
       const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
@@ -517,7 +529,7 @@ export default function AdminPortal() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        setTestForm({ name: '', category_id: '', organization: '', results_in: '', price: '', discount_percentage: '', is_active: true });
+        setTestForm({ name: '', category_id: '', organization: '', results_in: '', price: '', discount_percentage: '', is_active: true, clinic_address: '', clinic_open_time: '', clinic_close_time: '' });
         setIsAddTestOpen(false);
         fetchLabTests();
       } else {
@@ -527,6 +539,24 @@ export default function AdminPortal() {
     } catch (error: any) {
       setTestError(error.message || 'An unexpected error occurred');
     }
+  };
+
+  const fetchLabBookings = async (page = 1, status = labBookingStatusFilter) => {
+    setIsLoadingLabBookings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const statusParam = status !== 'all' ? `&status=${status}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/bookings/list?page=${page}&limit=${labBookingsPerPage}${statusParam}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      const json = await res.json();
+      if (json.success) {
+        setLabBookings(Array.isArray(json.data) ? json.data : (json.data?.items ?? []));
+        setLabBookingTotalPages(json.data?.total_pages ?? 1);
+      }
+    } catch (e) { console.error('Failed to fetch lab bookings', e); }
+    finally { setIsLoadingLabBookings(false); }
   };
 
   const executeDeleteTest = async (id: string) => {
@@ -1581,6 +1611,14 @@ export default function AdminPortal() {
           >
             Categories
           </button>
+          <button
+            onClick={() => { setLabTab('bookings'); fetchLabBookings(1, labBookingStatusFilter); }}
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
+              labTab === 'bookings' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Bookings
+          </button>
         </div>
       </div>
 
@@ -1729,6 +1767,76 @@ export default function AdminPortal() {
             )}
           </div>
         )}
+
+        {labTab === 'bookings' && (
+          <div className="space-y-6 flex-1 flex flex-col">
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'PENDING', 'PAID', 'CANCELLED', 'COMPLETED'] as const).map(s => (
+                <button key={s} onClick={() => { setLabBookingStatusFilter(s); setLabBookingPage(1); fetchLabBookings(1, s); }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${labBookingStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
+            </div>
+            {isLoadingLabBookings ? (
+              <div className="flex justify-center py-20 flex-1"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-100 flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                      <th className="p-4">Patient</th>
+                      <th className="p-4">Test</th>
+                      <th className="p-4">Lab</th>
+                      <th className="p-4">Scheduled Date</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Booked On</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {labBookings.length === 0 ? (
+                      <tr><td colSpan={6} className="p-8 text-center text-slate-400">No bookings found.</td></tr>
+                    ) : (
+                      labBookings.map((booking: any) => {
+                        const statusColors: Record<string, string> = {
+                          PENDING: 'bg-amber-100 text-amber-700',
+                          PAID: 'bg-emerald-100 text-emerald-700',
+                          CANCELLED: 'bg-red-100 text-red-700',
+                          COMPLETED: 'bg-blue-100 text-blue-700',
+                        };
+                        return (
+                          <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.patient_user_id?.slice(0, 8)}…</td>
+                            <td className="p-4">
+                              <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
+                            </td>
+                            <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
+                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                            <td className="p-4">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                                {booking.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-xs text-slate-400">{new Date(booking.created_at).toLocaleDateString()}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {labBookingTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-slate-500 font-bold">Page {labBookingPage} of {labBookingTotalPages}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { const p = Math.max(1, labBookingPage - 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16} /></button>
+                  <button onClick={() => { const p = Math.min(labBookingTotalPages, labBookingPage + 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === labBookingTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {labTab === 'tests' && totalTestPages > 1 && (
@@ -1828,6 +1936,20 @@ export default function AdminPortal() {
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Discount (%)</label>
                     <input required type="number" min="0" max="100" step="0.01" value={testForm.discount_percentage} onChange={e => setTestForm({...testForm, discount_percentage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Address <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                  <input type="text" value={testForm.clinic_address} onChange={e => setTestForm({...testForm, clinic_address: e.target.value})} placeholder="e.g. 12, MG Road, Bangalore" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Opens <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                    <input type="time" value={testForm.clinic_open_time} onChange={e => setTestForm({...testForm, clinic_open_time: e.target.value ? e.target.value + ':00' : ''})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Closes <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                    <input type="time" value={testForm.clinic_close_time} onChange={e => setTestForm({...testForm, clinic_close_time: e.target.value ? e.target.value + ':00' : ''})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
                   </div>
                 </div>
                 <label className="flex items-center gap-3 pt-2 cursor-pointer">
