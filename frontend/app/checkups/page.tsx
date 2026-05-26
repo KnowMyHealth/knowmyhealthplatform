@@ -332,15 +332,19 @@ function PackageCard({ pkg, onEnquire, index }: {
 /* ─── Enquire Modal ──────────────────────────────────────────────────────── */
 
 function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => void }) {
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
   const [isPaying, setIsPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(tomorrowStr);
   const fp = finalPrice(pkg);
   const category = getCategory(pkg.title);
   const meta = CATEGORY_META[category];
   const Icon = meta.icon;
 
   const handlePayNow = async () => {
+    if (!scheduledDate) { setPaymentError('Please select a scheduled date.'); return; }
     setIsPaying(true);
     setPaymentError(null);
 
@@ -352,6 +356,25 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
         return;
       }
 
+      // Step 1: Create PENDING booking
+      const bookingRes = await fetch(`${BACKEND_URL}/api/v1/health-packages/bookings`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ health_package_id: pkg.id, scheduled_date: scheduledDate })
+      });
+      const bookingJson = await bookingRes.json();
+      if (!bookingRes.ok || !bookingJson.data?.id) {
+        setPaymentError(bookingJson.message || 'Failed to create booking. Please try again.');
+        setIsPaying(false);
+        return;
+      }
+      const bookingId = bookingJson.data.id;
+
+      // Step 2: Create Razorpay order
       const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
         method: 'POST',
         headers: {
@@ -362,7 +385,7 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
         body: JSON.stringify({
           amount: fp,
           booking_type: 'HEALTH_PACKAGE',
-          booking_id: pkg.id
+          booking_id: bookingId
         })
       });
 
@@ -490,6 +513,17 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
             </motion.div>
           ) : (
             <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Scheduled Date</label>
+                <input
+                  type="date"
+                  value={scheduledDate}
+                  min={tomorrowStr}
+                  onChange={e => setScheduledDate(e.target.value)}
+                  disabled={isPaying}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+                />
+              </div>
               {paymentError && (
                 <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium">
@@ -499,7 +533,7 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
               )}
               <button
                 onClick={handlePayNow}
-                disabled={isPaying}
+                disabled={isPaying || !scheduledDate}
                 className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-900 text-white hover:bg-emerald-800 flex items-center justify-center gap-2 group transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isPaying
@@ -507,7 +541,7 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
                   : <>Pay ₹{fp.toLocaleString('en-IN')} & Book <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" /></>
                 }
               </button>
-              <p className="text-xs text-center text-slate-400">Secure payment powered by Razorpay. Our team will confirm your slot shortly.</p>
+              <p className="text-xs text-center text-slate-400">Secure payment powered by Razorpay. A confirmation email will be sent after payment.</p>
             </div>
           )}
         </div>
