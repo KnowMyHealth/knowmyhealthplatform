@@ -87,20 +87,6 @@ const navItems = [
   { icon: Settings, label: 'Settings', id: 'settings' },
 ];
 
-const monthlyData = [
-  { month: 'Jan', value: 40 },
-  { month: 'Feb', value: 70 },
-  { month: 'Mar', value: 45 },
-  { month: 'Apr', value: 90 },
-  { month: 'May', value: 65 },
-  { month: 'Jun', value: 85 },
-  { month: 'Jul', value: 100 },
-  { month: 'Aug', value: 55 },
-  { month: 'Sep', value: 75 },
-  { month: 'Oct', value: 60 },
-  { month: 'Nov', value: 80 },
-  { month: 'Dec', value: 50 },
-];
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -374,6 +360,10 @@ export default function DoctorDashboard() {
   const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
   const prescriptionInputRef = useRef<HTMLInputElement>(null);
 
+  // Revenue analytics states
+  const [revenueData, setRevenueData] = useState<{ total_earnings: number; monthly_earnings: { month: string; amount: number }[]; recent_transactions: { transaction_id: string; patient_name: string; date_label: string; amount: number; status: string }[] } | null>(null);
+  const [isLoadingRevenue, setIsLoadingRevenue] = useState(false);
+
   // Real-time tracker for join buttons
   const [now, setNow] = useState(new Date());
 
@@ -417,6 +407,13 @@ export default function DoctorDashboard() {
     fetchPatients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'earnings' && !revenueData) {
+      fetchRevenue();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const fetchDoctorProfile = async () => {
     let fetchedFirstName = '';
@@ -691,6 +688,26 @@ export default function DoctorDashboard() {
       console.error("Failed to fetch appointments", error);
     } finally {
       setIsLoadingAppointments(false);
+    }
+  };
+
+  const fetchRevenue = async () => {
+    if (isLoadingRevenue) return;
+    setIsLoadingRevenue(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/me/revenue-analytics`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setRevenueData(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch revenue analytics', e);
+    } finally {
+      setIsLoadingRevenue(false);
     }
   };
 
@@ -1312,57 +1329,82 @@ export default function DoctorDashboard() {
     );
   };
 
-  const renderAnalytics = () => (
-    <div className="space-y-8">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] p-6 sm:p-8">
-        <h2 className="text-xl font-extrabold text-slate-900 mb-6">Revenue & Analytics</h2>
-        <div className="h-72 bg-slate-50 rounded-2xl border border-slate-100 flex items-end justify-between px-4 pb-4 pt-12 relative overflow-hidden group">
-          <div className="absolute top-4 left-6 text-slate-400 font-bold text-sm">Monthly Earnings Overview</div>
-          {monthlyData.map((data, i) => (
-            <div key={i} className="flex flex-col items-center flex-1 h-full justify-end group/bar">
-              <motion.div 
-                initial={{ height: 0 }}
-                animate={{ height: `${data.value}%` }}
-                transition={{ duration: 1, delay: i * 0.05 }}
-                className="w-full max-w-[2rem] bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t-md relative group-hover/bar:opacity-80 transition-opacity"
-              >
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/bar:opacity-100 transition-opacity text-[10px] sm:text-xs font-bold text-emerald-700 bg-white px-1.5 py-1 rounded shadow-sm">
-                  ₹{data.value}k
-                </div>
-              </motion.div>
-              <span className="text-[10px] sm:text-xs font-medium text-slate-400 mt-2">{data.month}</span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+  const renderAnalytics = () => {
+    const monthly = revenueData?.monthly_earnings ?? [];
+    const maxAmount = monthly.length > 0 ? Math.max(...monthly.map(m => m.amount), 1) : 1;
 
-      <div className="grid grid-cols-1 gap-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">Recent Transactions</h3>
-          <div className="space-y-4">
-            {[
-              { id: 'TRX-9821', patient: 'Sarah Jenkins', amount: '₹1500', date: 'Today, 10:45 AM' },
-              { id: 'TRX-9820', patient: 'Michael Chen', amount: '₹2000', date: 'Yesterday' },
-              { id: 'TRX-9819', patient: 'Emma Davis', amount: '₹1500', date: 'Oct 23, 2023' },
-            ].map((trx, i) => (
-              <div key={i} className="flex items-center justify-between p-3 border-b border-slate-100 last:border-0">
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">{trx.patient}</p>
-                  <p className="text-xs text-slate-500 font-medium">{trx.id} • {trx.date}</p>
-                </div>
-                <div className="text-right">
-                  <span className="font-black text-emerald-600">{trx.amount}</span>
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mt-1 justify-end">
-                    <CheckCircle2 size={10} /> Paid
+    return (
+      <div className="space-y-8">
+        {revenueData && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-950 rounded-[2rem] p-6 sm:p-8 flex items-center justify-between shadow-xl relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-64 h-64 bg-teal-500/10 blur-[80px] rounded-full pointer-events-none" />
+            <div className="relative z-10">
+              <p className="text-emerald-300/70 text-sm font-bold uppercase tracking-wider mb-1">Total Earnings</p>
+              <h2 className="text-4xl font-black text-white">₹{revenueData.total_earnings.toLocaleString('en-IN')}</h2>
+            </div>
+            <TrendingUp size={48} className="text-emerald-500/30 relative z-10" />
+          </motion.div>
+        )}
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] p-6 sm:p-8">
+          <h2 className="text-xl font-extrabold text-slate-900 mb-6">Revenue & Analytics</h2>
+          {isLoadingRevenue ? (
+            <div className="h-72 flex items-center justify-center"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+          ) : (
+            <div className="h-72 bg-slate-50 rounded-2xl border border-slate-100 flex items-end justify-between px-4 pb-4 pt-12 relative overflow-hidden group">
+              <div className="absolute top-4 left-6 text-slate-400 font-bold text-sm">Monthly Earnings Overview</div>
+              {monthly.map((data, i) => {
+                const heightPct = (data.amount / maxAmount) * 100;
+                return (
+                  <div key={i} className="flex flex-col items-center flex-1 h-full justify-end group/bar">
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${heightPct}%` }}
+                      transition={{ duration: 1, delay: i * 0.05 }}
+                      className="w-full max-w-[2rem] bg-gradient-to-t from-emerald-500 to-teal-400 rounded-t-md relative group-hover/bar:opacity-80 transition-opacity"
+                    >
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover/bar:opacity-100 transition-opacity text-[10px] sm:text-xs font-bold text-emerald-700 bg-white px-1.5 py-1 rounded shadow-sm whitespace-nowrap">
+                        ₹{data.amount.toLocaleString('en-IN')}
+                      </div>
+                    </motion.div>
+                    <span className="text-[10px] sm:text-xs font-medium text-slate-400 mt-2">{data.month}</span>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </motion.div>
+
+        <div className="grid grid-cols-1 gap-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">Recent Transactions</h3>
+            {isLoadingRevenue ? (
+              <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-emerald-500" size={24} /></div>
+            ) : (revenueData?.recent_transactions ?? []).length === 0 ? (
+              <p className="text-slate-500 text-sm py-4 text-center">No transactions yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {(revenueData?.recent_transactions ?? []).map((trx, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 border-b border-slate-100 last:border-0">
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{trx.patient_name}</p>
+                      <p className="text-xs text-slate-500 font-medium">{trx.transaction_id} • {trx.date_label}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-emerald-600">₹{trx.amount.toLocaleString('en-IN')}</span>
+                      <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mt-1 justify-end">
+                        <CheckCircle2 size={10} /> {trx.status}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderSettings = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)] p-6 sm:p-8 max-w-3xl mx-auto">
