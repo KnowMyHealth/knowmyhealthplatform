@@ -8,6 +8,13 @@ from app.utils.api_response import ApiResponse
 from app.core.security import get_current_user
 from app.core.rate_limiter import limiter
 
+from app.utils.pagination import PaginationParams
+from app.core.security import RequireRole
+from app.modules.user.schemas import Role
+from app.db.all_models import User
+from app.modules.payment.schemas import AdminTransactionSchema
+from app.modules.payment.models import PaymentStatus, BookingType
+
 from app.modules.payment.schemas import OrderCreateRequest, OrderCreateResponse, PaymentVerifyRequest
 from app.modules.payment.service import PaymentService
 
@@ -43,3 +50,29 @@ async def verify_payment_signature(
 ):
     payment = await service.verify_payment(db, payload)
     return ApiResponse.success(message="Payment verified and booking confirmed!")
+
+
+@router.get(
+    "", 
+    summary="List All Transactions (Admin)",
+    description="View all platform payments. Filter by status or booking_type."
+)
+@limiter.limit("30/minute")
+async def list_all_transactions(
+    request: Request,
+    params: PaginationParams = Depends(),
+    status: PaymentStatus | None = None,
+    booking_type: BookingType | None = None,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: PaymentService = Depends(PaymentService)
+):
+    items, total = await service.list_all_payments(db, params, status, booking_type)
+    validated = [AdminTransactionSchema.model_validate(i) for i in items]
+    
+    return ApiResponse.paginated(
+        items=validated, 
+        total_items=total, 
+        params=params,
+        message="Transactions retrieved successfully."
+    )

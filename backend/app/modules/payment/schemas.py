@@ -1,4 +1,5 @@
 # app/modules/payment/schemas.py
+from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
 from pydantic import BaseModel, Field
@@ -19,3 +20,34 @@ class PaymentVerifyRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+
+
+class PaymentPatientProfileSchema(BaseModel):
+    first_name: str
+    last_name: str
+    phone_number: str | None = None
+
+    class Config:
+        from_attributes = True
+
+class PaymentUserSchema(BaseModel):
+    email: str
+    patient_profile: PaymentPatientProfileSchema | None = None
+
+    class Config:
+        from_attributes = True
+
+class AdminTransactionSchema(BaseModel):
+    id: UUID
+    amount: Decimal
+    currency: str
+    razorpay_order_id: str
+    razorpay_payment_id: str | None = None
+    status: PaymentStatus
+    booking_type: BookingType
+    booking_id: UUID
+    created_at: datetime
+    user: PaymentUserSchema | None = None
+
+    class Config:
+        from_attributes = True

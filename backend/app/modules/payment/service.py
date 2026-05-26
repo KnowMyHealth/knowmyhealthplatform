@@ -4,7 +4,9 @@ import secrets
 from uuid import UUID
 from decimal import Decimal
 from loguru import logger
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
+from sqlalchemy.orm import selectinload
+from app.utils.pagination import PaginationParams
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -180,3 +182,36 @@ class PaymentService:
         await db.commit()
         await db.refresh(payment)
         return payment
+    
+    async def list_all_payments(
+        self,
+        db: AsyncSession,
+        params: PaginationParams,
+        status: PaymentStatus | None = None,
+        booking_type: BookingType | None = None
+    ) -> tuple[list[Payment], int]:
+        """
+        ADMIN USE ONLY: Lists all platform transactions.
+        Eager loads the user and their patient profile.
+        """
+        from app.db.all_models import User
+        
+        query = select(Payment).options(
+            selectinload(Payment.user).selectinload(User.patient_profile)
+        )
+        count_query = select(func.count()).select_from(Payment)
+
+        if status:
+            query = query.where(Payment.status == status)
+            count_query = count_query.where(Payment.status == status)
+
+        if booking_type:
+            query = query.where(Payment.booking_type == booking_type)
+            count_query = count_query.where(Payment.booking_type == booking_type)
+
+        total_count = (await db.execute(count_query)).scalar() or 0
+        
+        query = query.order_by(Payment.created_at.desc()).offset(params.offset).limit(params.limit)
+        items = (await db.execute(query)).scalars().all()
+        
+        return list(items), total_count
