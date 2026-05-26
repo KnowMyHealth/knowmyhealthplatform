@@ -12,6 +12,23 @@ import { GoogleGenAI, Type } from '@google/genai';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { supabase } from '@/lib/supabase';
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(true); return; }
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
 interface CartItem {
   testId: string;
   quantity: number;
@@ -60,6 +77,10 @@ function DiagnosticsContent() {
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponSuccess, setCouponSuccess] = useState<string | null>(null);
+
+  // Checkout States
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -191,13 +212,107 @@ function DiagnosticsContent() {
     setCart(prev => prev.filter(item => item.testId !== testId));
   };
 
-  const handleCheckout = () => {
-    setIsCheckoutSuccess(true);
-    setTimeout(() => {
-      setCart([]);
-      setIsCheckoutSuccess(false);
-      setIsCartOpen(false);
-    }, 3000);
+  const handleCheckout = async () => {
+    if (cart.length === 0 || isCheckingOut) return;
+    setIsCheckingOut(true);
+    setCheckoutError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setCheckoutError('Session expired. Please log in again.');
+        setIsCheckingOut(false);
+        return;
+      }
+
+      const finalTotal = Math.max(0, cartTotal - couponDiscount);
+
+      // Create a payment order for the first cart item (LAB_TEST booking)
+      // The amount covers the full cart total
+      const firstItem = cart[0];
+      const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({
+          amount: finalTotal,
+          booking_type: 'LAB_TEST',
+          booking_id: firstItem.testId
+        })
+      });
+
+      const orderJson = await orderRes.json();
+      if (!orderRes.ok || !orderJson.razorpay_order_id) {
+        setCheckoutError(orderJson.message || 'Payment initiation failed. Please try again.');
+        setIsCheckingOut(false);
+        return;
+      }
+
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        setCheckoutError('Failed to load payment gateway. Please check your connection and try again.');
+        setIsCheckingOut(false);
+        return;
+      }
+
+      const rzp = new (window as any).Razorpay({
+        key: 'rzp_test_o9nYggdmmCOUap',
+        amount: orderJson.amount,
+        currency: orderJson.currency || 'INR',
+        order_id: orderJson.razorpay_order_id,
+        name: 'Know My Health',
+        description: `Diagnostic Tests (${cart.length} item${cart.length > 1 ? 's' : ''})`,
+        theme: { color: '#059669' },
+        handler: async (response: any) => {
+          try {
+            const { data: { session: verifySession } } = await supabase.auth.getSession();
+            const verifyRes = await fetch(`${BACKEND_URL}/api/v1/payments/verify`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${verifySession?.access_token ?? ''}`,
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            const verifyJson = await verifyRes.json();
+            if (verifyJson.success) {
+              setIsCheckoutSuccess(true);
+              setTimeout(() => {
+                setCart([]);
+                setIsCheckoutSuccess(false);
+                setIsCartOpen(false);
+                setAppliedCoupon(null);
+                setCouponDiscount(0);
+              }, 3000);
+            } else {
+              setCheckoutError(verifyJson.message || 'Payment verification failed. Contact support.');
+            }
+          } catch {
+            setCheckoutError('Payment verification failed due to a network error.');
+          } finally {
+            setIsCheckingOut(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setCheckoutError('Payment was cancelled. Your cart items are still saved.');
+            setIsCheckingOut(false);
+          }
+        }
+      });
+      rzp.open();
+    } catch {
+      setCheckoutError('Network error. Please check your connection and try again.');
+      setIsCheckingOut(false);
+    }
   };
 
   const handleApplyCoupon = async () => {
@@ -701,12 +816,22 @@ function DiagnosticsContent() {
                         <span>₹{Math.max(0, cartTotal - couponDiscount).toFixed(2)}</span>
                       </div>
                     </div>
-                    <button 
+                    {checkoutError && (
+                      <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                        className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium mb-4">
+                        <X size={15} className="shrink-0 mt-0.5 text-red-500" />
+                        {checkoutError}
+                      </motion.div>
+                    )}
+                    <button
                       onClick={handleCheckout}
-                      className="w-full py-4 bg-emerald-950 text-white font-bold rounded-xl hover:bg-emerald-900 transition-colors flex items-center justify-center space-x-2 shadow-lg shadow-emerald-900/20"
+                      disabled={isCheckingOut}
+                      className="w-full py-4 bg-emerald-950 text-white font-bold rounded-xl hover:bg-emerald-900 transition-colors flex items-center justify-center space-x-2 shadow-lg shadow-emerald-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <span>Proceed to Checkout</span>
-                      <ArrowRight size={20} />
+                      {isCheckingOut
+                        ? <><Loader2 size={20} className="animate-spin" /><span>Processing...</span></>
+                        : <><span>Proceed to Pay</span><ArrowRight size={20} /></>
+                      }
                     </button>
                   </div>
                 )}

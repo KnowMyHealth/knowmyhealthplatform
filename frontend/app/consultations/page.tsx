@@ -560,7 +560,7 @@ export default function ConsultationsPage() {
       }
       const rzp = new (window as any).Razorpay({
         key: 'rzp_test_o9nYggdmmCOUap',
-        amount: Math.round(orderJson.amount * 100),
+        amount: orderJson.amount,
         currency: orderJson.currency || 'INR',
         order_id: orderJson.razorpay_order_id,
         name: 'Know My Health',
