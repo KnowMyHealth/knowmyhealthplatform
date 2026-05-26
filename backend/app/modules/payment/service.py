@@ -83,6 +83,9 @@ class PaymentService:
         if not payment:
             raise PaymentError("Transaction reference not found in database.")
 
+        # ==========================================
+        # BOOKING STATUS ROUTING LOGIC
+        # ==========================================
         if payment.booking_type == BookingType.CONSULTATION:
             from app.modules.consultation.models import Consultation, ConsultationStatus
             await db.execute(
@@ -113,16 +116,13 @@ class PaymentService:
 
             if booking and booking.patient_user and booking.patient_user.patient_profile:
                 p_prof = booking.patient_user.patient_profile
-                
                 patient_name = f"{p_prof.first_name} {p_prof.last_name}"
                 test_name = booking.lab_test.name
                 sch_date = str(booking.scheduled_date)
                 c_addr = booking.lab_test.clinic_address or "Clinic address pending"
-                
                 open_t = booking.lab_test.clinic_open_time.strftime("%I:%M %p") if booking.lab_test.clinic_open_time else "TBD"
                 close_t = booking.lab_test.clinic_close_time.strftime("%I:%M %p") if booking.lab_test.clinic_close_time else "TBD"
-                c_time = f"{open_t} - {close_t}"
-
+                
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_labtest_booking_email,
@@ -131,7 +131,49 @@ class PaymentService:
                         test_name=test_name,
                         scheduled_date=sch_date,
                         clinic_address=c_addr,
-                        clinic_timing=c_time
+                        clinic_timing=f"{open_t} - {close_t}"
+                    )
+                )
+
+        # NEW: CONFIRM HEALTH PACKAGE BOOKING
+        elif payment.booking_type == BookingType.HEALTH_PACKAGE:
+            from app.modules.health_package.models import HealthPackageBooking, HealthPackageBookingStatus
+            from app.db.all_models import User
+            from sqlalchemy.orm import selectinload
+            import asyncio
+            from app.core.email import send_health_package_booking_email
+
+            await db.execute(
+                update(HealthPackageBooking)
+                .where(HealthPackageBooking.id == payment.booking_id)
+                .values(status=HealthPackageBookingStatus.PAID)
+            )
+
+            stmt_booking = select(HealthPackageBooking).options(
+                selectinload(HealthPackageBooking.health_package),
+                selectinload(HealthPackageBooking.patient_user).selectinload(User.patient_profile)
+            ).where(HealthPackageBooking.id == payment.booking_id)
+            
+            booking = (await db.execute(stmt_booking)).scalar_one_or_none()
+
+            if booking and booking.patient_user and booking.patient_user.patient_profile:
+                p_prof = booking.patient_user.patient_profile
+                patient_name = f"{p_prof.first_name} {p_prof.last_name}"
+                package_name = booking.health_package.title
+                sch_date = str(booking.scheduled_date)
+                c_addr = booking.health_package.clinic_address or "Clinic address pending"
+                open_t = booking.health_package.clinic_open_time.strftime("%I:%M %p") if booking.health_package.clinic_open_time else "TBD"
+                close_t = booking.health_package.clinic_close_time.strftime("%I:%M %p") if booking.health_package.clinic_close_time else "TBD"
+                
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        send_health_package_booking_email,
+                        to_email=booking.patient_user.email,
+                        patient_name=patient_name,
+                        package_name=package_name,
+                        scheduled_date=sch_date,
+                        clinic_address=c_addr,
+                        clinic_timing=f"{open_t} - {close_t}"
                     )
                 )
 
