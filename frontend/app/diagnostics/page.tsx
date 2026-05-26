@@ -563,10 +563,12 @@ function DiagnosticsContent() {
                           
                           <div className="mt-auto pt-6 border-t border-emerald-50 flex items-center justify-between">
                             <div>
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <span className="text-red-500 font-bold text-sm">-{test.discount}%</span>
-                                <span className="text-xs text-slate-400 line-through">₹{test.price}</span>
-                              </div>
+                              {test.discount > 0 && (
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-red-500 font-bold text-sm">-{test.discount}%</span>
+                                  <span className="text-xs text-slate-400 line-through">₹{test.price}</span>
+                                </div>
+                              )}
                               <p className="text-2xl font-black text-emerald-950 tracking-tighter">₹{test.discountPrice}</p>
                             </div>
                             <button 

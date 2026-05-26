@@ -61,6 +61,9 @@ interface LabTest {
   price: number;
   discount_percentage: number;
   is_active: boolean;
+  clinic_address?: string;
+  clinic_open_time?: string;
+  clinic_close_time?: string;
   created_at: string;
 }
 
@@ -201,7 +204,7 @@ export default function AdminPortal() {
   const [labCategories, setLabCategories] = useState<LabCategory[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [isLoadingLabTests, setIsLoadingLabTests] = useState(false);
-  const [labTab, setLabTab] = useState<'tests' | 'categories'>('tests');
+  const [labTab, setLabTab] = useState<'tests' | 'categories' | 'bookings'>('tests');
   const [testCurrentPage, setTestCurrentPage] = useState(1);
   const [testFilterStatus, setTestFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [testSearchQuery, setTestSearchQuery] = useState('');
@@ -214,11 +217,24 @@ export default function AdminPortal() {
   
   const [isAddTestOpen, setIsAddTestOpen] = useState(false);
   const [testForm, setTestForm] = useState({
-    name: '', category_id: '', organization: '', results_in: '', 
-    price: '', discount_percentage: '', is_active: true
+    name: '', category_id: '', organization: '', results_in: '',
+    price: '', discount_percentage: '', is_active: true,
+    clinic_address: '', clinic_open_time: '', clinic_close_time: ''
   });
+
+  // Lab Bookings States
+  const [labBookings, setLabBookings] = useState<any[]>([]);
+  const [isLoadingLabBookings, setIsLoadingLabBookings] = useState(false);
+  const [labBookingPage, setLabBookingPage] = useState(1);
+  const [labBookingTotalPages, setLabBookingTotalPages] = useState(1);
+  const [labBookingStatusFilter, setLabBookingStatusFilter] = useState<'all' | 'PENDING' | 'PAID' | 'CANCELLED' | 'COMPLETED'>('all');
+  const labBookingsPerPage = 10;
   const [testError, setTestError] = useState<string | null>(null);
   const [testToDelete, setTestToDelete] = useState<string | null>(null);
+  const [editingTest, setEditingTest] = useState<LabTest | null>(null);
+  const [editTestForm, setEditTestForm] = useState({ name: '', category_id: '', organization: '', results_in: '', price: '', discount_percentage: '', is_active: true, clinic_address: '', clinic_open_time: '', clinic_close_time: '' });
+  const [editTestError, setEditTestError] = useState<string | null>(null);
+  const [isSavingTest, setIsSavingTest] = useState(false);
 
   // Coupons States
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -501,15 +517,18 @@ export default function AdminPortal() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     try {
-      const payload = {
+      const payload: any = {
         ...testForm,
         results_in: parseInt(testForm.results_in, 10),
         price: parseFloat(testForm.price),
-        discount_percentage: parseFloat(testForm.discount_percentage)
+        discount_percentage: parseFloat(testForm.discount_percentage) || 0,
       };
+      if (!payload.clinic_address) delete payload.clinic_address;
+      if (!payload.clinic_open_time) delete payload.clinic_open_time;
+      if (!payload.clinic_close_time) delete payload.clinic_close_time;
       const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
@@ -517,7 +536,7 @@ export default function AdminPortal() {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        setTestForm({ name: '', category_id: '', organization: '', results_in: '', price: '', discount_percentage: '', is_active: true });
+        setTestForm({ name: '', category_id: '', organization: '', results_in: '', price: '', discount_percentage: '', is_active: true, clinic_address: '', clinic_open_time: '', clinic_close_time: '' });
         setIsAddTestOpen(false);
         fetchLabTests();
       } else {
@@ -529,13 +548,31 @@ export default function AdminPortal() {
     }
   };
 
+  const fetchLabBookings = async (page = 1, status = labBookingStatusFilter) => {
+    setIsLoadingLabBookings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const statusParam = status !== 'all' ? `&status=${status}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/bookings/list?page=${page}&limit=${labBookingsPerPage}${statusParam}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      const json = await res.json();
+      if (json.success) {
+        setLabBookings(Array.isArray(json.data) ? json.data : (json.data?.items ?? []));
+        setLabBookingTotalPages(json.data?.total_pages ?? 1);
+      }
+    } catch (e) { console.error('Failed to fetch lab bookings', e); }
+    finally { setIsLoadingLabBookings(false); }
+  };
+
   const executeDeleteTest = async (id: string) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     try {
       const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/${id}`, {
         method: 'DELETE',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
@@ -546,6 +583,63 @@ export default function AdminPortal() {
       }
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const handleEditTestClick = (test: LabTest) => {
+    setEditingTest(test);
+    setEditTestError(null);
+    setEditTestForm({
+      name: test.name,
+      category_id: test.category_id,
+      organization: test.organization,
+      results_in: String(test.results_in),
+      price: String(test.price),
+      discount_percentage: String(test.discount_percentage),
+      is_active: test.is_active,
+      clinic_address: test.clinic_address || '',
+      clinic_open_time: test.clinic_open_time || '',
+      clinic_close_time: test.clinic_close_time || '',
+    });
+  };
+
+  const executeUpdateTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTest) return;
+    setIsSavingTest(true);
+    setEditTestError(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setIsSavingTest(false); return; }
+    try {
+      const payload: any = {
+        ...editTestForm,
+        results_in: parseInt(editTestForm.results_in, 10),
+        price: parseFloat(editTestForm.price),
+        discount_percentage: parseFloat(editTestForm.discount_percentage) || 0,
+      };
+      if (!payload.clinic_address) delete payload.clinic_address;
+      if (!payload.clinic_open_time) delete payload.clinic_open_time;
+      if (!payload.clinic_close_time) delete payload.clinic_close_time;
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/${editingTest.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEditingTest(null);
+        fetchLabTests();
+      } else {
+        const err = await res.json();
+        setEditTestError(err.detail || 'Failed to update test.');
+      }
+    } catch (error) {
+      setEditTestError('Something went wrong.');
+    } finally {
+      setIsSavingTest(false);
     }
   };
   // --- END LAB TESTS API FUNCTIONS ---
@@ -1581,6 +1675,14 @@ export default function AdminPortal() {
           >
             Categories
           </button>
+          <button
+            onClick={() => { setLabTab('bookings'); fetchLabBookings(1, labBookingStatusFilter); }}
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
+              labTab === 'bookings' ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Bookings
+          </button>
         </div>
       </div>
 
@@ -1714,9 +1816,14 @@ export default function AdminPortal() {
                                   <button onClick={() => setTestToDelete(null)} className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded hover:bg-slate-200">No</button>
                                 </div>
                               ) : (
-                                <button onClick={() => setTestToDelete(test.id)} className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
-                                  <Trash2 size={18} />
-                                </button>
+                                <div className="flex items-center justify-end gap-1">
+                                  <button onClick={() => handleEditTestClick(test)} className="p-2 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-colors">
+                                    <PenTool size={18} />
+                                  </button>
+                                  <button onClick={() => setTestToDelete(test.id)} className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors">
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -1725,6 +1832,76 @@ export default function AdminPortal() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {labTab === 'bookings' && (
+          <div className="space-y-6 flex-1 flex flex-col">
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'PENDING', 'PAID', 'CANCELLED', 'COMPLETED'] as const).map(s => (
+                <button key={s} onClick={() => { setLabBookingStatusFilter(s); setLabBookingPage(1); fetchLabBookings(1, s); }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${labBookingStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
+            </div>
+            {isLoadingLabBookings ? (
+              <div className="flex justify-center py-20 flex-1"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-100 flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                      <th className="p-4">Patient</th>
+                      <th className="p-4">Test</th>
+                      <th className="p-4">Lab</th>
+                      <th className="p-4">Scheduled Date</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Booked On</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {labBookings.length === 0 ? (
+                      <tr><td colSpan={6} className="p-8 text-center text-slate-400">No bookings found.</td></tr>
+                    ) : (
+                      labBookings.map((booking: any) => {
+                        const statusColors: Record<string, string> = {
+                          PENDING: 'bg-amber-100 text-amber-700',
+                          PAID: 'bg-emerald-100 text-emerald-700',
+                          CANCELLED: 'bg-red-100 text-red-700',
+                          COMPLETED: 'bg-blue-100 text-blue-700',
+                        };
+                        return (
+                          <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.patient_user_id?.slice(0, 8)}…</td>
+                            <td className="p-4">
+                              <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
+                            </td>
+                            <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
+                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                            <td className="p-4">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                                {booking.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-xs text-slate-400">{new Date(booking.created_at).toLocaleDateString()}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {labBookingTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-slate-500 font-bold">Page {labBookingPage} of {labBookingTotalPages}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { const p = Math.max(1, labBookingPage - 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16} /></button>
+                  <button onClick={() => { const p = Math.min(labBookingTotalPages, labBookingPage + 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === labBookingTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16} /></button>
+                </div>
               </div>
             )}
           </div>
@@ -1818,7 +1995,38 @@ export default function AdminPortal() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Turnaround Time (Hours)</label>
-                  <input required type="number" min="1" value={testForm.results_in} onChange={e => setTestForm({...testForm, results_in: e.target.value})} placeholder="24" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[2, 4, 6, 12, 24, 48, 72].map(h => (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setTestForm({...testForm, results_in: String(h)})}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
+                          testForm.results_in === String(h)
+                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600'
+                        }`}
+                      >
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <input
+                      required
+                      type="number"
+                      min="1"
+                      value={testForm.results_in}
+                      onChange={e => setTestForm({...testForm, results_in: e.target.value})}
+                      placeholder="Or type custom hours…"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none pr-16"
+                    />
+                    {testForm.results_in && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-medium pointer-events-none">
+                        hrs
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1830,6 +2038,57 @@ export default function AdminPortal() {
                     <input required type="number" min="0" max="100" step="0.01" value={testForm.discount_percentage} onChange={e => setTestForm({...testForm, discount_percentage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Address <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                  <input type="text" value={testForm.clinic_address} onChange={e => setTestForm({...testForm, clinic_address: e.target.value})} placeholder="e.g. 12, MG Road, Bangalore" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {(['clinic_open_time', 'clinic_close_time'] as const).map((field, idx) => {
+                    const label = idx === 0 ? 'Clinic Opens' : 'Clinic Closes';
+                    const raw = testForm[field]; // stored as "HH:MM:SS" or ""
+                    const hh = raw ? raw.slice(0, 2) : '';
+                    const mm = raw ? raw.slice(3, 5) : '';
+                    const setTime = (newH: string, newM: string) => {
+                      if (!newH && !newM) { setTestForm({...testForm, [field]: ''}); return; }
+                      setTestForm({...testForm, [field]: `${newH || '00'}:${newM || '00'}:00`});
+                    };
+                    return (
+                      <div key={field}>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                          {label} <span className="normal-case font-normal text-slate-400">(optional)</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={hh}
+                            onChange={e => setTime(e.target.value, mm)}
+                            className="flex-1 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-slate-700 appearance-none text-center"
+                          >
+                            <option value="">HH</option>
+                            {Array.from({length: 24}, (_, i) => String(i).padStart(2, '0')).map(h => (
+                              <option key={h} value={h}>{h}</option>
+                            ))}
+                          </select>
+                          <span className="text-slate-400 font-bold text-lg">:</span>
+                          <select
+                            value={mm}
+                            onChange={e => setTime(hh, e.target.value)}
+                            className="flex-1 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-slate-700 appearance-none text-center"
+                          >
+                            <option value="">MM</option>
+                            {['00','15','30','45'].map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {hh && mm && (
+                          <p className="text-xs text-emerald-600 font-semibold mt-1.5 ml-1">
+                            {parseInt(hh) === 0 ? '12' : parseInt(hh) > 12 ? String(parseInt(hh) - 12).padStart(2,'0') : hh}:{mm} {parseInt(hh) >= 12 ? 'PM' : 'AM'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 <label className="flex items-center gap-3 pt-2 cursor-pointer">
                   <input type="checkbox" checked={testForm.is_active} onChange={e => setTestForm({...testForm, is_active: e.target.checked})} className="w-5 h-5 accent-emerald-600 rounded" />
                   <span className="text-sm font-bold text-slate-700">Test is Active</span>
@@ -1837,6 +2096,117 @@ export default function AdminPortal() {
                 <div className="flex gap-3 pt-4">
                   <button type="button" onClick={() => {setIsAddTestOpen(false); setTestError(null);}} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl">Cancel</button>
                   <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-md">Create Test</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Test Modal */}
+      <AnimatePresence>
+        {editingTest && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSavingTest && setEditingTest(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-xl font-bold text-slate-900 mb-1">Edit Lab Test</h2>
+              <p className="text-sm text-slate-400 mb-6">{editingTest.name}</p>
+
+              {editTestError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-600 text-sm font-medium">
+                  <AlertCircle size={16} /> {editTestError}
+                </div>
+              )}
+
+              <form onSubmit={executeUpdateTest} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Test Name</label>
+                  <input required type="text" value={editTestForm.name} onChange={e => setEditTestForm({...editTestForm, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Category</label>
+                  <select required value={editTestForm.category_id} onChange={e => setEditTestForm({...editTestForm, category_id: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none">
+                    <option value="">Select Category</option>
+                    {labCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Lab / Organization</label>
+                  <input required type="text" value={editTestForm.organization} onChange={e => setEditTestForm({...editTestForm, organization: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Turnaround Time (Hours)</label>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {[2, 4, 6, 12, 24, 48, 72].map(h => (
+                      <button key={h} type="button" onClick={() => setEditTestForm({...editTestForm, results_in: String(h)})}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all ${editTestForm.results_in === String(h) ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600'}`}>
+                        {h}h
+                      </button>
+                    ))}
+                  </div>
+                  <div className="relative">
+                    <input required type="number" min="1" value={editTestForm.results_in} onChange={e => setEditTestForm({...editTestForm, results_in: e.target.value})} placeholder="Or type custom hours…" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none pr-16" />
+                    {editTestForm.results_in && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-medium pointer-events-none">hrs</span>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Base Price (₹)</label>
+                    <input required type="number" min="0" step="0.01" value={editTestForm.price} onChange={e => setEditTestForm({...editTestForm, price: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Discount (%)</label>
+                    <input required type="number" min="0" max="100" step="0.01" value={editTestForm.discount_percentage} onChange={e => setEditTestForm({...editTestForm, discount_percentage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Clinic Address <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                  <input type="text" value={editTestForm.clinic_address} onChange={e => setEditTestForm({...editTestForm, clinic_address: e.target.value})} placeholder="e.g. 12, MG Road, Bangalore" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {(['clinic_open_time', 'clinic_close_time'] as const).map((field, idx) => {
+                    const label = idx === 0 ? 'Clinic Opens' : 'Clinic Closes';
+                    const raw = editTestForm[field];
+                    const hh = raw ? raw.slice(0, 2) : '';
+                    const mm = raw ? raw.slice(3, 5) : '';
+                    const setTime = (newH: string, newM: string) => {
+                      if (!newH && !newM) { setEditTestForm({...editTestForm, [field]: ''}); return; }
+                      setEditTestForm({...editTestForm, [field]: `${newH || '00'}:${newM || '00'}:00`});
+                    };
+                    return (
+                      <div key={field}>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                          {label} <span className="normal-case font-normal text-slate-400">(optional)</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <select value={hh} onChange={e => setTime(e.target.value, mm)} className="flex-1 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-slate-700 appearance-none text-center">
+                            <option value="">HH</option>
+                            {Array.from({length: 24}, (_, i) => String(i).padStart(2, '0')).map(h => <option key={h} value={h}>{h}</option>)}
+                          </select>
+                          <span className="text-slate-400 font-bold text-lg">:</span>
+                          <select value={mm} onChange={e => setTime(hh, e.target.value)} className="flex-1 px-3 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-slate-700 appearance-none text-center">
+                            <option value="">MM</option>
+                            {['00','15','30','45'].map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        {hh && mm && (
+                          <p className="text-xs text-emerald-600 font-semibold mt-1.5 ml-1">
+                            {parseInt(hh) === 0 ? '12' : parseInt(hh) > 12 ? String(parseInt(hh) - 12).padStart(2,'0') : hh}:{mm} {parseInt(hh) >= 12 ? 'PM' : 'AM'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <label className="flex items-center gap-3 pt-2 cursor-pointer">
+                  <input type="checkbox" checked={editTestForm.is_active} onChange={e => setEditTestForm({...editTestForm, is_active: e.target.checked})} className="w-5 h-5 accent-emerald-600 rounded" />
+                  <span className="text-sm font-bold text-slate-700">Test is Active</span>
+                </label>
+                <div className="flex gap-3 pt-4">
+                  <button type="button" onClick={() => { setEditingTest(null); setEditTestError(null); }} disabled={isSavingTest} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl disabled:opacity-50">Cancel</button>
+                  <button type="submit" disabled={isSavingTest} className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-md disabled:opacity-60 flex items-center justify-center gap-2">
+                    {isSavingTest ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</> : 'Save Changes'}
+                  </button>
                 </div>
               </form>
             </motion.div>
