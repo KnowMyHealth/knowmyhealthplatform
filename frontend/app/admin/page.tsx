@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, Users, Stethoscope, Building2,
@@ -4090,8 +4090,8 @@ export default function AdminPortal() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {paginated.map((cb) => (
-                    <>
-                      <tr key={cb.id} className="hover:bg-slate-50/50 transition-colors">
+                    <React.Fragment key={cb.id}>
+                      <tr className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-900">{cb.name}</td>
                         <td className="px-6 py-4">
                           <a href={`tel:${cb.phone}`} className="flex items-center gap-1.5 text-emerald-700 font-bold hover:text-emerald-900 transition-colors">
@@ -4137,7 +4137,7 @@ export default function AdminPortal() {
                       </tr>
                       {/* Inline notes expander */}
                       {openNotesId === cb.id && (
-                        <tr key={`${cb.id}-notes`} className="bg-slate-50/80">
+                        <tr className="bg-slate-50/80">
                           <td colSpan={6} className="px-6 pb-4 pt-0">
                             <div className="flex gap-3 items-start">
                               <textarea
@@ -4168,7 +4168,7 @@ export default function AdminPortal() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
