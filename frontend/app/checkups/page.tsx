@@ -5,10 +5,27 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Check, X, ChevronDown, ChevronUp, ArrowRight,
   Heart, Activity, Shield, Microscope, Users, Zap,
-  HeartPulse, Phone, Mail, User, Loader2, Star,
+  HeartPulse, Phone, Mail, User, Loader2, Star, AlertCircle,
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { supabase } from '@/lib/supabase';
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(true); return; }
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
@@ -315,17 +332,107 @@ function PackageCard({ pkg, onEnquire, index }: {
 /* ─── Enquire Modal ──────────────────────────────────────────────────────── */
 
 function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '' });
-  const [submitted, setSubmitted] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const fp = finalPrice(pkg);
   const category = getCategory(pkg.title);
   const meta = CATEGORY_META[category];
   const Icon = meta.icon;
 
+  const handlePayNow = async () => {
+    setIsPaying(true);
+    setPaymentError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setPaymentError('Session expired. Please log in again.');
+        setIsPaying(false);
+        return;
+      }
+
+      const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({
+          amount: fp,
+          booking_type: 'HEALTH_PACKAGE',
+          booking_id: pkg.id
+        })
+      });
+
+      const orderJson = await orderRes.json();
+      if (!orderRes.ok || !orderJson.razorpay_order_id) {
+        setPaymentError(orderJson.message || 'Payment initiation failed. Please try again.');
+        setIsPaying(false);
+        return;
+      }
+
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        setPaymentError('Failed to load payment gateway. Please check your connection and try again.');
+        setIsPaying(false);
+        return;
+      }
+      const rzp = new (window as any).Razorpay({
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
+        amount: orderJson.amount,
+        currency: orderJson.currency || 'INR',
+        order_id: orderJson.razorpay_order_id,
+        name: 'Know My Health',
+        description: pkg.title,
+        theme: { color: '#059669' },
+        handler: async (response: any) => {
+          try {
+            const { data: { session: verifySession } } = await supabase.auth.getSession();
+            const verifyRes = await fetch(`${BACKEND_URL}/api/v1/payments/verify`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${verifySession?.access_token ?? ''}`,
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            const verifyJson = await verifyRes.json();
+            if (verifyJson.success) {
+              setPaymentSuccess(true);
+            } else {
+              setPaymentError(verifyJson.message || 'Payment verification failed. Contact support.');
+            }
+          } catch {
+            setPaymentError('Payment verification failed due to a network error.');
+          } finally {
+            setIsPaying(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentError('Payment was cancelled. Please try again to complete your booking.');
+            setIsPaying(false);
+          }
+        }
+      });
+      rzp.open();
+    } catch {
+      setPaymentError('Network error. Please check your connection and try again.');
+      setIsPaying(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-emerald-950/60 backdrop-blur-sm" onClick={onClose} />
+        className="absolute inset-0 bg-emerald-950/60 backdrop-blur-sm" onClick={!isPaying ? onClose : undefined} />
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -344,9 +451,11 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
                 <p className={`text-xs font-bold ${meta.catText}`}>{category} · {pkg.included_tests.length} tests</p>
               </div>
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm">
-              <X size={15} className="text-slate-500" />
-            </button>
+            {!isPaying && (
+              <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors shadow-sm">
+                <X size={15} className="text-slate-500" />
+              </button>
+            )}
           </div>
           <h4 className="mt-4 text-sm font-semibold text-slate-700 capitalize">{pkg.title}</h4>
         </div>
@@ -365,40 +474,41 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
             </div>
           </div>
 
-          {!submitted ? (
-            <form onSubmit={(e) => { e.preventDefault(); setSubmitted(true); }} className="space-y-3">
-              {[
-                { icon: User,  key: 'name',  placeholder: 'Your full name *', type: 'text',  required: true },
-                { icon: Phone, key: 'phone', placeholder: 'Phone number *',   type: 'tel',   required: true },
-                { icon: Mail,  key: 'email', placeholder: 'Email (optional)',  type: 'email', required: false },
-              ].map(({ icon: FieldIcon, key, placeholder, type, required }) => (
-                <div key={key} className="relative">
-                  <FieldIcon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input type={type} required={required} placeholder={placeholder}
-                    value={(form as any)[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 placeholder:text-slate-400" />
-                </div>
-              ))}
-              <button type="submit"
-                className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-900 text-white hover:bg-emerald-800 flex items-center justify-center gap-2 group transition-colors mt-1">
-                Request Callback <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-              </button>
-              <p className="text-xs text-center text-slate-400">Our health advisor will call you within 30 minutes.</p>
-            </form>
-          ) : (
+          {paymentSuccess ? (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center py-4">
               <div className={`w-16 h-16 rounded-full ${meta.checkBg} flex items-center justify-center mx-auto mb-4`}>
                 <Check size={32} className={meta.checkText} strokeWidth={2.5} />
               </div>
-              <h4 className="font-extrabold text-slate-900 text-lg mb-2">Request Sent!</h4>
+              <h4 className="font-extrabold text-slate-900 text-lg mb-2">Payment Successful!</h4>
               <p className="text-sm text-slate-500 leading-relaxed capitalize">
-                We'll call you shortly about <strong className="text-emerald-900">{pkg.title}</strong>.
+                Your booking for <strong className="text-emerald-900">{pkg.title}</strong> is confirmed. Our team will contact you shortly.
               </p>
               <button onClick={onClose}
                 className="mt-6 px-8 py-2.5 rounded-xl font-bold text-sm text-white bg-emerald-900 hover:bg-emerald-800 transition-colors">
                 Done
               </button>
             </motion.div>
+          ) : (
+            <div className="space-y-4">
+              {paymentError && (
+                <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
+                  {paymentError}
+                </motion.div>
+              )}
+              <button
+                onClick={handlePayNow}
+                disabled={isPaying}
+                className="w-full py-3.5 rounded-2xl font-bold text-sm bg-emerald-900 text-white hover:bg-emerald-800 flex items-center justify-center gap-2 group transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isPaying
+                  ? <><Loader2 size={16} className="animate-spin" /> Processing...</>
+                  : <>Pay ₹{fp.toLocaleString('en-IN')} & Book <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" /></>
+                }
+              </button>
+              <p className="text-xs text-center text-slate-400">Secure payment powered by Razorpay. Our team will confirm your slot shortly.</p>
+            </div>
           )}
         </div>
       </motion.div>
