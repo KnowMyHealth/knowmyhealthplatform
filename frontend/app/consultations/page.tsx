@@ -47,8 +47,6 @@ interface Doctor {
 
   name: string;
   city: string;
-  rating: number;
-  reviews: number;
   image: string;
   nextAvailable: string;
 }
@@ -384,8 +382,6 @@ export default function ConsultationsPage() {
             name: `Dr. ${doc.first_name} ${doc.last_name}`,
             image: doc.avatar_url || `https://picsum.photos/seed/doc${index + 10}/200/200`,
             city: 'Virtual / Clinic',
-            rating: 4.8 + (stableHash(doc.id) % 20) / 100,
-            reviews: 50 + (stableHash(doc.id + 'r') % 200),
             nextAvailable: doc.is_available ? 'Available Now' : 'Check Schedule',
             video_consultation_enabled: doc.video_consultation_enabled !== undefined ? doc.video_consultation_enabled : true,
             offline_consultation_enabled: doc.offline_consultation_enabled ?? false,
@@ -875,9 +871,6 @@ export default function ConsultationsPage() {
                           <div>
                             <h3 className="text-xl font-black text-emerald-950 truncate group-hover:text-emerald-700 transition-colors">{doctor.name}</h3>
                             <p className="text-emerald-600 font-bold text-sm mb-2">{doctor.specialization}</p>
-                          </div>
-                          <div className="bg-amber-50 text-amber-700 font-bold text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0">
-                            <Star size={12} className="fill-amber-500 text-amber-500" /> {doctor.rating.toFixed(1)}
                           </div>
                         </div>
                         <div className="flex flex-wrap gap-2 mt-1">
