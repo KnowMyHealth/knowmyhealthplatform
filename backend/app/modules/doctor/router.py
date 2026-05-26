@@ -26,6 +26,8 @@ from app.modules.doctor.dependencies import get_doctors_service
 from app.utils.pagination import PaginationParams
 from app.modules.doctor.schemas import SetAvailabilityRequest, AvailabilitySchema
 from app.modules.doctor.schemas import DoctorRevenueAnalyticsResponse
+from app.modules.doctor.schemas import DoctorDashboardMetricsResponse
+
 
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
 
@@ -290,4 +292,25 @@ async def get_doctor_revenue_analytics(
     return ApiResponse.success(
         data=analytics_data,
         message="Revenue metrics compiled successfully."
+    )
+
+
+@router.get(
+    "/me/dashboard-metrics",
+    response_model=DoctorDashboardMetricsResponse,
+    summary="Get Doctor Dashboard KPI Metrics",
+    description="Returns aggregate counts (Total Patients, Today's Consults, Earnings, Total Consults) with MoM and DoD percentage/absolute changes."
+)
+@limiter.limit("20/minute")
+async def get_doctor_dashboard_metrics(
+    request: Request,
+    current_user = Depends(RequireRole([Role.DOCTOR])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    metrics = await service.get_doctor_dashboard_metrics(db, UUID(str(current_user.id)))
+    
+    return ApiResponse.success(
+        data=metrics,
+        message="Dashboard KPI metrics retrieved successfully."
     )

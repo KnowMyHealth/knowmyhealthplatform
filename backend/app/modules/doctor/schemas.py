@@ -134,3 +134,16 @@ class DoctorRevenueAnalyticsResponse(BaseModel):
     total_earnings: Decimal
     monthly_earnings: list[MonthlyEarningSchema]
     recent_transactions: list[DoctorTransactionSchema]
+
+
+class DoctorMetricStatSchema(BaseModel):
+    value: float
+    percentage_change: float
+    absolute_change: float
+    is_positive: bool
+
+class DoctorDashboardMetricsResponse(BaseModel):
+    total_patients: DoctorMetricStatSchema
+    todays_consults: DoctorMetricStatSchema
+    monthly_earnings: DoctorMetricStatSchema
+    total_consultations: DoctorMetricStatSchema

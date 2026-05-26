@@ -405,3 +405,101 @@ class DoctorsService:
             "monthly_earnings": monthly_earnings_list,
             "recent_transactions": recent_transactions
         }
+    
+
+    async def get_doctor_dashboard_metrics(self, db: AsyncSession, doctor_user_id: UUID) -> dict:
+        """
+        Calculates KPIs for the doctor dashboard including total counts, 
+        monthly earnings, and period-over-period percentage/absolute changes.
+        """
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import select, func
+        from app.modules.consultation.models import Consultation
+        from app.modules.payment.models import Payment, PaymentStatus, BookingType
+
+        doctor = await self.get_doctor_by_user_id(db, doctor_user_id)
+
+        now = datetime.now(timezone.utc)
+        
+        # Time boundaries for Month-over-Month
+        curr_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        prev_month_end = curr_month_start - timedelta(microseconds=1)
+        prev_month_start = prev_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Time boundaries for Day-over-Day (Today's Consults)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_start = today_start - timedelta(days=1)
+
+        def calc_change(curr, prev):
+            abs_change = float(curr) - float(prev)
+            if float(prev) == 0:
+                perc = 100.0 if curr > 0 else 0.0
+            else:
+                perc = (abs_change / float(prev)) * 100.0
+            return round(perc, 1), round(abs_change, 2), abs_change >= 0
+
+        # ---------------------------------------------------------
+        # 1. Total Patients (Unique patients ever seen by doctor)
+        # ---------------------------------------------------------
+        tot_pat = (await db.execute(select(func.count(func.distinct(Consultation.patient_user_id))).where(Consultation.doctor_id == doctor.id))).scalar() or 0
+        prev_tot_pat = (await db.execute(select(func.count(func.distinct(Consultation.patient_user_id))).where(Consultation.doctor_id == doctor.id, Consultation.created_at < curr_month_start))).scalar() or 0
+        
+        pat_perc, pat_abs, pat_pos = calc_change(tot_pat, prev_tot_pat)
+
+        # ---------------------------------------------------------
+        # 2. Today's Consults (Day over Day)
+        # ---------------------------------------------------------
+        todays_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id, Consultation.scheduled_at >= today_start, Consultation.scheduled_at < today_start + timedelta(days=1)))).scalar() or 0
+        yesterdays_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id, Consultation.scheduled_at >= yesterday_start, Consultation.scheduled_at < today_start))).scalar() or 0
+        
+        tod_perc, tod_abs, tod_pos = calc_change(todays_cons, yesterdays_cons)
+
+        # ---------------------------------------------------------
+        # 3. Monthly Earnings (Current Month vs Previous Month)
+        # ---------------------------------------------------------
+        earn_base_stmt = select(func.sum(Payment.amount)).join(Consultation, Payment.booking_id == Consultation.id).where(
+            Consultation.doctor_id == doctor.id, 
+            Payment.booking_type == BookingType.CONSULTATION, 
+            Payment.status == PaymentStatus.SUCCESS
+        )
+        
+        curr_earn = (await db.execute(earn_base_stmt.where(Payment.created_at >= curr_month_start))).scalar() or 0.0
+        prev_earn = (await db.execute(earn_base_stmt.where(Payment.created_at >= prev_month_start, Payment.created_at < curr_month_start))).scalar() or 0.0
+        
+        earn_perc, earn_abs, earn_pos = calc_change(curr_earn, prev_earn)
+
+        # ---------------------------------------------------------
+        # 4. Total Consultations (Lifetime volume growth)
+        # ---------------------------------------------------------
+        tot_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id))).scalar() or 0
+        prev_tot_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id, Consultation.created_at < curr_month_start))).scalar() or 0
+        
+        cons_perc, cons_abs, cons_pos = calc_change(tot_cons, prev_tot_cons)
+
+        # Build final dictionary
+        return {
+            "total_patients": {
+                "value": float(tot_pat),
+                "percentage_change": pat_perc,
+                "absolute_change": pat_abs,
+                "is_positive": pat_pos
+            },
+            "todays_consults": {
+                "value": float(todays_cons),
+                "percentage_change": tod_perc,
+                "absolute_change": tod_abs,
+                "is_positive": tod_pos
+            },
+            "monthly_earnings": {
+                "value": float(curr_earn),
+                "percentage_change": earn_perc,
+                "absolute_change": earn_abs,
+                "is_positive": earn_pos
+            },
+            "total_consultations": {
+                "value": float(tot_cons),
+                "percentage_change": cons_perc,
+                "absolute_change": cons_abs,
+                "is_positive": cons_pos
+            }
+        }
