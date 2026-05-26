@@ -70,7 +70,7 @@ const stats = [
   { title: 'Total Patients', value: '1,248', trend: '+12%', isUp: true },
   { title: "Today's Consults", value: '14', trend: '+2', isUp: true },
   { title: 'Monthly Earnings', value: '₹1,45,000', trend: '+8.5%', isUp: true },
-  { title: 'Patient Rating', value: '4.9/5', trend: 'Top 5%', isUp: true },
+  { title: 'Total Consultations', value: '3,842', trend: '+5%', isUp: true },
 ];
 
 const recentPatients = [
