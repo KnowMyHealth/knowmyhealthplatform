@@ -230,6 +230,9 @@ export default function AdminPortal() {
   const [labBookingTotalPages, setLabBookingTotalPages] = useState(1);
   const [labBookingStatusFilter, setLabBookingStatusFilter] = useState<'all' | 'PENDING' | 'PAID' | 'CANCELLED' | 'COMPLETED'>('all');
   const labBookingsPerPage = 10;
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
+  const [patientBookings, setPatientBookings] = useState<any[]>([]);
+  const [isLoadingPatientBookings, setIsLoadingPatientBookings] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
   const [testToDelete, setTestToDelete] = useState<string | null>(null);
   const [editingTest, setEditingTest] = useState<LabTest | null>(null);
@@ -568,6 +571,23 @@ export default function AdminPortal() {
       }
     } catch (e) { console.error('Failed to fetch lab bookings', e); }
     finally { setIsLoadingLabBookings(false); }
+  };
+
+  const fetchPatientBookings = async (patientUserId: string) => {
+    setIsLoadingPatientBookings(true);
+    setPatientBookings([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/bookings/patient/${patientUserId}?page=1&limit=50`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPatientBookings(Array.isArray(json.data) ? json.data : (json.data?.items ?? []));
+      }
+    } catch (e) { console.error('Failed to fetch patient bookings', e); }
+    finally { setIsLoadingPatientBookings(false); }
   };
 
   const executeDeleteTest = async (id: string) => {
@@ -2690,86 +2710,220 @@ export default function AdminPortal() {
     </motion.div>
   );
 
-  const renderTestBookings = () => (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
-      <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
-            <CalendarDays className="text-emerald-600" size={22} />
-            Test Bookings
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">All patient lab test bookings.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(['all', 'PENDING', 'PAID', 'CANCELLED', 'COMPLETED'] as const).map(s => (
-            <button key={s} onClick={() => { setLabBookingStatusFilter(s); setLabBookingPage(1); fetchLabBookings(1, s); }}
-              className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${labBookingStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
-              {s === 'all' ? 'All' : s}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex-1 flex flex-col p-6 sm:p-8">
-        {isLoadingLabBookings ? (
-          <div className="flex justify-center py-20 flex-1"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border border-slate-100 flex-1">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
-                  <th className="p-4">Patient</th>
-                  <th className="p-4">Test</th>
-                  <th className="p-4">Lab</th>
-                  <th className="p-4">Scheduled Date</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Booked On</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {labBookings.length === 0 ? (
-                  <tr><td colSpan={6} className="p-8 text-center text-slate-400">No bookings found.</td></tr>
-                ) : (
-                  labBookings.map((booking: any) => {
-                    const statusColors: Record<string, string> = {
-                      PENDING: 'bg-amber-100 text-amber-700',
-                      PAID: 'bg-emerald-100 text-emerald-700',
-                      CANCELLED: 'bg-red-100 text-red-700',
-                      COMPLETED: 'bg-blue-100 text-blue-700',
-                    };
-                    return (
-                      <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4 text-sm text-slate-600 font-medium">{booking.patient_user_id?.slice(0, 8)}…</td>
-                        <td className="p-4">
-                          <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
-                        </td>
-                        <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
-                        <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
-                        <td className="p-4">
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
-                            {booking.status}
-                          </span>
-                        </td>
-                        <td className="p-4 text-xs text-slate-400">{new Date(booking.created_at).toLocaleDateString()}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {labBookingTotalPages > 1 && (
-          <div className="flex items-center justify-between pt-4">
-            <p className="text-xs text-slate-500 font-bold">Page {labBookingPage} of {labBookingTotalPages}</p>
-            <div className="flex gap-2">
-              <button onClick={() => { const p = Math.max(1, labBookingPage - 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16} /></button>
-              <button onClick={() => { const p = Math.min(labBookingTotalPages, labBookingPage + 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === labBookingTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16} /></button>
+  const renderTestBookings = () => {
+    const statusColors: Record<string, string> = {
+      PENDING: 'bg-amber-100 text-amber-700',
+      PAID: 'bg-emerald-100 text-emerald-700',
+      CANCELLED: 'bg-red-100 text-red-700',
+      COMPLETED: 'bg-blue-100 text-blue-700',
+    };
+    return (
+      <>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
+          <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                <CalendarDays className="text-emerald-600" size={22} />
+                Test Bookings
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">Click any row to see full booking & patient details.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'PENDING', 'PAID', 'CANCELLED', 'COMPLETED'] as const).map(s => (
+                <button key={s} onClick={() => { setLabBookingStatusFilter(s); setLabBookingPage(1); fetchLabBookings(1, s); }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${labBookingStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
             </div>
           </div>
-        )}
-      </div>
-    </motion.div>
-  );
+          <div className="flex-1 flex flex-col p-6 sm:p-8">
+            {isLoadingLabBookings ? (
+              <div className="flex justify-center py-20 flex-1"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-100 flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                      <th className="p-4">Patient</th>
+                      <th className="p-4">Test</th>
+                      <th className="p-4">Lab</th>
+                      <th className="p-4">Scheduled Date</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Booked On</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {labBookings.length === 0 ? (
+                      <tr><td colSpan={6} className="p-8 text-center text-slate-400">No bookings found.</td></tr>
+                    ) : (
+                      labBookings.map((booking: any) => (
+                        <tr key={booking.id}
+                          onClick={() => { setSelectedBooking(booking); fetchPatientBookings(booking.patient_user_id); }}
+                          className="hover:bg-emerald-50/40 cursor-pointer transition-colors">
+                          <td className="p-4">
+                            {booking.patient_user ? (
+                              <>
+                                <p className="text-sm font-bold text-slate-900">{booking.patient_user.patient_profile?.first_name} {booking.patient_user.patient_profile?.last_name}</p>
+                                <p className="text-xs text-slate-400">{booking.patient_user.email}</p>
+                              </>
+                            ) : (
+                              <span className="text-sm text-slate-400 font-mono">{booking.patient_user_id?.slice(0, 8)}…</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
+                          </td>
+                          <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
+                          <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                          <td className="p-4">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                              {booking.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-xs text-slate-400">{new Date(booking.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {labBookingTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-xs text-slate-500 font-bold">Page {labBookingPage} of {labBookingTotalPages}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { const p = Math.max(1, labBookingPage - 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16} /></button>
+                  <button onClick={() => { const p = Math.min(labBookingTotalPages, labBookingPage + 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === labBookingTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Booking Detail Panel */}
+        <AnimatePresence>
+          {selectedBooking && (
+            <div className="fixed inset-0 z-[110] flex justify-end">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setSelectedBooking(null)}
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+              <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col overflow-y-auto">
+
+                {/* Header */}
+                <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/60 shrink-0">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Booking Detail</p>
+                    <h3 className="text-lg font-extrabold text-slate-900">{selectedBooking.lab_test?.name ?? 'Lab Test'}</h3>
+                    <p className="text-sm text-slate-500">{selectedBooking.lab_test?.organization ?? '—'}</p>
+                  </div>
+                  <button onClick={() => setSelectedBooking(null)} className="p-2 rounded-xl hover:bg-slate-200 text-slate-500 transition-colors shrink-0"><X size={20} /></button>
+                </div>
+
+                <div className="flex-1 p-6 space-y-6">
+                  {/* Status */}
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${statusColors[selectedBooking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {selectedBooking.status}
+                    </span>
+                    <span className="text-xs text-slate-400">Booking ID: <span className="font-mono">{selectedBooking.id?.slice(0, 12)}…</span></span>
+                  </div>
+
+                  {/* Patient Info */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Patient</p>
+                    {selectedBooking.patient_user ? (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                            <span className="text-emerald-700 font-bold text-sm">
+                              {selectedBooking.patient_user.patient_profile?.first_name?.[0]}{selectedBooking.patient_user.patient_profile?.last_name?.[0]}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900">{selectedBooking.patient_user.patient_profile?.first_name} {selectedBooking.patient_user.patient_profile?.last_name}</p>
+                            <p className="text-xs text-slate-500">{selectedBooking.patient_user.email}</p>
+                          </div>
+                        </div>
+                        {selectedBooking.patient_user.patient_profile?.phone_number && (
+                          <div className="flex items-center gap-2 text-sm text-slate-600">
+                            <Phone size={14} className="text-slate-400" />
+                            {selectedBooking.patient_user.patient_profile.phone_number}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-400 font-mono">{selectedBooking.patient_user_id}</p>
+                    )}
+                  </div>
+
+                  {/* Booking Info */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Booking Info</p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Scheduled Date</span>
+                        <span className="font-bold text-slate-900">{selectedBooking.scheduled_date ?? '—'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Booked On</span>
+                        <span className="font-semibold text-slate-700">{new Date(selectedBooking.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Clinic Info */}
+                  {(selectedBooking.lab_test?.clinic_address || selectedBooking.lab_test?.clinic_open_time) && (
+                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinic</p>
+                      <div className="space-y-2 text-sm">
+                        {selectedBooking.lab_test?.clinic_address && (
+                          <div className="flex gap-2 text-slate-600">
+                            <MapPin size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                            {selectedBooking.lab_test.clinic_address}
+                          </div>
+                        )}
+                        {selectedBooking.lab_test?.clinic_open_time && selectedBooking.lab_test?.clinic_close_time && (
+                          <div className="flex gap-2 text-slate-600">
+                            <Clock size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                            {selectedBooking.lab_test.clinic_open_time.slice(0, 5)} – {selectedBooking.lab_test.clinic_close_time.slice(0, 5)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* All bookings by this patient */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">All Bookings by This Patient</p>
+                    {isLoadingPatientBookings ? (
+                      <div className="flex justify-center py-6"><Loader2 className="animate-spin text-emerald-500" size={24} /></div>
+                    ) : patientBookings.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-4">No other bookings found.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {patientBookings.map((b: any) => (
+                          <div key={b.id} onClick={() => { setSelectedBooking(b); fetchPatientBookings(b.patient_user_id); }}
+                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${b.id === selectedBooking.id ? 'border-emerald-300 bg-emerald-50' : 'border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50'}`}>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{b.lab_test?.name ?? '—'}</p>
+                              <p className="text-xs text-slate-400">{b.scheduled_date ?? '—'}</p>
+                            </div>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${statusColors[b.status] ?? 'bg-slate-100 text-slate-600'}`}>{b.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  };
 
   const renderLabs = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden">
