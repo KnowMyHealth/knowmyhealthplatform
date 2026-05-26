@@ -161,6 +161,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   { icon: Stethoscope, label: 'Doctors', id: 'doctors' },
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
+  { icon: CalendarDays, label: 'Test Bookings', id: 'test-bookings' },
   { icon: HeartPulse, label: 'Health Packages', id: 'health-packages' },
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
   { icon: Handshake, label: 'Partners', id: 'partners' },
@@ -338,6 +339,9 @@ export default function AdminPortal() {
     }
     if (activeTab === 'callbacks') {
       fetchCallbacks();
+    }
+    if (activeTab === 'test-bookings') {
+      fetchLabBookings(1, labBookingStatusFilter);
     }
     if (activeTab === 'health-packages') {
       fetchHealthPackages();
@@ -2676,6 +2680,87 @@ export default function AdminPortal() {
     </motion.div>
   );
 
+  const renderTestBookings = () => (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
+      <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+        <div>
+          <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+            <CalendarDays className="text-emerald-600" size={22} />
+            Test Bookings
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">All patient lab test bookings.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(['all', 'PENDING', 'PAID', 'CANCELLED', 'COMPLETED'] as const).map(s => (
+            <button key={s} onClick={() => { setLabBookingStatusFilter(s); setLabBookingPage(1); fetchLabBookings(1, s); }}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${labBookingStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
+              {s === 'all' ? 'All' : s}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col p-6 sm:p-8">
+        {isLoadingLabBookings ? (
+          <div className="flex justify-center py-20 flex-1"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-100 flex-1">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                  <th className="p-4">Patient</th>
+                  <th className="p-4">Test</th>
+                  <th className="p-4">Lab</th>
+                  <th className="p-4">Scheduled Date</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Booked On</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {labBookings.length === 0 ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-slate-400">No bookings found.</td></tr>
+                ) : (
+                  labBookings.map((booking: any) => {
+                    const statusColors: Record<string, string> = {
+                      PENDING: 'bg-amber-100 text-amber-700',
+                      PAID: 'bg-emerald-100 text-emerald-700',
+                      CANCELLED: 'bg-red-100 text-red-700',
+                      COMPLETED: 'bg-blue-100 text-blue-700',
+                    };
+                    return (
+                      <tr key={booking.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 text-sm text-slate-600 font-medium">{booking.patient_user_id?.slice(0, 8)}…</td>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
+                        </td>
+                        <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
+                        <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                        <td className="p-4">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                            {booking.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs text-slate-400">{new Date(booking.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {labBookingTotalPages > 1 && (
+          <div className="flex items-center justify-between pt-4">
+            <p className="text-xs text-slate-500 font-bold">Page {labBookingPage} of {labBookingTotalPages}</p>
+            <div className="flex gap-2">
+              <button onClick={() => { const p = Math.max(1, labBookingPage - 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16} /></button>
+              <button onClick={() => { const p = Math.min(labBookingTotalPages, labBookingPage + 1); setLabBookingPage(p); fetchLabBookings(p, labBookingStatusFilter); }} disabled={labBookingPage === labBookingTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16} /></button>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+
   const renderLabs = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden">
       <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
@@ -3618,6 +3703,7 @@ export default function AdminPortal() {
                   {activeTab === 'dashboard' && renderDashboard()}
                   {activeTab === 'doctors' && renderDoctors()}
                   {activeTab === 'lab-tests' && renderLabTests()}
+                  {activeTab === 'test-bookings' && renderTestBookings()}
                   {activeTab === 'health-packages' && renderHealthPackages()}
                   {activeTab === 'coupons' && renderCoupons()}
                   {activeTab === 'partners' && renderPartners()}
