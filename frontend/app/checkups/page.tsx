@@ -10,6 +10,23 @@ import {
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { supabase } from '@/lib/supabase';
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(true); return; }
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
 interface HealthPackage {
@@ -323,14 +340,6 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
   const meta = CATEGORY_META[category];
   const Icon = meta.icon;
 
-  useEffect(() => {
-    if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) return;
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.head.appendChild(script);
-  }, []);
-
   const handlePayNow = async () => {
     setIsPaying(true);
     setPaymentError(null);
@@ -364,6 +373,12 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
         return;
       }
 
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        setPaymentError('Failed to load payment gateway. Please check your connection and try again.');
+        setIsPaying(false);
+        return;
+      }
       const rzp = new (window as any).Razorpay({
         key: 'rzp_test_o9nYggdmmCOUap',
         amount: orderJson.amount,

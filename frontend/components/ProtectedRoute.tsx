@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 
 export default function ProtectedRoute({ children, requiredRole }: { children: ReactNode, requiredRole?: string }) {
-  const { isLoggedIn, userRole, isLoading } = useAuth();
+  const { isLoggedIn, userRole, isLoading, openAuthModal } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -15,6 +15,7 @@ export default function ProtectedRoute({ children, requiredRole }: { children: R
   useEffect(() => {
     if (!mounted || isLoading) return;
     if (!isLoggedIn) {
+      openAuthModal();
       router.push('/');
     } else if (requiredRole && userRole !== requiredRole) {
       if (userRole === 'ADMIN') router.push('/admin');
@@ -22,7 +23,7 @@ export default function ProtectedRoute({ children, requiredRole }: { children: R
       else if (userRole === 'DOCTOR') router.push('/doctor');
       else router.push('/');
     }
-  }, [mounted, isLoading, isLoggedIn, userRole, requiredRole, router]);
+  }, [mounted, isLoading, isLoggedIn, userRole, requiredRole, router, openAuthModal]);
 
   if (!mounted || isLoading) {
     return (

@@ -14,6 +14,23 @@ import Image from 'next/image';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { supabase } from '@/lib/supabase';
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(true); return; }
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
+
 interface Doctor {
   id: string;
   first_name: string;
@@ -300,13 +317,6 @@ export default function ConsultationsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) return;
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    document.head.appendChild(script);
-  }, []);
 
   const getJoinStatus = (scheduledAt: string) => {
     const sTime = new Date(scheduledAt).getTime();
@@ -542,6 +552,12 @@ export default function ConsultationsPage() {
       }
 
       // Step 3: Open Razorpay checkout
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        setPaymentError('Failed to load payment gateway. Please check your connection and try again.');
+        setIsBooking(false);
+        return;
+      }
       const rzp = new (window as any).Razorpay({
         key: 'rzp_test_o9nYggdmmCOUap',
         amount: orderJson.amount,

@@ -12,12 +12,12 @@ import AuthModal from './AuthModal';
 import { useAuth } from '@/lib/AuthContext';
 
 const navLinks = [
-  { name: 'Home', href: '/' },
-  { name: 'Diagnostics', href: '/diagnostics' },
-  { name: 'Checkups', href: '/checkups' },
-  { name: 'Prescription', href: '/prescription' },
-  { name: 'Complaints', href: '/complaints' },
-  { name: 'Insights & Blog', href: '/insights' },
+  { name: 'Home', href: '/', public: true },
+  { name: 'Diagnostics', href: '/diagnostics', public: false },
+  { name: 'Checkups', href: '/checkups', public: false },
+  { name: 'Prescription', href: '/prescription', public: false },
+  { name: 'Complaints', href: '/complaints', public: false },
+  { name: 'Insights & Blog', href: '/insights', public: true },
 ];
 
 export default function Navbar() {
@@ -52,6 +52,18 @@ export default function Navbar() {
             <nav className="hidden lg:flex items-center space-x-1">
               {(!isLoggedIn || userRole === 'PATIENT') && navLinks.map((link) => {
                 const isActive = pathname === link.href;
+                const requiresAuth = !link.public;
+                if (requiresAuth && !isLoggedIn) {
+                  return (
+                    <button
+                      key={link.name}
+                      onClick={openAuthModal}
+                      className="relative px-4 py-2 text-sm font-medium transition-colors hover:text-emerald-600 text-emerald-900/80"
+                    >
+                      {link.name}
+                    </button>
+                  );
+                }
                 return (
                   <Link
                     key={link.name}
@@ -185,18 +197,32 @@ export default function Navbar() {
                 className="lg:hidden mt-2 p-4 bg-white/90 backdrop-blur-xl border border-white/50 rounded-3xl shadow-xl"
               >
                 <nav className="flex flex-col space-y-2">
-                  {(!isLoggedIn || userRole === 'PATIENT') && navLinks.map((link) => (
-                    <Link
-                      key={link.name}
-                      href={link.href}
-                      onClick={() => setIsOpen(false)}
-                      className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                        pathname === link.href ? 'bg-emerald-100 text-emerald-900' : 'text-emerald-900/80 hover:bg-emerald-50'
-                      }`}
-                    >
-                      {link.name}
-                    </Link>
-                  ))}
+                  {(!isLoggedIn || userRole === 'PATIENT') && navLinks.map((link) => {
+                    const requiresAuth = !link.public;
+                    if (requiresAuth && !isLoggedIn) {
+                      return (
+                        <button
+                          key={link.name}
+                          onClick={() => { setIsOpen(false); openAuthModal(); }}
+                          className="px-4 py-3 rounded-xl text-sm font-medium transition-colors text-left text-emerald-900/80 hover:bg-emerald-50"
+                        >
+                          {link.name}
+                        </button>
+                      );
+                    }
+                    return (
+                      <Link
+                        key={link.name}
+                        href={link.href}
+                        onClick={() => setIsOpen(false)}
+                        className={`px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                          pathname === link.href ? 'bg-emerald-100 text-emerald-900' : 'text-emerald-900/80 hover:bg-emerald-50'
+                        }`}
+                      >
+                        {link.name}
+                      </Link>
+                    );
+                  })}
 
                   <div className="pt-4 mt-2 border-t border-emerald-100/50">
                     {isLoggedIn ? (
