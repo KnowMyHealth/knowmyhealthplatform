@@ -2120,7 +2120,7 @@ export default function AdminPortal() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Discount (%)</label>
-                    <input required type="number" min="0" max="100" step="0.01" value={testForm.discount_percentage} onChange={e => setTestForm({...testForm, discount_percentage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                    <input required type="number" min="0" max="100" step="0.01" value={testForm.discount_percentage} onChange={e => setTestForm({...testForm, discount_percentage: Math.min(100, parseFloat(e.target.value) || 0).toString()})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
                   </div>
                 </div>
                 <div>
@@ -2241,7 +2241,7 @@ export default function AdminPortal() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Discount (%)</label>
-                    <input required type="number" min="0" max="100" step="0.01" value={editTestForm.discount_percentage} onChange={e => setEditTestForm({...editTestForm, discount_percentage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
+                    <input required type="number" min="0" max="100" step="0.01" value={editTestForm.discount_percentage} onChange={e => setEditTestForm({...editTestForm, discount_percentage: Math.min(100, parseFloat(e.target.value) || 0).toString()})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none" />
                   </div>
                 </div>
                 <div>
@@ -2425,7 +2425,7 @@ export default function AdminPortal() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Discount (%)</label>
-                    <input required type="number" min="1" max="100" step="0.01" value={couponForm.discount_percentage} onChange={e => setCouponForm({...couponForm, discount_percentage: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none font-bold text-emerald-600" />
+                    <input required type="number" min="1" max="100" step="0.01" value={couponForm.discount_percentage} onChange={e => setCouponForm({...couponForm, discount_percentage: Math.min(100, parseFloat(e.target.value) || 0).toString()})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none font-bold text-emerald-600" />
                   </div>
                 </div>
                 
@@ -3371,8 +3371,18 @@ export default function AdminPortal() {
                   ].map(({ key, label, placeholder, type }) => (
                     <div key={key}>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
-                      <input type={type} placeholder={placeholder} value={(hpForm as any)[key]}
-                        onChange={e => setHpForm(p => ({ ...p, [key]: e.target.value }))}
+                      <input
+                        type={type}
+                        placeholder={placeholder}
+                        value={(hpForm as any)[key]}
+                        min={type === 'number' ? 0 : undefined}
+                        max={key === 'discount_percentage' ? 100 : undefined}
+                        onChange={e => {
+                          const val = key === 'discount_percentage'
+                            ? Math.min(100, parseFloat(e.target.value) || 0).toString()
+                            : e.target.value;
+                          setHpForm(p => ({ ...p, [key]: val }));
+                        }}
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
                     </div>
                   ))}
