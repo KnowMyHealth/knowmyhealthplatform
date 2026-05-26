@@ -314,6 +314,23 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   };
 
+  const handleGoogleAuth = async () => {
+    setIsLoading(true);
+    setAuthError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+    if (error) {
+      setAuthError(error.message || 'Google sign-in failed. Please try again.');
+      setIsLoading(false);
+    }
+    // On success Supabase redirects — loading stays true until page navigates
+  };
+
   const handleForgotPassword = async () => {
     if (isLoading) return;
     setForgotError(null);
@@ -501,7 +518,33 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                       {isLoading ? <Loader2 size={24} className="animate-spin" /> : isSignIn ? 'Sign In' : 'Create Account'}
                     </button>
 
-                    <div className="mt-8 pt-6 border-t border-gray-100 text-center flex flex-col space-y-6">
+                    {/* Divider */}
+                    <div className="flex items-center gap-4 mt-6">
+                      <div className="flex-1 h-px bg-gray-100" />
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">or</span>
+                      <div className="flex-1 h-px bg-gray-100" />
+                    </div>
+
+                    {/* Google Button */}
+                    <button
+                      onClick={handleGoogleAuth}
+                      disabled={isLoading}
+                      className="w-full py-3.5 bg-white border border-gray-200 rounded-2xl font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98] flex justify-center items-center gap-3 shadow-sm disabled:opacity-60 mt-1"
+                    >
+                      {isLoading ? <Loader2 size={20} className="animate-spin text-gray-400" /> : (
+                        <>
+                          <svg width="20" height="20" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M47.532 24.552c0-1.636-.132-3.208-.382-4.728H24.48v9.02h12.958c-.558 2.942-2.252 5.44-4.8 7.118v5.918h7.776c4.546-4.186 7.118-10.348 7.118-17.328z" fill="#4285F4"/>
+                            <path d="M24.48 48c6.49 0 11.936-2.152 15.914-5.832l-7.776-5.918c-2.152 1.44-4.904 2.29-8.138 2.29-6.258 0-11.558-4.228-13.452-9.908H3.02v6.108C6.98 42.938 15.164 48 24.48 48z" fill="#34A853"/>
+                            <path d="M11.028 28.632A14.47 14.47 0 0 1 10.21 24c0-1.608.276-3.168.818-4.632V13.26H3.02A23.952 23.952 0 0 0 .48 24c0 3.876.928 7.546 2.54 10.74l8.008-6.108z" fill="#FBBC05"/>
+                            <path d="M24.48 9.556c3.524 0 6.688 1.212 9.174 3.594l6.876-6.876C36.41 2.392 30.968 0 24.48 0 15.164 0 6.98 5.062 3.02 13.26l8.008 6.108c1.894-5.68 7.194-9.812 13.452-9.812z" fill="#EA4335"/>
+                          </svg>
+                          {isSignIn ? 'Sign in with Google' : 'Sign up with Google'}
+                        </>
+                      )}
+                    </button>
+
+                    <div className="mt-6 pt-6 border-t border-gray-100 text-center flex flex-col space-y-6">
                       <p className="text-gray-500 font-medium">
                         {isSignIn ? "Don't have an account? " : "Already have an account? "}
                         <button 
