@@ -170,7 +170,7 @@ const navItems = [
 export default function AdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [adminName, setAdminName] = useState<string>('');
+  const [adminName, setAdminName] = useState<string>('Admin');
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { logout } = useAuth();
@@ -3230,7 +3230,7 @@ export default function AdminPortal() {
               <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
                   <p className="text-sm font-bold text-slate-900 leading-none">
-                    {adminName ? adminName : <span className="opacity-50 text-xs font-normal">Loading...</span>}
+                    {adminName}
                   </p>
                   <p className="text-xs text-slate-500 mt-1 font-medium">System Admin</p>
                 </div>
