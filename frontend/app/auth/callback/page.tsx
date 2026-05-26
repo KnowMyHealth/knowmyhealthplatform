@@ -9,27 +9,12 @@ export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const handleCallback = async () => {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
-      const errorParam = url.searchParams.get('error');
-
-      if (errorParam) {
-        router.replace('/');
-        return;
-      }
-
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) console.error('Code exchange failed', error);
-      }
-
-      // detectSessionInUrl: true will pick up hash tokens automatically.
-      // Either way, wait a tick for onAuthStateChange to fire, then route home.
-      router.replace('/');
-    };
-
-    handleCallback();
+    // detectSessionInUrl: true in supabase.ts auto-exchanges the ?code= using the
+    // PKCE verifier stored in localStorage. Don't call exchangeCodeForSession here —
+    // that would consume the verifier first and the auto-exchange would then fail.
+    // Just wait briefly for the auto-exchange + onAuthStateChange to fire, then go home.
+    const t = setTimeout(() => router.replace('/'), 500);
+    return () => clearTimeout(t);
   }, [router]);
 
   return (
