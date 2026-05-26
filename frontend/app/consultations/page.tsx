@@ -319,25 +319,27 @@ export default function ConsultationsPage() {
   const getJoinStatus = (scheduledAt: string) => {
     const sTime = new Date(scheduledAt).getTime();
     const cTime = now.getTime();
-    const startWindow = sTime - (5 * 60 * 1000); // 5 mins before
-    const endWindow = sTime + (15 * 60 * 1000); // 15 mins after
+    const startWindow = sTime - (5 * 60 * 1000);
+    const endWindow = sTime + (15 * 60 * 1000);
 
     if (cTime < startWindow) {
       const diffMins = Math.ceil((startWindow - cTime) / 60000);
       if (diffMins > 60) {
         const h = Math.floor(diffMins / 60);
         const m = diffMins % 60;
-        return { canJoin: false, label: `Join in ${h}h ${m}m` };
+        return { canJoin: false, isExpired: false, label: `Join in ${h}h ${m}m` };
       }
-      return { canJoin: false, label: `Join in ${diffMins}m` };
+      return { canJoin: false, isExpired: false, label: `Join in ${diffMins}m` };
     }
-    
+
     if (cTime > endWindow) {
-      return { canJoin: false, label: 'Expired' };
+      return { canJoin: false, isExpired: true, label: 'Expired' };
     }
-    
-    return { canJoin: true, label: 'Join Call' };
+
+    return { canJoin: true, isExpired: false, label: 'Join Call' };
   };
+
+  const isPastScheduled = (scheduledAt: string) => now.getTime() > new Date(scheduledAt).getTime();
 
   const fetchMyConsultations = async () => {
     try {
@@ -757,7 +759,7 @@ export default function ConsultationsPage() {
                 const docImage = doc?.image || 'https://picsum.photos/seed/generic/200/200';
                 const scheduledDate = new Date(consultation.scheduled_at);
                 
-                const { canJoin, label } = getJoinStatus(consultation.scheduled_at);
+                const { canJoin, isExpired, label } = getJoinStatus(consultation.scheduled_at);
                 
                 return (
                   <motion.div 
@@ -789,11 +791,18 @@ export default function ConsultationsPage() {
                       </div>
                     </div>
                     {consultation.consultation_type === 'OFFLINE' ? (
-                      <div className="w-full md:w-auto px-8 py-4 rounded-2xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
-                        <MapPin size={20} />
-                        <span>In-Clinic Visit</span>
-                      </div>
-                    ) : (
+                      isPastScheduled(consultation.scheduled_at) ? (
+                        <div className="w-full md:w-auto px-8 py-4 rounded-2xl font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-2">
+                          <CheckCircle2 size={20} />
+                          <span>Completed</span>
+                        </div>
+                      ) : (
+                        <div className="w-full md:w-auto px-8 py-4 rounded-2xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
+                          <MapPin size={20} />
+                          <span>In-Clinic Visit</span>
+                        </div>
+                      )
+                    ) : isExpired ? null : (
                       <button
                         onClick={() => handleJoinCall(consultation.id, docName)}
                         disabled={isJoiningId === consultation.id || !canJoin}

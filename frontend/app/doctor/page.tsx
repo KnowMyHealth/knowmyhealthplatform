@@ -385,6 +385,8 @@ export default function DoctorDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const isPastScheduled = (scheduledAt: string) => now.getTime() > new Date(scheduledAt).getTime();
+
   const getJoinStatus = (scheduledAt: string) => {
     const sTime = new Date(scheduledAt).getTime();
     const cTime = now.getTime();
@@ -893,9 +895,15 @@ export default function DoctorDashboard() {
                 <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                   {apt.status === 'SCHEDULED' && (
                     (apt as any).consultation_type === 'OFFLINE' ? (
-                      <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
-                        <MapPin size={18} /> In-Clinic Visit
-                      </span>
+                      isPastScheduled(apt.scheduled_at) ? (
+                        <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-2">
+                          <CheckCircle2 size={18} /> Completed
+                        </span>
+                      ) : (
+                        <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
+                          <MapPin size={18} /> In-Clinic Visit
+                        </span>
+                      )
                     ) : (
                     <button
                       onClick={() => handleJoinCall(apt.id, patientLabel)}
@@ -1044,9 +1052,15 @@ export default function DoctorDashboard() {
                     {apt.status === 'SCHEDULED' && (
                       <>
                         {(apt as any).consultation_type === 'OFFLINE' ? (
-                          <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
-                            <MapPin size={16} /> In-Clinic Visit
-                          </span>
+                          isPastScheduled(apt.scheduled_at) ? (
+                            <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-2">
+                              <CheckCircle2 size={16} /> Completed
+                            </span>
+                          ) : (
+                            <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
+                              <MapPin size={16} /> In-Clinic Visit
+                            </span>
+                          )
                         ) : (
                           <button
                             onClick={() => handleJoinCall(apt.id, patientLabel)}
