@@ -174,7 +174,6 @@ const bookingSubItems = [
 export default function AdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [bookingsOpen, setBookingsOpen] = useState(false);
   const [bookingSubTab, setBookingSubTab] = useState<'all' | 'test-bookings' | 'package-bookings' | 'consultations'>('all');
   const [adminName, setAdminName] = useState<string>('Admin');
   const [dashboardMetrics, setDashboardMetrics] = useState<{
@@ -357,9 +356,6 @@ export default function AdminPortal() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'consultations') {
-      fetchConsultations(1, consultationStatusFilter);
-    }
     if (activeTab === 'lab-tests') {
       fetchLabCategories();
       fetchLabTests();
@@ -381,11 +377,10 @@ export default function AdminPortal() {
     if (activeTab === 'callbacks') {
       fetchCallbacks();
     }
-    if (activeTab === 'test-bookings') {
+    if (activeTab === 'all-bookings') {
       fetchLabBookings(1, labBookingStatusFilter);
-    }
-    if (activeTab === 'package-bookings') {
       fetchPkgBookings(1, pkgBookingStatusFilter);
+      fetchConsultations(1, consultationStatusFilter);
     }
     if (activeTab === 'health-packages') {
       fetchHealthPackages();
@@ -4502,9 +4497,9 @@ export default function AdminPortal() {
               );
             })}
 
-            {/* All Bookings collapsible group */}
+            {/* All Bookings — single flat nav item */}
             <button
-              onClick={() => { setBookingsOpen(v => !v); setActiveTab('all-bookings'); setIsSidebarOpen(false); }}
+              onClick={() => { setActiveTab('all-bookings'); setBookingSubTab('all'); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
                 activeTab === 'all-bookings'
                   ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5'
@@ -4513,38 +4508,7 @@ export default function AdminPortal() {
             >
               <CalendarDays size={20} className={`shrink-0 ${activeTab === 'all-bookings' ? 'text-emerald-400' : 'text-slate-500'}`} />
               <span className="flex-1 text-left">All Bookings</span>
-              <ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${bookingsOpen ? 'rotate-180' : ''}`} />
             </button>
-
-            <AnimatePresence initial={false}>
-              {bookingsOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden pl-4"
-                >
-                  {bookingSubItems.map((sub) => {
-                    const isSubActive = activeTab === 'all-bookings' && bookingSubTab === sub.id;
-                    return (
-                      <button
-                        key={sub.id}
-                        onClick={() => { setActiveTab('all-bookings'); setBookingSubTab(sub.id as any); setIsSidebarOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left text-sm ${
-                          isSubActive
-                            ? 'bg-emerald-900/40 text-white font-medium border border-white/5'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <sub.icon size={16} className={`shrink-0 ${isSubActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                        <span>{sub.label}</span>
-                      </button>
-                    );
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
@@ -4570,7 +4534,7 @@ export default function AdminPortal() {
               </button>
               <h1 className="text-xl font-bold text-slate-900 hidden sm:block">
                 {activeTab === 'all-bookings'
-                  ? (bookingSubItems.find(s => s.id === bookingSubTab)?.label ?? 'All Bookings')
+                  ? 'All Bookings'
                   : navItems.find(item => item.id === activeTab)?.label}
               </h1>
             </div>
@@ -4596,10 +4560,31 @@ export default function AdminPortal() {
                 <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                   {activeTab === 'dashboard' && renderDashboard()}
                   {activeTab === 'doctors' && renderDoctors()}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'all' && <div className="space-y-10">{renderTestBookings()}{renderPackageBookings()}{renderConsultations()}</div>}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'test-bookings' && renderTestBookings()}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'package-bookings' && renderPackageBookings()}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'consultations' && renderConsultations()}
+                  {activeTab === 'all-bookings' && (
+                    <div className="space-y-6">
+                      {/* Filter chips */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {bookingSubItems.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setBookingSubTab(s.id as any)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all border ${
+                              bookingSubTab === s.id
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            <s.icon size={15} />
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                      {bookingSubTab === 'all' && <div className="space-y-10">{renderTestBookings()}{renderPackageBookings()}{renderConsultations()}</div>}
+                      {bookingSubTab === 'test-bookings' && renderTestBookings()}
+                      {bookingSubTab === 'package-bookings' && renderPackageBookings()}
+                      {bookingSubTab === 'consultations' && renderConsultations()}
+                    </div>
+                  )}
                   {activeTab === 'lab-tests' && renderLabTests()}
                   {activeTab === 'health-packages' && renderHealthPackages()}
                   {activeTab === 'coupons' && renderCoupons()}
