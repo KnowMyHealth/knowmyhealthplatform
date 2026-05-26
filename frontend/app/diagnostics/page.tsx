@@ -259,7 +259,7 @@ function DiagnosticsContent() {
       }
 
       const rzp = new (window as any).Razorpay({
-        key: 'rzp_test_o9nYggdmmCOUap',
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
         amount: orderJson.amount,
         currency: orderJson.currency || 'INR',
         order_id: orderJson.razorpay_order_id,
