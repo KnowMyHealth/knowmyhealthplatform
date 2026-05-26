@@ -7,7 +7,7 @@ import {
   Settings, Menu, X, CheckCircle2, XCircle,
   TrendingUp, LogOut, Sparkles, Activity, CalendarDays,
   ShieldCheck, MapPin, Mail, Clock, FileText, Loader2, ArrowUpRight,
-  ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, Ticket,
+  ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, ChevronDown, Ticket,
   Microscope, Plus, Trash2, AlertCircle, BookOpen, PenTool, Wand2, Tag,
   Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone,
   HeartPulse, Pencil, Save, ToggleLeft, ToggleRight, PhoneCall, Copy, ClipboardList, Video
@@ -145,12 +145,6 @@ interface PartnerApplication {
 }
 
 // --- MOCK DATA FOR OTHER TABS ---
-const stats = [
-  { title: 'Total Patients', value: '24,592', trend: '+14.5%', isUp: true },
-  { title: 'Active Doctors', value: '1,843', trend: '+5.2%', isUp: true },
-  { title: 'Partner Labs', value: '428', trend: '+1.2%', isUp: true },
-  { title: 'Pending Verifications', value: '38', trend: '-12%', isUp: false },
-];
 
 const mockLabs = [
   { id: 1, name: 'Apollo Diagnostics', location: 'New York, NY', tests: 145, status: 'Active' },
@@ -160,10 +154,7 @@ const mockLabs = [
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', id: 'dashboard' },
   { icon: Stethoscope, label: 'Doctors', id: 'doctors' },
-  { icon: ClipboardList, label: 'Consultations', id: 'consultations' },
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
-  { icon: CalendarDays, label: 'Test Bookings', id: 'test-bookings' },
-  { icon: HeartPulse, label: 'Package Bookings', id: 'package-bookings' },
   { icon: Wand2, label: 'Health Packages', id: 'health-packages' },
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
   { icon: Handshake, label: 'Partners', id: 'partners' },
@@ -173,10 +164,25 @@ const navItems = [
   { icon: Settings, label: 'Settings', id: 'settings' },
 ];
 
+const bookingSubItems = [
+  { icon: CalendarDays, label: 'All Bookings', id: 'all' },
+  { icon: Microscope, label: 'Test Bookings', id: 'test-bookings' },
+  { icon: HeartPulse, label: 'Package Bookings', id: 'package-bookings' },
+  { icon: ClipboardList, label: 'Consultations', id: 'consultations' },
+];
+
 export default function AdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [bookingsOpen, setBookingsOpen] = useState(false);
+  const [bookingSubTab, setBookingSubTab] = useState<'all' | 'test-bookings' | 'package-bookings' | 'consultations'>('all');
   const [adminName, setAdminName] = useState<string>('Admin');
+  const [dashboardMetrics, setDashboardMetrics] = useState<{
+    total_patients: { count: number; percentage_change: number; is_positive: boolean };
+    active_doctors: { count: number; percentage_change: number; is_positive: boolean };
+    partner_labs: { count: number; percentage_change: number; is_positive: boolean };
+    pending_verifications: { count: number; percentage_change: number; is_positive: boolean };
+  } | null>(null);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { logout } = useAuth();
@@ -343,6 +349,7 @@ export default function AdminPortal() {
   useEffect(() => {
     fetchAdminDetails();
     fetchAllDoctors();
+    fetchDashboardMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -390,6 +397,22 @@ export default function AdminPortal() {
   useEffect(() => {
     setTestCurrentPage(1);
   }, [testFilterStatus, testSearchQuery]);
+
+  const fetchDashboardMetrics = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/users/admin/dashboard/metrics`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setDashboardMetrics(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch dashboard metrics', e);
+    }
+  };
 
   const fetchAdminDetails = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -1511,25 +1534,35 @@ export default function AdminPortal() {
   const paginatedBlogs = blogsList.slice((blogCurrentPage - 1) * blogsPerPage, blogCurrentPage * blogsPerPage);
 
   // --- TAB RENDERERS ---
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+    const metricCards = dashboardMetrics ? [
+      { title: 'Total Patients', count: dashboardMetrics.total_patients.count, pct: dashboardMetrics.total_patients.percentage_change, isUp: dashboardMetrics.total_patients.is_positive },
+      { title: 'Active Doctors', count: dashboardMetrics.active_doctors.count, pct: dashboardMetrics.active_doctors.percentage_change, isUp: dashboardMetrics.active_doctors.is_positive },
+      { title: 'Partner Labs', count: dashboardMetrics.partner_labs.count, pct: dashboardMetrics.partner_labs.percentage_change, isUp: dashboardMetrics.partner_labs.is_positive },
+      { title: 'Pending Verifications', count: dashboardMetrics.pending_verifications.count, pct: dashboardMetrics.pending_verifications.percentage_change, isUp: dashboardMetrics.pending_verifications.is_positive },
+    ] : null;
+
+    return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => {
-          const value = stat.title === 'Pending Verifications' ? String(pendingDoctors.length) : stat.value;
-          return (
-            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden group">
-              <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
-              <div className="flex items-end gap-3">
-                <h3 className="text-3xl font-black text-slate-900 tracking-tight">{value}</h3>
-                <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
-                  {stat.trend}
-                </span>
-              </div>
-              <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
-            </motion.div>
-          );
-        })}
+        {metricCards ? metricCards.map((stat, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden group">
+            <p className="text-sm font-medium text-slate-500 mb-2">{stat.title}</p>
+            <div className="flex items-end gap-3">
+              <h3 className="text-3xl font-black text-slate-900 tracking-tight">{stat.count.toLocaleString('en-IN')}</h3>
+              <span className={`flex items-center text-sm font-bold mb-1 ${stat.isUp ? 'text-emerald-600' : 'text-red-500'}`}>
+                {stat.isUp ? <TrendingUp size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1 rotate-180" />}
+                {stat.isUp ? '+' : ''}{stat.pct}%
+              </span>
+            </div>
+            <div className="absolute -bottom-6 -right-6 w-24 h-24 bg-slate-50 rounded-full group-hover:scale-150 transition-transform duration-500 -z-10" />
+          </motion.div>
+        )) : Array.from({ length: 4 }).map((_, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200/60 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] relative overflow-hidden animate-pulse">
+            <div className="h-4 bg-slate-100 rounded w-2/3 mb-4" />
+            <div className="h-8 bg-slate-100 rounded w-1/2" />
+          </motion.div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -1665,7 +1698,8 @@ export default function AdminPortal() {
         </motion.div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderDoctors = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
@@ -4373,6 +4407,50 @@ export default function AdminPortal() {
                 </button>
               );
             })}
+
+            {/* All Bookings collapsible group */}
+            <button
+              onClick={() => { setBookingsOpen(v => !v); setActiveTab('all-bookings'); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                activeTab === 'all-bookings'
+                  ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5'
+                  : 'hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <CalendarDays size={20} className={`shrink-0 ${activeTab === 'all-bookings' ? 'text-emerald-400' : 'text-slate-500'}`} />
+              <span className="flex-1 text-left">All Bookings</span>
+              <ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${bookingsOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {bookingsOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden pl-4"
+                >
+                  {bookingSubItems.map((sub) => {
+                    const isSubActive = activeTab === 'all-bookings' && bookingSubTab === sub.id;
+                    return (
+                      <button
+                        key={sub.id}
+                        onClick={() => { setActiveTab('all-bookings'); setBookingSubTab(sub.id as any); setIsSidebarOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left text-sm ${
+                          isSubActive
+                            ? 'bg-emerald-900/40 text-white font-medium border border-white/5'
+                            : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <sub.icon size={16} className={`shrink-0 ${isSubActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                        <span>{sub.label}</span>
+                      </button>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
@@ -4397,7 +4475,9 @@ export default function AdminPortal() {
                 <Menu size={24} />
               </button>
               <h1 className="text-xl font-bold text-slate-900 hidden sm:block">
-                {navItems.find(item => item.id === activeTab)?.label}
+                {activeTab === 'all-bookings'
+                  ? (bookingSubItems.find(s => s.id === bookingSubTab)?.label ?? 'All Bookings')
+                  : navItems.find(item => item.id === activeTab)?.label}
               </h1>
             </div>
 
@@ -4422,10 +4502,11 @@ export default function AdminPortal() {
                 <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                   {activeTab === 'dashboard' && renderDashboard()}
                   {activeTab === 'doctors' && renderDoctors()}
-                  {activeTab === 'consultations' && renderConsultations()}
+                  {activeTab === 'all-bookings' && bookingSubTab === 'all' && <div className="space-y-10">{renderTestBookings()}{renderPackageBookings()}{renderConsultations()}</div>}
+                  {activeTab === 'all-bookings' && bookingSubTab === 'test-bookings' && renderTestBookings()}
+                  {activeTab === 'all-bookings' && bookingSubTab === 'package-bookings' && renderPackageBookings()}
+                  {activeTab === 'all-bookings' && bookingSubTab === 'consultations' && renderConsultations()}
                   {activeTab === 'lab-tests' && renderLabTests()}
-                  {activeTab === 'test-bookings' && renderTestBookings()}
-                  {activeTab === 'package-bookings' && renderPackageBookings()}
                   {activeTab === 'health-packages' && renderHealthPackages()}
                   {activeTab === 'coupons' && renderCoupons()}
                   {activeTab === 'partners' && renderPartners()}
