@@ -117,3 +117,20 @@ class AvailabilitySchema(BaseModel):
 
 class SetAvailabilityRequest(BaseModel):
     schedule: list[AvailabilitySchema] = Field(..., description="List of time windows")
+
+
+class MonthlyEarningSchema(BaseModel):
+    month: str  # "Jan", "Feb", ..., "Dec"
+    amount: Decimal
+
+class DoctorTransactionSchema(BaseModel):
+    transaction_id: str      # e.g., "TRX-9821" or "pay_XXXXXX"
+    patient_name: str
+    date_label: str          # e.g., "Today, 10:45 AM", "Yesterday", or "25 May, 04:30 PM"
+    amount: Decimal
+    status: str              # "Paid"
+
+class DoctorRevenueAnalyticsResponse(BaseModel):
+    total_earnings: Decimal
+    monthly_earnings: list[MonthlyEarningSchema]
+    recent_transactions: list[DoctorTransactionSchema]

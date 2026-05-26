@@ -2,9 +2,14 @@ import asyncio
 import uuid
 import string
 import secrets
+import calendar
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
 from uuid import UUID
 from loguru import logger
 from sqlalchemy import update, select, func, delete
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -292,4 +297,111 @@ class DoctorsService:
             logger.error(f"Database error updating doctor profile {doctor.id}: {e}")
             raise DoctorUpdateError("Failed to update profile due to a database error.")
         
+    async def get_doctor_revenue_analytics(self, db: AsyncSession, doctor_user_id: UUID) -> dict:
+        """
+        Retrieves aggregated earnings and transaction history using ONLY 
+        the local database tables (payments, consultations).
+        """
+        doctor = await self.get_doctor_by_user_id(db, doctor_user_id)
         
+        # Local imports of models mapping to your Postgres tables
+        from app.modules.payment.models import Payment, PaymentStatus, BookingType
+        from app.modules.consultation.models import Consultation
+        from app.modules.user.models import User
+
+        current_year = datetime.now().year
+
+        # ---------------------------------------------------------
+        # 1. LOCAL DB QUERY: Aggregate Monthly Earnings
+        # ---------------------------------------------------------
+        monthly_stmt = (
+            select(
+                func.extract('month', Payment.created_at).label('month'),
+                func.sum(Payment.amount).label('total_revenue')
+            )
+            .join(Consultation, Payment.booking_id == Consultation.id)
+            .where(
+                Consultation.doctor_id == doctor.id,
+                Payment.booking_type == BookingType.CONSULTATION,
+                Payment.status == PaymentStatus.SUCCESS,
+                func.extract('year', Payment.created_at) == current_year
+            )
+            .group_by(func.extract('month', Payment.created_at))
+        )
+        
+        # Executes against local Postgres
+        monthly_result = await db.execute(monthly_stmt)
+        monthly_rows = monthly_result.all()
+
+        months_abbr = list(calendar.month_abbr)[1:]  # ["Jan", "Feb", ..., "Dec"]
+        monthly_earnings_map = {month: Decimal("0.00") for month in months_abbr}
+        total_earnings = Decimal("0.00")
+
+        for row in monthly_rows:
+            if row.month and row.total_revenue:
+                month_name = months_abbr[int(row.month) - 1]
+                revenue_val = Decimal(str(row.total_revenue))
+                monthly_earnings_map[month_name] = revenue_val
+                total_earnings += revenue_val
+
+        monthly_earnings_list = [
+            {"month": m, "amount": amt} for m, amt in monthly_earnings_map.items()
+        ]
+
+        # ---------------------------------------------------------
+        # 2. LOCAL DB QUERY: Recent Transactions List
+        # ---------------------------------------------------------
+        transactions_stmt = (
+            select(Payment, Consultation)
+            .options(
+                selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+            )
+            .join(Consultation, Payment.booking_id == Consultation.id)
+            .where(
+                Consultation.doctor_id == doctor.id,
+                Payment.booking_type == BookingType.CONSULTATION,
+                Payment.status == PaymentStatus.SUCCESS
+            )
+            .order_by(Payment.created_at.desc())
+            .limit(10)
+        )
+
+        # Executes against local Postgres
+        transactions_result = await db.execute(transactions_stmt)
+        transaction_rows = transactions_result.all()
+
+        recent_transactions = []
+        now = datetime.now(timezone.utc)
+
+        for payment, consultation in transaction_rows:
+            patient_name = "Anonymous Patient"
+            if consultation.patient_user and consultation.patient_user.patient_profile:
+                profile = consultation.patient_user.patient_profile
+                patient_name = f"{profile.first_name} {profile.last_name}"
+
+            pay_time = payment.created_at
+            if pay_time.date() == now.date():
+                date_label = f"Today, {pay_time.strftime('%I:%M %p')}"
+            elif pay_time.date() == (now.date() - timedelta(days=1)):
+                date_label = "Yesterday"
+            else:
+                date_label = pay_time.strftime("%d %b, %I:%M %p")
+
+            # We read the transaction ID directly from the local database column.
+            # (No API request is being made here)
+            raw_ref = payment.razorpay_payment_id or str(payment.id)
+            clean_trx_id = f"TRX-{raw_ref[-6:].upper()}" if len(raw_ref) >= 6 else f"TRX-{raw_ref.upper()}"
+
+            recent_transactions.append({
+                "transaction_id": clean_trx_id,
+                "patient_name": patient_name,
+                "date_label": date_label,
+                "amount": payment.amount,
+                "status": "Paid"
+            })
+
+        return {
+            "total_earnings": total_earnings,
+            "monthly_earnings": monthly_earnings_list,
+            "recent_transactions": recent_transactions
+        }

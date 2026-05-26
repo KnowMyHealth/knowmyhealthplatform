@@ -25,6 +25,7 @@ from app.modules.doctor.service import DoctorsService
 from app.modules.doctor.dependencies import get_doctors_service
 from app.utils.pagination import PaginationParams
 from app.modules.doctor.schemas import SetAvailabilityRequest, AvailabilitySchema
+from app.modules.doctor.schemas import DoctorRevenueAnalyticsResponse
 
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
 
@@ -266,4 +267,27 @@ async def approve_doctor_application(
     return ApiResponse.success(
         data=validated_doctor,
         message="Doctor approved and user account created."
+    )
+
+
+@router.get(
+    "/me/revenue-analytics",
+    response_model=DoctorRevenueAnalyticsResponse,
+    summary="Get Doctor Revenue Analytics & Transactions",
+    description="Returns aggregate monthly consultation earnings for the current calendar year, along with the recent transaction records."
+)
+@limiter.limit("20/minute")
+async def get_doctor_revenue_analytics(
+    request: Request,
+    current_user = Depends(RequireRole([Role.DOCTOR])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    analytics_data = await service.get_doctor_revenue_analytics(
+        db=db, 
+        doctor_user_id=UUID(str(current_user.id))
+    )
+    return ApiResponse.success(
+        data=analytics_data,
+        message="Revenue metrics compiled successfully."
     )

@@ -5,17 +5,17 @@ from loguru import logger
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from datetime import datetime, timedelta, timezone, date
 
 from app.core.storage import upload_prescription_pdf
 from app.modules.patient.models import Patient
 from app.modules.consultation.models import Consultation, ConsultationStatus, ConsultationType
-from app.modules.doctor.models import Doctor
+from app.modules.doctor.models import Doctor, DoctorAvailability
 from app.modules.consultation.schemas import BookConsultationRequest, AgoraJoinResponse
 from app.modules.consultation.exceptions import ConsultationError, ConsultationNotFoundError, ConsultationAccessDenied
 from app.core.agora import generate_agora_token
-from datetime import datetime, timedelta, timezone, date
-from app.modules.doctor.models import DoctorAvailability
 
+# User required for eager loading patient_profile
 from app.db.all_models import User
 from app.utils.pagination import PaginationParams
 
@@ -77,8 +77,14 @@ class ConsultationService:
         )
         db.add(consultation)
         await db.commit()
-        await db.refresh(consultation)
-        return consultation
+        
+        # 8. Eager load relations before returning so Pydantic doesn't crash on the newly added schema fields
+        fetch_stmt = select(Consultation).options(
+            selectinload(Consultation.doctor),
+            selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+        ).where(Consultation.id == consultation.id)
+        
+        return (await db.execute(fetch_stmt)).scalar_one()
 
     async def list_doctor_patients(self, db: AsyncSession, doctor_user_id: UUID) -> list[dict]:
         """
@@ -90,7 +96,6 @@ class ConsultationService:
             return []
 
         # 2. Query distinct patients joined with their last consultation date
-        # We group by Patient to get unique records and count how many times they visited
         stmt = (
             select(
                 Patient,
@@ -123,7 +128,6 @@ class ConsultationService:
             raise ConsultationAccessDenied("Doctor profile not found.")
 
         # 2. Verify that this doctor has at least one consultation with this patient
-        # (Medical Privacy: Doctors shouldn't browse patients who haven't booked them)
         check_stmt = select(Consultation).where(
             Consultation.doctor_id == doctor.id,
             Consultation.patient_user_id == patient_user_id
@@ -139,9 +143,13 @@ class ConsultationService:
         if not patient:
             raise ConsultationError("Patient profile is incomplete or not found.", status_code=404)
 
-        # 4. Fetch Consultation History between these two
+        # 4. Fetch Consultation History between these two (With Eager Loading)
         history_stmt = (
             select(Consultation)
+            .options(
+                selectinload(Consultation.doctor),
+                selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+            )
             .where(Consultation.doctor_id == doctor.id, Consultation.patient_user_id == patient_user_id)
             .order_by(Consultation.scheduled_at.desc())
         )
@@ -203,7 +211,11 @@ class ConsultationService:
         )
         
     async def list_my_consultations(self, db: AsyncSession, user_id: UUID, is_doctor: bool) -> list[Consultation]:
-        stmt = select(Consultation).order_by(Consultation.scheduled_at.desc())
+        # Eager load the required nested models
+        stmt = select(Consultation).options(
+            selectinload(Consultation.doctor),
+            selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+        ).order_by(Consultation.scheduled_at.desc())
         
         if is_doctor:
             doctor = (await db.execute(select(Doctor).where(Doctor.user_id == user_id))).scalar_one_or_none()
@@ -223,7 +235,12 @@ class ConsultationService:
         user_id: UUID, 
         new_status: ConsultationStatus
     ) -> Consultation:
-        stmt = select(Consultation).options(selectinload(Consultation.doctor)).where(Consultation.id == consultation_id)
+        # Eager load relations before update
+        stmt = select(Consultation).options(
+            selectinload(Consultation.doctor),
+            selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+        ).where(Consultation.id == consultation_id)
+        
         consultation = (await db.execute(stmt)).scalar_one_or_none()
         
         if not consultation:
@@ -234,7 +251,6 @@ class ConsultationService:
 
         consultation.status = new_status
         await db.commit()
-        await db.refresh(consultation)
         
         logger.info(f"Consultation {consultation_id} status updated to {new_status}")
         return consultation
@@ -281,6 +297,36 @@ class ConsultationService:
 
         return slots
     
+    async def upload_prescription(self, db: AsyncSession, consultation_id: UUID, doctor_user_id: UUID, pdf_bytes: bytes) -> Consultation:
+        # Eager load relations before update
+        stmt = select(Consultation).options(
+            selectinload(Consultation.doctor),
+            selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+        ).where(Consultation.id == consultation_id)
+        
+        consultation = (await db.execute(stmt)).scalar_one_or_none()
+        
+        if not consultation:
+            raise ConsultationNotFoundError("Consultation not found.")
+
+        if consultation.doctor.user_id != doctor_user_id:
+            raise ConsultationAccessDenied("You can only upload prescriptions for your own patients.")
+
+        if consultation.status == ConsultationStatus.CANCELLED:
+            raise ConsultationError("Cannot upload a prescription for a cancelled consultation.")
+
+        _, public_url = await upload_prescription_pdf(pdf_bytes)
+
+        consultation.prescription_url = public_url
+        
+        if consultation.status == ConsultationStatus.SCHEDULED:
+            consultation.status = ConsultationStatus.COMPLETED
+
+        await db.commit()
+        
+        logger.info(f"Prescription uploaded for consultation {consultation_id}")
+        return consultation
+
     async def list_all_consultations(
         self,
         db: AsyncSession,
@@ -298,7 +344,6 @@ class ConsultationService:
         )
         count_query = select(func.count()).select_from(Consultation)
 
-        # Apply Filters
         if status:
             query = query.where(Consultation.status == status)
             count_query = count_query.where(Consultation.status == status)
@@ -307,10 +352,8 @@ class ConsultationService:
             query = query.where(Consultation.doctor_id == doctor_id)
             count_query = count_query.where(Consultation.doctor_id == doctor_id)
 
-        # Execute Count
         total_count = (await db.execute(count_query)).scalar() or 0
         
-        # Execute Paginated Query
         query = query.order_by(Consultation.scheduled_at.desc()).offset(params.offset).limit(params.limit)
         items = (await db.execute(query)).scalars().all()
         
@@ -323,7 +366,6 @@ class ConsultationService:
         user_id: UUID, 
         role: str
     ) -> dict:
-        # 1. Fetch consultation with Eager Loading for Doctor and Patient Profile
         stmt = select(Consultation).options(
             selectinload(Consultation.doctor),
             selectinload(Consultation.patient_user).selectinload(User.patient_profile)
@@ -333,13 +375,10 @@ class ConsultationService:
         if not consultation:
             raise ConsultationNotFoundError("Consultation not found.")
             
-        # 2. Authorization / Privacy Check
-        # Admins bypass this. Doctors and Patients must be explicitly linked to the consultation.
         if role != "ADMIN":
             if consultation.patient_user_id != user_id and consultation.doctor.user_id != user_id:
                 raise ConsultationAccessDenied("You do not have permission to view this consultation.")
                 
-        # 3. Format Response Dictionary
         return {
             "id": consultation.id,
             "patient_user_id": consultation.patient_user_id,
@@ -353,35 +392,3 @@ class ConsultationService:
             "doctor": consultation.doctor,
             "patient": consultation.patient_user.patient_profile if consultation.patient_user else None
         }
-
-    async def upload_prescription(self, db: AsyncSession, consultation_id: UUID, doctor_user_id: UUID, pdf_bytes: bytes) -> Consultation:
-        # 1. Fetch consultation and the doctor's profile
-        stmt = select(Consultation).options(selectinload(Consultation.doctor)).where(Consultation.id == consultation_id)
-        consultation = (await db.execute(stmt)).scalar_one_or_none()
-        
-        if not consultation:
-            raise ConsultationNotFoundError("Consultation not found.")
-
-        # 2. Security Check: Ensure the logged-in user is the assigned doctor
-        if consultation.doctor.user_id != doctor_user_id:
-            raise ConsultationAccessDenied("You can only upload prescriptions for your own patients.")
-
-        # 3. Security Check: Only allow uploads if the appointment isn't cancelled
-        if consultation.status == ConsultationStatus.CANCELLED:
-            raise ConsultationError("Cannot upload a prescription for a cancelled consultation.")
-
-        # 4. Upload to Supabase
-        _, public_url = await upload_prescription_pdf(pdf_bytes)
-
-        # 5. Save to database
-        consultation.prescription_url = public_url
-        
-        # Optional UX boost: Automatically mark as COMPLETED if they upload a prescription
-        if consultation.status == ConsultationStatus.SCHEDULED:
-            consultation.status = ConsultationStatus.COMPLETED
-
-        await db.commit()
-        await db.refresh(consultation)
-        
-        logger.info(f"Prescription uploaded for consultation {consultation_id}")
-        return consultation
