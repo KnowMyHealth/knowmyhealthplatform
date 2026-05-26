@@ -1322,33 +1322,7 @@ export default function DoctorDashboard() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">Patient Reviews</h3>
-          <div className="flex items-center gap-6 mb-6">
-            <div className="text-5xl font-black text-slate-900">4.9</div>
-            <div>
-              <div className="flex gap-1 mb-1">
-                {[1,2,3,4,5].map(i => <Star key={i} size={20} className="fill-amber-400 text-amber-400" />)}
-              </div>
-              <p className="text-sm font-medium text-slate-500">Based on 342 reviews</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {[
-              { text: "Excellent doctor, very patient and explains everything clearly.", rating: 5 },
-              { text: "Video consult was seamless. Highly recommend.", rating: 5 },
-            ].map((review, i) => (
-              <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex gap-0.5 mb-2">
-                  {[...Array(review.rating)].map((_, j) => <Star key={j} size={12} className="fill-amber-400 text-amber-400" />)}
-                </div>
-                <p className="text-sm text-slate-700 italic">&quot;{review.text}&quot;</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
+      <div className="grid grid-cols-1 gap-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
           <h3 className="text-lg font-bold text-slate-900 mb-4">Recent Transactions</h3>
           <div className="space-y-4">
