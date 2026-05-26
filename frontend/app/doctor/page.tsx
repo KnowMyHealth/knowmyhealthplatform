@@ -385,6 +385,8 @@ export default function DoctorDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const isPastScheduled = (scheduledAt: string) => now.getTime() > new Date(scheduledAt).getTime();
+
   const getJoinStatus = (scheduledAt: string) => {
     const sTime = new Date(scheduledAt).getTime();
     const cTime = now.getTime();
@@ -893,9 +895,15 @@ export default function DoctorDashboard() {
                 <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                   {apt.status === 'SCHEDULED' && (
                     (apt as any).consultation_type === 'OFFLINE' ? (
-                      <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
-                        <MapPin size={18} /> In-Clinic Visit
-                      </span>
+                      isPastScheduled(apt.scheduled_at) ? (
+                        <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center gap-2">
+                          <CheckCircle2 size={18} /> Completed
+                        </span>
+                      ) : (
+                        <span className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center gap-2">
+                          <MapPin size={18} /> In-Clinic Visit
+                        </span>
+                      )
                     ) : (
                     <button
                       onClick={() => handleJoinCall(apt.id, patientLabel)}
@@ -1044,9 +1052,15 @@ export default function DoctorDashboard() {
                     {apt.status === 'SCHEDULED' && (
                       <>
                         {(apt as any).consultation_type === 'OFFLINE' ? (
-                          <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
-                            <MapPin size={16} /> In-Clinic Visit
-                          </span>
+                          isPastScheduled(apt.scheduled_at) ? (
+                            <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-2">
+                              <CheckCircle2 size={16} /> Completed
+                            </span>
+                          ) : (
+                            <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-2">
+                              <MapPin size={16} /> In-Clinic Visit
+                            </span>
+                          )
                         ) : (
                           <button
                             onClick={() => handleJoinCall(apt.id, patientLabel)}
@@ -1322,33 +1336,7 @@ export default function DoctorDashboard() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
-          <h3 className="text-lg font-bold text-slate-900 mb-4">Patient Reviews</h3>
-          <div className="flex items-center gap-6 mb-6">
-            <div className="text-5xl font-black text-slate-900">4.9</div>
-            <div>
-              <div className="flex gap-1 mb-1">
-                {[1,2,3,4,5].map(i => <Star key={i} size={20} className="fill-amber-400 text-amber-400" />)}
-              </div>
-              <p className="text-sm font-medium text-slate-500">Based on 342 reviews</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {[
-              { text: "Excellent doctor, very patient and explains everything clearly.", rating: 5 },
-              { text: "Video consult was seamless. Highly recommend.", rating: 5 },
-            ].map((review, i) => (
-              <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex gap-0.5 mb-2">
-                  {[...Array(review.rating)].map((_, j) => <Star key={j} size={12} className="fill-amber-400 text-amber-400" />)}
-                </div>
-                <p className="text-sm text-slate-700 italic">&quot;{review.text}&quot;</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
+      <div className="grid grid-cols-1 gap-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.03)]">
           <h3 className="text-lg font-bold text-slate-900 mb-4">Recent Transactions</h3>
           <div className="space-y-4">
