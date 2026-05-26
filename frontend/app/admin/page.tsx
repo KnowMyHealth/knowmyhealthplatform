@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard, Users, Stethoscope, Building2,
@@ -174,7 +174,6 @@ const bookingSubItems = [
 export default function AdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [bookingsOpen, setBookingsOpen] = useState(false);
   const [bookingSubTab, setBookingSubTab] = useState<'all' | 'test-bookings' | 'package-bookings' | 'consultations'>('all');
   const [adminName, setAdminName] = useState<string>('Admin');
   const [dashboardMetrics, setDashboardMetrics] = useState<{
@@ -183,6 +182,8 @@ export default function AdminPortal() {
     partner_labs: { count: number; percentage_change: number; is_positive: boolean };
     pending_verifications: { count: number; percentage_change: number; is_positive: boolean };
   } | null>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { logout } = useAuth();
@@ -350,13 +351,11 @@ export default function AdminPortal() {
     fetchAdminDetails();
     fetchAllDoctors();
     fetchDashboardMetrics();
+    fetchTransactions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'consultations') {
-      fetchConsultations(1, consultationStatusFilter);
-    }
     if (activeTab === 'lab-tests') {
       fetchLabCategories();
       fetchLabTests();
@@ -378,11 +377,10 @@ export default function AdminPortal() {
     if (activeTab === 'callbacks') {
       fetchCallbacks();
     }
-    if (activeTab === 'test-bookings') {
+    if (activeTab === 'all-bookings') {
       fetchLabBookings(1, labBookingStatusFilter);
-    }
-    if (activeTab === 'package-bookings') {
       fetchPkgBookings(1, pkgBookingStatusFilter);
+      fetchConsultations(1, consultationStatusFilter);
     }
     if (activeTab === 'health-packages') {
       fetchHealthPackages();
@@ -397,6 +395,25 @@ export default function AdminPortal() {
   useEffect(() => {
     setTestCurrentPage(1);
   }, [testFilterStatus, testSearchQuery]);
+
+  const fetchTransactions = async () => {
+    setIsLoadingTransactions(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/payments?limit=10&page=1`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setTransactions(json.data || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch transactions', e);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  };
 
   const fetchDashboardMetrics = async () => {
     try {
@@ -1697,6 +1714,78 @@ export default function AdminPortal() {
           </div>
         </motion.div>
       </div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden">
+        <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900">Recent Transactions</h3>
+            <p className="text-sm text-slate-500 mt-0.5">Latest payments across the platform.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {(['SUCCESS', 'PENDING', 'FAILED'] as const).map(s => (
+              <span key={s} className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                s === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' :
+                s === 'PENDING' ? 'bg-amber-50 text-amber-700' :
+                'bg-red-50 text-red-600'
+              }`}>{s}</span>
+            ))}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          {isLoadingTransactions ? (
+            <div className="py-16 flex justify-center"><Loader2 className="animate-spin text-emerald-500" size={28} /></div>
+          ) : transactions.length === 0 ? (
+            <div className="py-16 text-center text-slate-500 font-medium">No transactions yet.</div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                  <th className="p-4 pl-8">Patient</th>
+                  <th className="p-4">Type</th>
+                  <th className="p-4">Amount</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Order ID</th>
+                  <th className="p-4 pr-8">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transactions.map((trx) => {
+                  const name = trx.user?.patient_profile
+                    ? `${trx.user.patient_profile.first_name} ${trx.user.patient_profile.last_name}`
+                    : trx.user?.email ?? '—';
+                  const dateIST = new Date(trx.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <tr key={trx.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="p-4 pl-8">
+                        <div>
+                          <p className="font-bold text-slate-900 text-sm">{name}</p>
+                          <p className="text-xs text-slate-400">{trx.user?.email}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                          trx.booking_type === 'CONSULTATION' ? 'bg-blue-50 text-blue-700' :
+                          trx.booking_type === 'LAB_TEST' ? 'bg-violet-50 text-violet-700' :
+                          'bg-teal-50 text-teal-700'
+                        }`}>{trx.booking_type?.replace('_', ' ')}</span>
+                      </td>
+                      <td className="p-4 font-black text-slate-900">₹{Number(trx.amount).toLocaleString('en-IN')}</td>
+                      <td className="p-4">
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                          trx.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700' :
+                          trx.status === 'PENDING' ? 'bg-amber-50 text-amber-700' :
+                          'bg-red-50 text-red-600'
+                        }`}>{trx.status}</span>
+                      </td>
+                      <td className="p-4 text-xs text-slate-500 font-mono">{trx.razorpay_order_id ?? '—'}</td>
+                      <td className="p-4 pr-8 text-sm text-slate-500">{dateIST}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </motion.div>
     </div>
     );
   };
@@ -4001,8 +4090,8 @@ export default function AdminPortal() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {paginated.map((cb) => (
-                    <>
-                      <tr key={cb.id} className="hover:bg-slate-50/50 transition-colors">
+                    <React.Fragment key={cb.id}>
+                      <tr className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-4 font-bold text-slate-900">{cb.name}</td>
                         <td className="px-6 py-4">
                           <a href={`tel:${cb.phone}`} className="flex items-center gap-1.5 text-emerald-700 font-bold hover:text-emerald-900 transition-colors">
@@ -4048,7 +4137,7 @@ export default function AdminPortal() {
                       </tr>
                       {/* Inline notes expander */}
                       {openNotesId === cb.id && (
-                        <tr key={`${cb.id}-notes`} className="bg-slate-50/80">
+                        <tr className="bg-slate-50/80">
                           <td colSpan={6} className="px-6 pb-4 pt-0">
                             <div className="flex gap-3 items-start">
                               <textarea
@@ -4079,7 +4168,7 @@ export default function AdminPortal() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
@@ -4408,9 +4497,9 @@ export default function AdminPortal() {
               );
             })}
 
-            {/* All Bookings collapsible group */}
+            {/* All Bookings — single flat nav item */}
             <button
-              onClick={() => { setBookingsOpen(v => !v); setActiveTab('all-bookings'); setIsSidebarOpen(false); }}
+              onClick={() => { setActiveTab('all-bookings'); setBookingSubTab('all'); setIsSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
                 activeTab === 'all-bookings'
                   ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5'
@@ -4419,38 +4508,7 @@ export default function AdminPortal() {
             >
               <CalendarDays size={20} className={`shrink-0 ${activeTab === 'all-bookings' ? 'text-emerald-400' : 'text-slate-500'}`} />
               <span className="flex-1 text-left">All Bookings</span>
-              <ChevronDown size={16} className={`text-slate-500 transition-transform duration-200 ${bookingsOpen ? 'rotate-180' : ''}`} />
             </button>
-
-            <AnimatePresence initial={false}>
-              {bookingsOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden pl-4"
-                >
-                  {bookingSubItems.map((sub) => {
-                    const isSubActive = activeTab === 'all-bookings' && bookingSubTab === sub.id;
-                    return (
-                      <button
-                        key={sub.id}
-                        onClick={() => { setActiveTab('all-bookings'); setBookingSubTab(sub.id as any); setIsSidebarOpen(false); }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left text-sm ${
-                          isSubActive
-                            ? 'bg-emerald-900/40 text-white font-medium border border-white/5'
-                            : 'text-slate-400 hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <sub.icon size={16} className={`shrink-0 ${isSubActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                        <span>{sub.label}</span>
-                      </button>
-                    );
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           <div className="p-4 border-t border-white/10 space-y-2 shrink-0">
@@ -4476,7 +4534,7 @@ export default function AdminPortal() {
               </button>
               <h1 className="text-xl font-bold text-slate-900 hidden sm:block">
                 {activeTab === 'all-bookings'
-                  ? (bookingSubItems.find(s => s.id === bookingSubTab)?.label ?? 'All Bookings')
+                  ? 'All Bookings'
                   : navItems.find(item => item.id === activeTab)?.label}
               </h1>
             </div>
@@ -4502,10 +4560,31 @@ export default function AdminPortal() {
                 <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
                   {activeTab === 'dashboard' && renderDashboard()}
                   {activeTab === 'doctors' && renderDoctors()}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'all' && <div className="space-y-10">{renderTestBookings()}{renderPackageBookings()}{renderConsultations()}</div>}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'test-bookings' && renderTestBookings()}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'package-bookings' && renderPackageBookings()}
-                  {activeTab === 'all-bookings' && bookingSubTab === 'consultations' && renderConsultations()}
+                  {activeTab === 'all-bookings' && (
+                    <div className="space-y-6">
+                      {/* Filter chips */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {bookingSubItems.map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => setBookingSubTab(s.id as any)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all border ${
+                              bookingSubTab === s.id
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md'
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            <s.icon size={15} />
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                      {bookingSubTab === 'all' && <div className="space-y-10">{renderTestBookings()}{renderPackageBookings()}{renderConsultations()}</div>}
+                      {bookingSubTab === 'test-bookings' && renderTestBookings()}
+                      {bookingSubTab === 'package-bookings' && renderPackageBookings()}
+                      {bookingSubTab === 'consultations' && renderConsultations()}
+                    </div>
+                  )}
                   {activeTab === 'lab-tests' && renderLabTests()}
                   {activeTab === 'health-packages' && renderHealthPackages()}
                   {activeTab === 'coupons' && renderCoupons()}
