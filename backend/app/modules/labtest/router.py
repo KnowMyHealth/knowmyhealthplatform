@@ -135,7 +135,7 @@ async def delete_lab_test(
     return ApiResponse.no_content()
 
 # -------------------------------------------------------------------------
-# NEW: LAB TEST BOOKINGS
+# BOOKINGS
 # -------------------------------------------------------------------------
 @router.post("/bookings", status_code=status.HTTP_201_CREATED, summary="Book a Lab Test (Patient)")
 @limiter.limit("5/minute")
@@ -154,11 +154,38 @@ async def book_lab_test(
 async def list_all_bookings(
     request: Request,
     params: PaginationParams = Depends(),
-    status: LabTestBookingStatus | None = None, # e.g. ?status=PAID
+    status: LabTestBookingStatus | None = None,
     current_user: User = Depends(RequireRole([Role.ADMIN])),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
     items, total = await service.list_bookings(db, params, status)
+    validated = [LabTestBookingSchema.model_validate(i) for i in items]
+    return ApiResponse.paginated(items=validated, total_items=total, params=params)
+
+@router.get("/bookings/me", summary="View My Booked Tests (Patient)")
+@limiter.limit("30/minute")
+async def list_my_bookings(
+    request: Request,
+    params: PaginationParams = Depends(),
+    current_user = Depends(RequireRole([Role.PATIENT])),
+    db: AsyncSession = Depends(get_db),
+    service: LabTestService = Depends(get_labtest_service)
+):
+    items, total = await service.get_patient_bookings(db, UUID(str(current_user.id)), params)
+    validated = [LabTestBookingSchema.model_validate(i) for i in items]
+    return ApiResponse.paginated(items=validated, total_items=total, params=params)
+
+@router.get("/bookings/patient/{patient_user_id}", summary="View Specific Patient Bookings (Admin)")
+@limiter.limit("30/minute")
+async def list_patient_bookings(
+    request: Request,
+    patient_user_id: UUID,
+    params: PaginationParams = Depends(),
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: LabTestService = Depends(get_labtest_service)
+):
+    items, total = await service.get_patient_bookings(db, patient_user_id, params)
     validated = [LabTestBookingSchema.model_validate(i) for i in items]
     return ApiResponse.paginated(items=validated, total_items=total, params=params)

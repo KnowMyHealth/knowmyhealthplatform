@@ -1,3 +1,4 @@
+# app/modules/labtest/service.py
 from uuid import UUID
 from loguru import logger
 from datetime import date
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.utils.pagination import PaginationParams
+from app.db.all_models import User
 from app.modules.labtest.models import LabTest, LabTestCategory, LabTestBooking, LabTestBookingStatus
 from app.modules.labtest.schemas import LabTestCreateRequest, CategoryCreateRequest, BookLabTestRequest
 from app.modules.labtest.exceptions import (
@@ -117,7 +119,7 @@ class LabTestService:
             await db.rollback()
             raise LabTestCreationError("Failed to delete lab test.")
 
-    # --- NEW: Lab Test Booking Methods ---
+    # --- Lab Test Booking Methods ---
     async def book_test(self, db: AsyncSession, user_id: UUID, payload: BookLabTestRequest) -> LabTestBooking:
         test = await db.get(LabTest, payload.lab_test_id)
         if not test or not test.is_active:
@@ -133,11 +135,11 @@ class LabTestService:
             db.add(booking)
             await db.commit()
             
-            # Eagerly load the nested test AND category to prevent crashes
             fetch_stmt = (
                 select(LabTestBooking)
                 .options(
-                    selectinload(LabTestBooking.lab_test).selectinload(LabTest.category)
+                    selectinload(LabTestBooking.lab_test).selectinload(LabTest.category),
+                    selectinload(LabTestBooking.patient_user).selectinload(User.patient_profile)
                 )
                 .where(LabTestBooking.id == booking.id)
             )
@@ -150,11 +152,11 @@ class LabTestService:
             raise LabTestError("Failed to schedule lab test booking.")
 
     async def list_bookings(self, db: AsyncSession, params: PaginationParams, status: LabTestBookingStatus | None = None) -> tuple[list[LabTestBooking], int]:
-        # MUST eager load both lab_test and category for Pydantic serialization
         query = (
             select(LabTestBooking)
             .options(
-                selectinload(LabTestBooking.lab_test).selectinload(LabTest.category)
+                selectinload(LabTestBooking.lab_test).selectinload(LabTest.category),
+                selectinload(LabTestBooking.patient_user).selectinload(User.patient_profile)
             )
         )
         count_query = select(func.count()).select_from(LabTestBooking)
@@ -162,6 +164,23 @@ class LabTestService:
         if status:
             query = query.where(LabTestBooking.status == status)
             count_query = count_query.where(LabTestBooking.status == status)
+
+        total_count = (await db.execute(count_query)).scalar() or 0
+        query = query.order_by(LabTestBooking.created_at.desc()).offset(params.offset).limit(params.limit)
+        items = (await db.execute(query)).scalars().all()
+        
+        return list(items), total_count
+
+    async def get_patient_bookings(self, db: AsyncSession, patient_user_id: UUID, params: PaginationParams) -> tuple[list[LabTestBooking], int]:
+        query = (
+            select(LabTestBooking)
+            .options(
+                selectinload(LabTestBooking.lab_test).selectinload(LabTest.category),
+                selectinload(LabTestBooking.patient_user).selectinload(User.patient_profile)
+            )
+            .where(LabTestBooking.patient_user_id == patient_user_id)
+        )
+        count_query = select(func.count()).select_from(LabTestBooking).where(LabTestBooking.patient_user_id == patient_user_id)
 
         total_count = (await db.execute(count_query)).scalar() or 0
         query = query.order_by(LabTestBooking.created_at.desc()).offset(params.offset).limit(params.limit)

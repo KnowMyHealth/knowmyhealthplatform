@@ -21,7 +21,6 @@ class CategoryCreateRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     description: Optional[str] = None
 
-
 # --- Lab Test Schemas ---
 class LabTestSchema(BaseModel):
     id: UUID
@@ -69,6 +68,21 @@ class LabTestUpdateRequest(BaseModel):
     class Config:
         extra = "forbid"
 
+# --- Nested Patient/User Schemas for Admin View ---
+class BookingPatientProfileSchema(BaseModel):
+    first_name: str
+    last_name: str
+    phone_number: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class BookingUserSchema(BaseModel):
+    email: str
+    patient_profile: Optional[BookingPatientProfileSchema] = None
+    
+    class Config:
+        from_attributes = True
 
 # --- Lab Test Booking Schemas ---
 class LabTestBookingSchema(BaseModel):
@@ -79,6 +93,7 @@ class LabTestBookingSchema(BaseModel):
     scheduled_date: date
     created_at: datetime
     lab_test: Optional[LabTestSchema] = None
+    patient_user: Optional[BookingUserSchema] = None 
 
     class Config:
         from_attributes = True

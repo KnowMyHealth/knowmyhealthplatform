@@ -169,4 +169,45 @@ def send_employee_welcome_email(to_email: str, employee_name: str, company_name:
         logger.error(f"Failed to send employee email to {to_email}: {str(e)}")
         return False
     
+def send_labtest_booking_email(to_email: str, patient_name: str, test_name: str, scheduled_date: str, clinic_address: str, clinic_timing: str) -> bool:
+    """
+    Sends an appointment confirmation email after a lab test is paid for.
+    """
+    try:
+        resend.api_key = settings.RESEND_API_KEY.get_secret_value()
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
+            <h2 style="color: #2b6cb0;">Booking Confirmed!</h2>
+            <p>Hi <strong>{patient_name}</strong>,</p>
+            <p>Your payment was successful and your lab test appointment is confirmed.</p>
+            
+            <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; font-size: 1.1em;"><strong>{test_name}</strong></p>
+                <p style="margin: 5px 0;"><strong>📅 Date:</strong> {scheduled_date}</p>
+                <p style="margin: 5px 0;"><strong>⏰ Clinic Hours:</strong> {clinic_timing}</p>
+                <p style="margin: 5px 0;"><strong>📍 Address:</strong> {clinic_address}</p>
+            </div>
+            
+            <p>Please arrive at the clinic during the operating hours on your scheduled date. If you have any questions, please contact our support team.</p>
+            
+            <p>Best Regards,<br/><strong>The Know My Health Team</strong></p>
+        </div>
+        """
+
+        response = resend.Emails.send({
+            "from": from_email,
+            "to": [to_email],
+            "subject": f"Booking Confirmed: {test_name}",
+            "html": html_content
+        })
+        
+        logger.info(f"Lab test confirmation email sent to {to_email}.")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send lab test confirmation email to {to_email}: {str(e)}")
+        return False
+    
     
