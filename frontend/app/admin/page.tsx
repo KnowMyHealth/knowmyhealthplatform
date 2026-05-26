@@ -162,7 +162,8 @@ const navItems = [
   { icon: Stethoscope, label: 'Doctors', id: 'doctors' },
   { icon: Microscope, label: 'Diagnostic Tests', id: 'lab-tests' },
   { icon: CalendarDays, label: 'Test Bookings', id: 'test-bookings' },
-  { icon: HeartPulse, label: 'Health Packages', id: 'health-packages' },
+  { icon: HeartPulse, label: 'Package Bookings', id: 'package-bookings' },
+  { icon: Wand2, label: 'Health Packages', id: 'health-packages' },
   { icon: Ticket, label: 'Coupons', id: 'coupons' },
   { icon: Handshake, label: 'Partners', id: 'partners' },
   { icon: Users, label: 'Patients', id: 'patients' },
@@ -233,6 +234,18 @@ export default function AdminPortal() {
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [patientBookings, setPatientBookings] = useState<any[]>([]);
   const [isLoadingPatientBookings, setIsLoadingPatientBookings] = useState(false);
+
+  // Health Package Bookings States
+  const [pkgBookings, setPkgBookings] = useState<any[]>([]);
+  const [isLoadingPkgBookings, setIsLoadingPkgBookings] = useState(false);
+  const [pkgBookingPage, setPkgBookingPage] = useState(1);
+  const [pkgBookingTotalPages, setPkgBookingTotalPages] = useState(1);
+  const [pkgBookingStatusFilter, setPkgBookingStatusFilter] = useState<'all' | 'PENDING' | 'PAID' | 'CANCELLED' | 'COMPLETED'>('all');
+  const pkgBookingsPerPage = 10;
+  const [selectedPkgBooking, setSelectedPkgBooking] = useState<any | null>(null);
+  const [patientPkgBookings, setPatientPkgBookings] = useState<any[]>([]);
+  const [isLoadingPatientPkgBookings, setIsLoadingPatientPkgBookings] = useState(false);
+
   const [testError, setTestError] = useState<string | null>(null);
   const [testToDelete, setTestToDelete] = useState<string | null>(null);
   const [editingTest, setEditingTest] = useState<LabTest | null>(null);
@@ -345,6 +358,9 @@ export default function AdminPortal() {
     }
     if (activeTab === 'test-bookings') {
       fetchLabBookings(1, labBookingStatusFilter);
+    }
+    if (activeTab === 'package-bookings') {
+      fetchPkgBookings(1, pkgBookingStatusFilter);
     }
     if (activeTab === 'health-packages') {
       fetchHealthPackages();
@@ -588,6 +604,41 @@ export default function AdminPortal() {
       }
     } catch (e) { console.error('Failed to fetch patient bookings', e); }
     finally { setIsLoadingPatientBookings(false); }
+  };
+
+  const fetchPkgBookings = async (page = 1, status = pkgBookingStatusFilter) => {
+    setIsLoadingPkgBookings(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const statusParam = status !== 'all' ? `&status=${status}` : '';
+      const res = await fetch(`${BACKEND_URL}/api/v1/health-packages/bookings/list?page=${page}&limit=${pkgBookingsPerPage}${statusParam}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPkgBookings(Array.isArray(json.data) ? json.data : (json.data?.items ?? []));
+        setPkgBookingTotalPages(json.data?.total_pages ?? 1);
+      }
+    } catch (e) { console.error('Failed to fetch package bookings', e); }
+    finally { setIsLoadingPkgBookings(false); }
+  };
+
+  const fetchPatientPkgBookings = async (patientUserId: string) => {
+    setIsLoadingPatientPkgBookings(true);
+    setPatientPkgBookings([]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/health-packages/bookings/patient/${patientUserId}?page=1&limit=50`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setPatientPkgBookings(Array.isArray(json.data) ? json.data : (json.data?.items ?? []));
+      }
+    } catch (e) { console.error('Failed to fetch patient package bookings', e); }
+    finally { setIsLoadingPatientPkgBookings(false); }
   };
 
   const executeDeleteTest = async (id: string) => {
@@ -2925,6 +2976,237 @@ export default function AdminPortal() {
     );
   };
 
+  const renderPackageBookings = () => {
+    const statusColors: Record<string, string> = {
+      PENDING: 'bg-amber-100 text-amber-700',
+      PAID: 'bg-emerald-100 text-emerald-700',
+      CANCELLED: 'bg-red-100 text-red-700',
+      COMPLETED: 'bg-blue-100 text-blue-700',
+    };
+    return (
+      <>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden min-h-[600px] flex flex-col">
+          <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                <HeartPulse className="text-emerald-600" size={22} />
+                Package Bookings
+              </h2>
+              <p className="text-sm text-slate-500 mt-1">Click any row to see full booking & patient details.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'PENDING', 'PAID', 'CANCELLED', 'COMPLETED'] as const).map(s => (
+                <button key={s} onClick={() => { setPkgBookingStatusFilter(s); setPkgBookingPage(1); fetchPkgBookings(1, s); }}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-all border ${pkgBookingStatusFilter === s ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-500 border-slate-200 hover:border-emerald-400'}`}>
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col p-6 sm:p-8">
+            {isLoadingPkgBookings ? (
+              <div className="flex justify-center py-20 flex-1"><Loader2 className="animate-spin text-emerald-500" size={32} /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-100 flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-xs uppercase tracking-wider text-slate-500 font-bold">
+                      <th className="p-4">Patient</th>
+                      <th className="p-4">Package</th>
+                      <th className="p-4">Organization</th>
+                      <th className="p-4">Scheduled Date</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Booked On</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pkgBookings.length === 0 ? (
+                      <tr><td colSpan={6} className="p-8 text-center text-slate-400">No bookings found.</td></tr>
+                    ) : (
+                      pkgBookings.map((booking: any) => (
+                        <tr key={booking.id}
+                          onClick={() => { setSelectedPkgBooking(booking); fetchPatientPkgBookings(booking.patient_user_id); }}
+                          className="hover:bg-emerald-50/40 cursor-pointer transition-colors">
+                          <td className="p-4">
+                            {booking.patient_user ? (
+                              <>
+                                <p className="text-sm font-bold text-slate-900">{booking.patient_user.patient_profile?.first_name} {booking.patient_user.patient_profile?.last_name}</p>
+                                <p className="text-xs text-slate-400">{booking.patient_user.email}</p>
+                              </>
+                            ) : (
+                              <span className="text-sm text-slate-400 font-mono">{booking.patient_user_id?.slice(0, 8)}…</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <p className="font-bold text-slate-900 text-sm">{booking.health_package?.title ?? '—'}</p>
+                          </td>
+                          <td className="p-4 text-sm text-slate-500">{booking.health_package?.organization ?? '—'}</td>
+                          <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                          <td className="p-4">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                              {booking.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-xs text-slate-400">{new Date(booking.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {pkgBookingTotalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <p className="text-xs text-slate-500 font-bold">Page {pkgBookingPage} of {pkgBookingTotalPages}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => { const p = Math.max(1, pkgBookingPage - 1); setPkgBookingPage(p); fetchPkgBookings(p, pkgBookingStatusFilter); }} disabled={pkgBookingPage === 1} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronLeft size={16} /></button>
+                  <button onClick={() => { const p = Math.min(pkgBookingTotalPages, pkgBookingPage + 1); setPkgBookingPage(p); fetchPkgBookings(p, pkgBookingStatusFilter); }} disabled={pkgBookingPage === pkgBookingTotalPages} className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><ChevronRight size={16} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Package Booking Detail Panel */}
+        <AnimatePresence>
+          {selectedPkgBooking && (
+            <div className="fixed inset-0 z-[110] flex justify-end">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setSelectedPkgBooking(null)}
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+              <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col overflow-y-auto">
+
+                <div className="p-6 border-b border-slate-100 flex items-start justify-between gap-4 bg-slate-50/60 shrink-0">
+                  <div>
+                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Package Booking</p>
+                    <h3 className="text-lg font-extrabold text-slate-900">{selectedPkgBooking.health_package?.title ?? 'Health Package'}</h3>
+                    <p className="text-sm text-slate-500">{selectedPkgBooking.health_package?.organization ?? '—'}</p>
+                  </div>
+                  <button onClick={() => setSelectedPkgBooking(null)} className="p-2 rounded-xl hover:bg-slate-200 text-slate-500 transition-colors shrink-0"><X size={20} /></button>
+                </div>
+
+                <div className="flex-1 p-6 space-y-6">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${statusColors[selectedPkgBooking.status] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {selectedPkgBooking.status}
+                    </span>
+                    <span className="text-xs text-slate-400">ID: <span className="font-mono">{selectedPkgBooking.id?.slice(0, 12)}…</span></span>
+                  </div>
+
+                  {/* Patient */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Patient</p>
+                    {selectedPkgBooking.patient_user ? (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                            <span className="text-emerald-700 font-bold text-sm">
+                              {selectedPkgBooking.patient_user.patient_profile?.first_name?.[0]}{selectedPkgBooking.patient_user.patient_profile?.last_name?.[0]}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900">{selectedPkgBooking.patient_user.patient_profile?.first_name} {selectedPkgBooking.patient_user.patient_profile?.last_name}</p>
+                            <p className="text-xs text-slate-500">{selectedPkgBooking.patient_user.email}</p>
+                          </div>
+                        </div>
+                        {selectedPkgBooking.patient_user.patient_profile?.phone_number && (
+                          <div className="flex items-center gap-2 text-sm text-slate-600">
+                            <Phone size={14} className="text-slate-400" />
+                            {selectedPkgBooking.patient_user.patient_profile.phone_number}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-400 font-mono">{selectedPkgBooking.patient_user_id}</p>
+                    )}
+                  </div>
+
+                  {/* Booking Info */}
+                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Booking Info</p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Scheduled Date</span>
+                        <span className="font-bold text-slate-900">{selectedPkgBooking.scheduled_date ?? '—'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Booked On</span>
+                        <span className="font-semibold text-slate-700">{new Date(selectedPkgBooking.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                      {selectedPkgBooking.health_package?.price && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Price</span>
+                          <span className="font-bold text-slate-900">₹{selectedPkgBooking.health_package.price}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Package Tests */}
+                  {selectedPkgBooking.health_package?.included_tests?.length > 0 && (
+                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Included Tests</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedPkgBooking.health_package.included_tests.map((t: string) => (
+                          <span key={t} className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-1 rounded-full border border-emerald-100">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Clinic Info */}
+                  {(selectedPkgBooking.health_package?.clinic_address || selectedPkgBooking.health_package?.clinic_open_time) && (
+                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Clinic</p>
+                      <div className="space-y-2 text-sm">
+                        {selectedPkgBooking.health_package?.clinic_address && (
+                          <div className="flex gap-2 text-slate-600">
+                            <MapPin size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                            {selectedPkgBooking.health_package.clinic_address}
+                          </div>
+                        )}
+                        {selectedPkgBooking.health_package?.clinic_open_time && selectedPkgBooking.health_package?.clinic_close_time && (
+                          <div className="flex gap-2 text-slate-600">
+                            <Clock size={14} className="text-slate-400 mt-0.5 shrink-0" />
+                            {selectedPkgBooking.health_package.clinic_open_time.slice(0, 5)} – {selectedPkgBooking.health_package.clinic_close_time.slice(0, 5)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* All bookings by this patient */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">All Package Bookings by This Patient</p>
+                    {isLoadingPatientPkgBookings ? (
+                      <div className="flex justify-center py-6"><Loader2 className="animate-spin text-emerald-500" size={24} /></div>
+                    ) : patientPkgBookings.length === 0 ? (
+                      <p className="text-sm text-slate-400 text-center py-4">No other bookings found.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {patientPkgBookings.map((b: any) => (
+                          <div key={b.id} onClick={() => { setSelectedPkgBooking(b); fetchPatientPkgBookings(b.patient_user_id); }}
+                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${b.id === selectedPkgBooking.id ? 'border-emerald-300 bg-emerald-50' : 'border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50'}`}>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900">{b.health_package?.title ?? '—'}</p>
+                              <p className="text-xs text-slate-400">{b.scheduled_date ?? '—'}</p>
+                            </div>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${statusColors[b.status] ?? 'bg-slate-100 text-slate-600'}`}>{b.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  };
+
   const renderLabs = () => (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] overflow-hidden">
       <div className="p-6 sm:p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
@@ -3868,6 +4150,7 @@ export default function AdminPortal() {
                   {activeTab === 'doctors' && renderDoctors()}
                   {activeTab === 'lab-tests' && renderLabTests()}
                   {activeTab === 'test-bookings' && renderTestBookings()}
+                  {activeTab === 'package-bookings' && renderPackageBookings()}
                   {activeTab === 'health-packages' && renderHealthPackages()}
                   {activeTab === 'coupons' && renderCoupons()}
                   {activeTab === 'partners' && renderPartners()}
