@@ -17,7 +17,10 @@ export default function ProtectedRoute({ children, requiredRole }: { children: R
     if (!isLoggedIn) {
       router.push('/');
     } else if (requiredRole && userRole !== requiredRole) {
-      router.push('/');
+      if (userRole === 'ADMIN') router.push('/admin');
+      else if (userRole === 'PARTNER') router.push('/partner');
+      else if (userRole === 'DOCTOR') router.push('/doctor');
+      else router.push('/');
     }
   }, [mounted, isLoading, isLoggedIn, userRole, requiredRole, router]);
 

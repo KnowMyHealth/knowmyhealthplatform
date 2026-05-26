@@ -10,7 +10,7 @@ import {
   ExternalLink, Briefcase, DollarSign, ChevronLeft, ChevronRight, Ticket,
   Microscope, Plus, Trash2, AlertCircle, BookOpen, PenTool, Wand2, Tag,
   Image as ImageIcon, UploadCloud, Eye, Search, Handshake, Globe, Phone,
-  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight, PhoneCall
+  HeartPulse, Pencil, Save, ToggleLeft, ToggleRight, PhoneCall, Copy
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/lib/AuthContext';
@@ -133,6 +133,10 @@ interface PartnerApplication {
   address: string;
   website: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  discount_percentage?: number | null;
+  coupon_code?: string | null;
+  coupon_id?: string | null;
+  coupon_is_active?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -166,10 +170,18 @@ const navItems = [
 export default function AdminPortal() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [adminName, setAdminName] = useState<string>(''); 
+  const [adminName, setAdminName] = useState<string>('');
+  const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { logout } = useAuth();
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+
+  const showToast = (type: 'success' | 'error', text: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMsg({ type, text });
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 4000);
+  };
 
   // Doctor States
   const [allDoctors, setAllDoctors] = useState<DoctorListItem[]>([]);
@@ -218,12 +230,17 @@ export default function AdminPortal() {
   const [couponForm, setCouponForm] = useState({ code: '', discount_percentage: '', category_id: '', lab_test_id: '', valid_until: '', is_active: true });
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponToDelete, setCouponToDelete] = useState<string | null>(null);
+  const [copiedCouponId, setCopiedCouponId] = useState<string | null>(null);
+
+  // Partner approval
+  const [approveDiscountPct, setApproveDiscountPct] = useState('');
 
   // --- BLOGS STATES & LOGIC ---
   const [blogTab, setBlogTab] = useState<'list' | 'write' | 'ai'>('list');
   const [blogsList, setBlogsList] = useState<BlogPost[]>([]);
   const [blogCurrentPage, setBlogCurrentPage] = useState(1);
   const blogsPerPage = 10;
+  const [blogToDelete, setBlogToDelete] = useState<string | null>(null);
   
   const [blogForm, setBlogForm] = useState({ id: '', title: '', category: '', readTime: '', excerpt: '', content: '' });
   const [blogImagePreview, setBlogImagePreview] = useState<string | null>(null);
@@ -814,33 +831,35 @@ export default function AdminPortal() {
         setMarkdownView('write');
         setBlogTab('write');
       } else {
-        alert("Failed to load blog details.");
+        showToast('error', 'Failed to load blog details.');
       }
     } catch (error) {
       console.error("Error fetching blog details", error);
+      showToast('error', 'Failed to load blog details.');
     }
   };
 
   const handleDeleteBlog = async (id: string) => {
-    if (!confirm("Are you sure you want to permanently delete this blog?")) return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-    
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/v1/blogs/${id}`, {
         method: 'DELETE',
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
       if (res.ok) {
         fetchBlogs();
+        showToast('success', 'Blog deleted successfully.');
       } else {
-        alert("Failed to delete blog.");
+        showToast('error', 'Failed to delete blog.');
       }
     } catch(e) {
       console.error(e);
+      showToast('error', 'Failed to delete blog.');
     }
   };
 
@@ -854,7 +873,7 @@ export default function AdminPortal() {
 
   const handleSaveBlog = async (status: 'Published' | 'Draft') => {
     if (!blogForm.title.trim() || !blogForm.content.trim()) {
-      alert("Title and content are required.");
+      showToast('error', 'Title and content are required.');
       return;
     }
     
@@ -902,11 +921,11 @@ export default function AdminPortal() {
         setTimeout(() => setBlogSuccess(null), 3000);
       } else {
         const err = await res.json();
-        alert(err.message || 'Failed to save blog');
+        showToast('error', err.message || 'Failed to save blog.');
       }
     } catch(e) {
       console.error(e);
-      alert("Error saving blog");
+      showToast('error', 'Error saving blog. Please try again.');
     }
   };
 
@@ -952,11 +971,11 @@ export default function AdminPortal() {
         setAiBlogForm({ topic: '', tone: 'Professional & Authoritative', audience: 'General Patients', instructions: '' });
         setBlogTab('write'); 
       } else {
-        alert(result.message || "Failed to generate blog via AI.");
+        showToast('error', result.message || 'Failed to generate blog via AI.');
       }
     } catch(e) {
       console.error(e);
-      alert("Failed to generate blog via AI. Please check your connection or try again.");
+      showToast('error', 'Failed to generate blog via AI. Please check your connection or try again.');
     } finally {
       setIsGeneratingBlog(false);
     }
@@ -966,13 +985,13 @@ export default function AdminPortal() {
   const fetchPatients = async () => {
     setIsLoadingPatients(true);
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
       const res = await fetch(`${BACKEND_URL}/api/v1/patients/?limit=50`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`, 
-          'ngrok-skip-browser-warning': 'true' 
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'ngrok-skip-browser-warning': 'true'
         }
       });
       if (res.ok) {
@@ -992,11 +1011,12 @@ export default function AdminPortal() {
     setSelectedPatient(null);
 
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const res = await fetch(`${BACKEND_URL}/api/v1/patients/${patientId}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`, 
-          'ngrok-skip-browser-warning': 'true' 
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'ngrok-skip-browser-warning': 'true'
         }
       });
       if (res.ok) {
@@ -1130,20 +1150,26 @@ export default function AdminPortal() {
     }
   };
 
-  const approvePartner = async (partnerId: string) => {
+  const approvePartner = async (partnerId: string, discountPct: number) => {
     setIsUpdatingPartnerStatus(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setIsUpdatingPartnerStatus(false); return; }
     try {
       const res = await fetch(`${BACKEND_URL}/api/v1/partners/${partnerId}/approve`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify({ discount_percentage: discountPct }),
       });
       if (res.ok) {
         const json = await res.json();
         const updated: PartnerApplication = json.data;
         setPartnerApplications(prev => prev.map(p => p.id === partnerId ? updated : p));
         setSelectedPartner(updated);
+        setApproveDiscountPct('');
       }
     } catch (err) {
       console.error('Failed to approve partner', err);
@@ -1831,7 +1857,7 @@ export default function AdminPortal() {
           </h2>
           <p className="text-sm text-slate-500 mt-1">Manage discount codes for diagnostic tests.</p>
         </div>
-        <button 
+        <button
           onClick={() => { resetCouponForm(); setIsAddCouponOpen(true); }}
           className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm"
         >
@@ -1865,7 +1891,7 @@ export default function AdminPortal() {
                       </td>
                       <td className="p-4 text-sm font-bold text-emerald-700">{coupon.discount_percentage}%</td>
                       <td className="p-4">
-                        {coupon.is_active 
+                        {coupon.is_active
                           ? <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Active</span>
                           : <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Inactive</span>
                         }
@@ -1904,14 +1930,14 @@ export default function AdminPortal() {
         <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50 mt-auto">
           <p className="text-xs text-slate-500 font-bold px-4">Page {couponCurrentPage} of {totalCouponPages}</p>
           <div className="flex gap-2 pr-4">
-            <button 
+            <button
               onClick={() => setCouponCurrentPage(p => Math.max(1, p - 1))}
               disabled={couponCurrentPage === 1}
               className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
               <ChevronLeft size={16} />
             </button>
-            <button 
+            <button
               onClick={() => setCouponCurrentPage(p => Math.min(totalCouponPages, p + 1))}
               disabled={couponCurrentPage === totalCouponPages}
               className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"
@@ -2062,8 +2088,8 @@ export default function AdminPortal() {
                           >
                             <PenTool size={16} />
                           </button>
-                          <button 
-                            onClick={() => handleDeleteBlog(blog.id)}
+                          <button
+                            onClick={() => setBlogToDelete(blog.id)}
                             className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-red-50 hover:text-red-600 transition-colors"
                             title="Delete Blog"
                           >
@@ -2793,12 +2819,60 @@ export default function AdminPortal() {
                     ))}
                   </div>
 
+                  {/* Corporate Coupon Card — visible once approved */}
+                  {selectedPartner.status === 'APPROVED' && selectedPartner.coupon_code && (
+                    <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-3">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Tag size={12} /> Corporate Coupon
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 px-4 py-2.5 bg-white text-emerald-800 font-black text-base rounded-xl border border-emerald-200 tracking-widest text-center">
+                          {selectedPartner.coupon_code}
+                        </code>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedPartner.coupon_code!);
+                            setCopiedCouponId(selectedPartner.id);
+                            setTimeout(() => setCopiedCouponId(null), 1800);
+                          }}
+                          title="Copy code"
+                          className="p-2.5 bg-white border border-emerald-200 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors shrink-0"
+                        >
+                          {copiedCouponId === selectedPartner.id
+                            ? <CheckCircle2 size={16} className="text-emerald-600" />
+                            : <Copy size={16} />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-emerald-700">
+                        <span className="font-black">{selectedPartner.discount_percentage ?? 10}%</span> discount · shared with all employees of this organisation
+                      </p>
+                    </div>
+                  )}
+
                   <div>
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Update Status</p>
+
+                    {/* Discount % input — shown before approval */}
+                    {selectedPartner.status !== 'APPROVED' && (
+                      <div className="mb-3">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                          Corporate Discount % <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                          type="number" min="1" max="100" step="0.01"
+                          placeholder="e.g. 15"
+                          value={approveDiscountPct}
+                          onChange={e => setApproveDiscountPct(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:outline-none text-sm font-bold text-emerald-700"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">Required to generate the corporate coupon on approval.</p>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        disabled={isUpdatingPartnerStatus || selectedPartner.status === 'APPROVED'}
-                        onClick={() => approvePartner(selectedPartner.id)}
+                        disabled={isUpdatingPartnerStatus || (selectedPartner.status as string) === 'APPROVED' || (!approveDiscountPct && (selectedPartner.status as string) !== 'APPROVED')}
+                        onClick={() => approvePartner(selectedPartner.id, parseFloat(approveDiscountPct))}
                         className={`py-2.5 rounded-xl text-sm font-bold transition-colors border disabled:opacity-50 flex items-center justify-center gap-1.5 ${
                           selectedPartner.status === 'APPROVED'
                             ? PARTNER_STATUS_COLORS['APPROVED'] + ' cursor-default'
@@ -3056,7 +3130,28 @@ export default function AdminPortal() {
   return (
     <ProtectedRoute requiredRole="ADMIN">
       <div className="fixed inset-0 z-[100] flex bg-[#f8fafc] text-slate-900 font-sans overflow-hidden">
-        
+
+        {/* Global Toast */}
+        <AnimatePresence>
+          {toastMsg && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, x: '-50%' }}
+              animate={{ opacity: 1, y: 0, x: '-50%' }}
+              exit={{ opacity: 0, y: -50, x: '-50%' }}
+              className={`fixed top-6 left-1/2 z-[500] px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 border ${
+                toastMsg.type === 'error'
+                  ? 'bg-red-950 text-white border-red-800'
+                  : 'bg-emerald-950 text-white border-emerald-700'
+              }`}
+            >
+              {toastMsg.type === 'error'
+                ? <AlertCircle size={20} className="text-red-400 shrink-0" />
+                : <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />}
+              <span className="font-bold text-sm">{toastMsg.text}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.div 
@@ -3087,14 +3182,14 @@ export default function AdminPortal() {
                 <button
                   key={item.id}
                   onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                    isActive 
-                      ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5' 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                    isActive
+                      ? 'bg-emerald-900/50 text-white font-medium shadow-inner border border-white/5'
                       : 'hover:bg-white/5 hover:text-white'
                   }`}
                 >
-                  <item.icon size={20} className={isActive ? 'text-emerald-400' : 'text-slate-500'} />
-                  <span className="flex-1">{item.label}</span>
+                  <item.icon size={20} className={`shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span className="flex-1 text-left">{item.label}</span>
                   {item.id === 'callbacks' && callbacks.filter(c => c.status === 'PENDING').length > 0 && (
                     <span className="ml-auto text-[10px] font-black bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
                       {callbacks.filter(c => c.status === 'PENDING').length}
@@ -3313,6 +3408,48 @@ export default function AdminPortal() {
           </AnimatePresence>
 
         </div>
+
+        {/* Blog Delete Confirmation Modal */}
+        <AnimatePresence>
+          {blogToDelete && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]"
+                onClick={() => setBlogToDelete(null)}
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm"
+              >
+                <div className="flex flex-col items-center text-center gap-4">
+                  <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
+                    <Trash2 size={24} className="text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">Delete Blog Post?</h3>
+                  <p className="text-sm text-slate-500">This action is permanent and cannot be undone.</p>
+                  <div className="flex gap-3 w-full mt-2">
+                    <button
+                      onClick={() => setBlogToDelete(null)}
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { handleDeleteBlog(blogToDelete); setBlogToDelete(null); }}
+                      className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
       </div>
     </ProtectedRoute>
   );

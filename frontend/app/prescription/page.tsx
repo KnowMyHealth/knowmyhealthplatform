@@ -11,6 +11,7 @@ import {
 import { useDropzone } from 'react-dropzone';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import Markdown from 'react-markdown';
+import { supabase } from '@/lib/supabase';
 
 type RecordType = {
   id: string; doctor: string; clinic: string; date: string;
@@ -63,10 +64,10 @@ export default function PrescriptionVaultPage() {
 
   const fetchHistory = async () => {
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'ngrok-skip-browser-warning': 'true' },
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'ngrok-skip-browser-warning': 'true' },
       });
       const data = await res.json();
       if (res.ok && data.success) setHistory(data.data);
@@ -100,11 +101,11 @@ export default function PrescriptionVaultPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const { data: { session } } = await supabase.auth.getSession();
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
-      const token = localStorage.getItem('supabase_access_token');
       const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/ocr`, {
         method: 'POST',
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'ngrok-skip-browser-warning': 'true' },
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'ngrok-skip-browser-warning': 'true' },
         body: formData,
       });
       const data = await res.json();
@@ -123,10 +124,10 @@ export default function PrescriptionVaultPage() {
     setIsFetchingRecord(true);
     setSelectedRecord(null);
     try {
-      const token = localStorage.getItem('supabase_access_token');
+      const { data: { session } } = await supabase.auth.getSession();
       const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
       const res = await fetch(`${BACKEND_URL}/api/v1/prescriptions/${id}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'ngrok-skip-browser-warning': 'true' },
+        headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'ngrok-skip-browser-warning': 'true' },
       });
       const data = await res.json();
       if (res.ok) {

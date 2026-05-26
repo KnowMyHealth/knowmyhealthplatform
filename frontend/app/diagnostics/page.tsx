@@ -236,9 +236,11 @@ function DiagnosticsContent() {
           totalDiscount += json.data.discount_amount * item.quantity;
         } else {
           lastErrMsg = json.message || "Invalid coupon";
+          if (res.status === 400) break;
         }
       } catch (err: any) {
         lastErrMsg = "Network error while validating coupon.";
+        break;
       }
     }
 

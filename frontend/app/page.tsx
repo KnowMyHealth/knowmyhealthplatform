@@ -3,7 +3,8 @@
 import { motion } from 'motion/react';
 import {
   ArrowRight, Activity, HeartPulse, Stethoscope, FileText, Pill, Brain, Star,
-  Building2, Mail, MapPin, Globe, User, CheckCircle2, Shield, Zap, Lock, Phone
+  Building2, Mail, MapPin, Globe, User, CheckCircle2, Shield, Zap, Lock, Phone,
+  Loader2
 } from 'lucide-react';
 import Floating3DElements from '@/components/Floating3DElements';
 import StickyCallback from '@/components/StickyCallback';
@@ -165,8 +166,12 @@ export default function Home() {
     else if (userRole === 'DOCTOR') router.push('/doctor');
   }, [isLoggedIn, userRole, isLoading, router]);
 
-  if (!isLoading && isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR')) {
-    return null;
+  if (isLoading || (isLoggedIn && (userRole === 'ADMIN' || userRole === 'PARTNER' || userRole === 'DOCTOR'))) {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-screen">
+        <Loader2 className="animate-spin text-emerald-600" size={48} />
+      </div>
+    );
   }
 
   const containerVariants = {

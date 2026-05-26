@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, User, Calendar, Droplet, Phone, MapPin, HeartPulse, Loader2, CheckCircle2, AlertCircle, Activity } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 export default function PatientProfileManager() {
   const { isLoggedIn, userRole } = useAuth();
@@ -29,12 +30,12 @@ export default function PatientProfileManager() {
   const fetchProfile = async (autoOpenOn404: boolean = false) => {
     setMode('loading');
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
 
       const res = await fetch(`${BACKEND_URL}/api/v1/patients/me`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
@@ -90,8 +91,8 @@ export default function PatientProfileManager() {
     setMessage(null);
 
     try {
-      const token = localStorage.getItem('supabase_access_token');
-      if (!token) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         setMessage({ type: 'error', text: 'Session expired. Please log in again.' });
         setIsSaving(false);
         return;
@@ -102,7 +103,7 @@ export default function PatientProfileManager() {
       const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method,
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
           'ngrok-skip-browser-warning': 'true'
         },

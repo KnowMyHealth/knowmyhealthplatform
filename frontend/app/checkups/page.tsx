@@ -8,6 +8,7 @@ import {
   HeartPulse, Phone, Mail, User, Loader2, Star,
 } from 'lucide-react';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { supabase } from '@/lib/supabase';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
@@ -456,9 +457,9 @@ export default function CheckupsPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const token = localStorage.getItem('supabase_access_token');
+        const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(`${BACKEND_URL}/api/v1/health-packages?is_active=true&limit=100`, {
-          headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+          headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'ngrok-skip-browser-warning': 'true' },
         });
         if (res.ok) {
           const json = await res.json();

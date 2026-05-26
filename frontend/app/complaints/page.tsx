@@ -100,7 +100,7 @@ export default function ComplaintsPage() {
     setIsLoadingReports(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || localStorage.getItem('supabase_access_token');
+      const token = session?.access_token;
       if (!token) return;
 
       const res = await fetch(`${BACKEND_URL}/api/v1/symptom-checker`, {
@@ -128,7 +128,7 @@ export default function ComplaintsPage() {
     setIsFetchingReportId(id);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || localStorage.getItem('supabase_access_token');
+      const token = session?.access_token;
       
       const res = await fetch(`${BACKEND_URL}/api/v1/symptom-checker/${id}`, {
         headers: {
@@ -181,13 +181,13 @@ export default function ComplaintsPage() {
   // --- API INTERACTION (CHAT) ---
   const sendSymptomToAPI = async (message: string, currentHistory: HistoryItem[]) => {
     const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || localStorage.getItem('supabase_access_token');
-    
+    const token = session?.access_token;
+
     const res = await fetch(`${BACKEND_URL}/api/v1/symptom-checker`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${token ?? ''}`,
         'ngrok-skip-browser-warning': 'true'
       },
       body: JSON.stringify({

@@ -51,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!isMounted) return;
       if (session) {
-        localStorage.setItem('supabase_access_token', session.access_token);
         const role = await fetchUserProfile(session.access_token);
         if (!isMounted) return;
         setUserRole(role);
@@ -68,16 +67,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session) {
-        localStorage.setItem('supabase_access_token', session.access_token);
         const role = await fetchUserProfile(session.access_token);
+        if (!isMounted) return;
         if (role) setUserRole(role);
         setIsLoggedIn(true);
+        if (event === 'SIGNED_IN') {
+          if (role === 'ADMIN') router.push('/admin');
+          else if (role === 'PARTNER') router.push('/partner');
+          else if (role === 'DOCTOR') router.push('/doctor');
+        }
       } else {
+        if (!isMounted) return;
         setIsLoggedIn(false);
         setUserRole(null);
-        localStorage.removeItem('supabase_access_token');
       }
     });
 
@@ -91,6 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoggedIn(true);
     setUserRole(role);
     setIsAuthModalOpen(false);
+    if (role === 'ADMIN') router.push('/admin');
+    else if (role === 'PARTNER') router.push('/partner');
+    else if (role === 'DOCTOR') router.push('/doctor');
   };
 
   const logout = async () => {
