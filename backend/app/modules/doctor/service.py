@@ -4,6 +4,7 @@ import uuid
 import string
 import secrets
 import calendar
+from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -296,6 +297,7 @@ class DoctorsService:
         from app.modules.payment.models import Payment, PaymentStatus, BookingType
         from app.modules.consultation.models import Consultation
         from app.modules.user.models import User
+        from zoneinfo import ZoneInfo
 
         current_year = datetime.now().year
 
@@ -349,7 +351,10 @@ class DoctorsService:
         transaction_rows = transactions_result.all()
 
         recent_transactions = []
-        now = datetime.now(timezone.utc)
+        
+        # TIMEZONE FIX: Set up IST timezone
+        ist_tz = ZoneInfo("Asia/Kolkata")
+        now_ist = datetime.now(ist_tz)
 
         for payment, consultation in transaction_rows:
             patient_name = "Anonymous Patient"
@@ -357,13 +362,16 @@ class DoctorsService:
                 profile = consultation.patient_user.patient_profile
                 patient_name = f"{profile.first_name} {profile.last_name}"
 
-            pay_time = payment.created_at
-            if pay_time.date() == now.date():
-                date_label = f"Today, {pay_time.strftime('%I:%M %p')}"
-            elif pay_time.date() == (now.date() - timedelta(days=1)):
-                date_label = "Yesterday"
+            # TIMEZONE FIX: Convert Postgres UTC timestamp to IST
+            pay_time_ist = payment.created_at.astimezone(ist_tz)
+            
+            # Formatting logic based on IST dates
+            if pay_time_ist.date() == now_ist.date():
+                date_label = f"Today, {pay_time_ist.strftime('%I:%M %p')}"
+            elif pay_time_ist.date() == (now_ist.date() - timedelta(days=1)):
+                date_label = f"Yesterday, {pay_time_ist.strftime('%I:%M %p')}"
             else:
-                date_label = pay_time.strftime("%d %b, %I:%M %p")
+                date_label = pay_time_ist.strftime("%d %b, %I:%M %p")
 
             raw_ref = payment.razorpay_payment_id or str(payment.id)
             clean_trx_id = f"TRX-{raw_ref[-6:].upper()}" if len(raw_ref) >= 6 else f"TRX-{raw_ref.upper()}"
@@ -381,7 +389,6 @@ class DoctorsService:
             "monthly_earnings": monthly_earnings_list,
             "recent_transactions": recent_transactions
         }
-    
 
     async def get_doctor_dashboard_metrics(self, db: AsyncSession, doctor_user_id: UUID) -> dict:
         from datetime import datetime, timedelta, timezone

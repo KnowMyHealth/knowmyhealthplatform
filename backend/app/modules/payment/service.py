@@ -2,6 +2,7 @@
 import razorpay
 import secrets
 from uuid import UUID
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from loguru import logger
 from sqlalchemy import select, update, func
@@ -113,7 +114,11 @@ class PaymentService:
 
             if booking and booking.doctor and booking.patient_user:
                 doc_name = f"{booking.doctor.first_name} {booking.doctor.last_name}"
-                formatted_date = booking.scheduled_at.strftime("%d %b %Y, %I:%M %p")
+
+                # Convert UTC datetime to IST
+                ist_tz = ZoneInfo("Asia/Kolkata")
+                local_dt = booking.scheduled_at.astimezone(ist_tz)
+                formatted_date = local_dt.strftime("%d %b %Y, %I:%M %p")
                 
                 # Safe Fallback if profile is incomplete
                 patient_name = "Patient"
