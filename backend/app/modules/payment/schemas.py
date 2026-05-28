@@ -3,12 +3,13 @@ from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
 from pydantic import BaseModel, Field, ConfigDict
-from app.modules.payment.models import PaymentStatus, BookingType
+from app.modules.payment.models import PaymentStatus, BookingType, PaymentMode
 
 class OrderCreateRequest(BaseModel):
     amount: Decimal = Field(..., gt=0, description="Amount in INR (e.g. 500.00)")
     booking_type: BookingType
     booking_id: UUID = Field(..., description="ID of the consultation, lab test booking, or package booking")
+    payment_mode: PaymentMode = Field(default=PaymentMode.FULL, description="FULL or ADVANCE")
 
 class OrderCreateResponse(BaseModel):
     payment_id: UUID = Field(..., description="Internal DB payment ID")
@@ -47,5 +48,6 @@ class AdminTransactionSchema(BaseModel):
     status: PaymentStatus
     booking_type: BookingType
     booking_id: UUID
+    payment_mode: PaymentMode
     created_at: datetime
     user: PaymentUserSchema | None = None

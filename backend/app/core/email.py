@@ -1,15 +1,11 @@
+# app/core/email.py
 import resend
 from loguru import logger
 from app.core.config import settings
 
 def send_doctor_welcome_email(to_email: str, doctor_name: str, temp_password: str) -> bool:
-    """
-    Sends a welcome email to the newly approved doctor using Resend.
-    """
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
-
-        # NOTE: In production, change "onboarding@resend.dev" to your verified domain (e.g. "noreply@knowmyhealth.com")
         from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
 
         html_content = f"""
@@ -39,19 +35,13 @@ def send_doctor_welcome_email(to_email: str, doctor_name: str, temp_password: st
         
         logger.info(f"Welcome email sent successfully to {to_email}. Resend ID: {response.get('id')}")
         return True
-
     except Exception as e:
         logger.error(f"Failed to send email to {to_email}: {str(e)}")
         return False
 
 def send_doctor_invite_email(to_email: str, doctor_name: str, invite_link: str) -> bool:
-    """
-    Sends an invitation link to the newly approved doctor using Resend.
-    """
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
-
-        # Change "onboarding@resend.dev" to your domain once verified on Resend
         from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
 
         html_content = f"""
@@ -83,11 +73,9 @@ def send_doctor_invite_email(to_email: str, doctor_name: str, invite_link: str) 
         
         logger.info(f"Invite email sent successfully to {to_email}. Resend ID: {response.get('id')}")
         return True
-
     except Exception as e:
         logger.error(f"Failed to send invite email to {to_email}: {str(e)}")
         return False
-    
 
 def send_partner_welcome_email(to_email: str, company_name: str, temp_password: str, coupon_code: str) -> bool:
     try:
@@ -169,10 +157,15 @@ def send_employee_welcome_email(to_email: str, employee_name: str, company_name:
         logger.error(f"Failed to send employee email to {to_email}: {str(e)}")
         return False
     
-def send_labtest_booking_email(to_email: str, patient_name: str, test_name: str, scheduled_date: str, clinic_address: str, clinic_timing: str) -> bool:
-    """
-    Sends an appointment confirmation email after a lab test is paid for.
-    """
+def send_labtest_booking_email(
+    to_email: str, 
+    patient_name: str, 
+    test_name: str, 
+    scheduled_date: str, 
+    clinic_address: str, 
+    clinic_timing: str,
+    payment_summary_html: str = "" # <-- NEW
+) -> bool:
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
         from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
@@ -188,6 +181,7 @@ def send_labtest_booking_email(to_email: str, patient_name: str, test_name: str,
                 <p style="margin: 5px 0;"><strong>📅 Date:</strong> {scheduled_date}</p>
                 <p style="margin: 5px 0;"><strong>⏰ Clinic Hours:</strong> {clinic_timing}</p>
                 <p style="margin: 5px 0;"><strong>📍 Address:</strong> {clinic_address}</p>
+                {payment_summary_html}
             </div>
             
             <p>Please arrive at the clinic during the operating hours on your scheduled date. If you have any questions, please contact our support team.</p>
@@ -205,15 +199,19 @@ def send_labtest_booking_email(to_email: str, patient_name: str, test_name: str,
         
         logger.info(f"Lab test confirmation email sent to {to_email}.")
         return True
-
     except Exception as e:
         logger.error(f"Failed to send lab test confirmation email to {to_email}: {str(e)}")
         return False
     
-def send_health_package_booking_email(to_email: str, patient_name: str, package_name: str, scheduled_date: str, clinic_address: str, clinic_timing: str) -> bool:
-    """
-    Sends an appointment confirmation email after a health package is paid for.
-    """
+def send_health_package_booking_email(
+    to_email: str, 
+    patient_name: str, 
+    package_name: str, 
+    scheduled_date: str, 
+    clinic_address: str, 
+    clinic_timing: str,
+    payment_summary_html: str = "" # <-- NEW
+) -> bool:
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
         from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
@@ -229,6 +227,7 @@ def send_health_package_booking_email(to_email: str, patient_name: str, package_
                 <p style="margin: 5px 0;"><strong>📅 Date:</strong> {scheduled_date}</p>
                 <p style="margin: 5px 0;"><strong>⏰ Clinic Hours:</strong> {clinic_timing}</p>
                 <p style="margin: 5px 0;"><strong>📍 Address:</strong> {clinic_address}</p>
+                {payment_summary_html}
             </div>
             
             <p>Please arrive at the clinic during the operating hours on your scheduled date. Fasting might be required depending on the tests included in your package.</p>
@@ -246,7 +245,6 @@ def send_health_package_booking_email(to_email: str, patient_name: str, package_
         
         logger.info(f"Health package confirmation email sent to {to_email}.")
         return True
-
     except Exception as e:
         logger.error(f"Failed to send health package confirmation email to {to_email}: {str(e)}")
         return False
@@ -258,7 +256,8 @@ def send_consultation_booking_patient_email(
     doctor_name: str, 
     scheduled_date: str, 
     consultation_type: str, 
-    clinic_address: str | None
+    clinic_address: str | None,
+    payment_summary_html: str = "" # <-- NEW
 ) -> bool:
     """Sends a booking confirmation email to the Patient."""
     try:
@@ -280,6 +279,7 @@ def send_consultation_booking_patient_email(
                 <p style="margin: 5px 0;"><strong>🩺 Type:</strong> {consultation_type}</p>
                 {location_html}
                 {link_html}
+                {payment_summary_html}
             </div>
             
             <p>If you have any questions or need to reschedule, please visit your dashboard or contact our support team.</p>
@@ -300,12 +300,14 @@ def send_consultation_booking_patient_email(
         logger.error(f"Failed to send patient consultation email to {to_email}: {str(e)}")
         return False
 
+
 def send_consultation_booking_doctor_email(
     to_email: str, 
     doctor_name: str, 
     patient_name: str, 
     scheduled_date: str, 
-    consultation_type: str
+    consultation_type: str,
+    payment_summary_html: str = "" # <-- NEW
 ) -> bool:
     """Sends a new booking notification email to the Doctor."""
     try:
@@ -322,6 +324,7 @@ def send_consultation_booking_doctor_email(
                 <p style="margin: 0 0 10px 0; font-size: 1.1em;"><strong>Patient: {patient_name}</strong></p>
                 <p style="margin: 5px 0;"><strong>📅 Date & Time:</strong> {scheduled_date}</p>
                 <p style="margin: 5px 0;"><strong>🩺 Type:</strong> {consultation_type}</p>
+                {payment_summary_html}
             </div>
             
             <p>Please log in to your provider dashboard to view the patient's full medical profile and history.</p>
@@ -341,7 +344,6 @@ def send_consultation_booking_doctor_email(
     except Exception as e:
         logger.error(f"Failed to send doctor consultation email to {to_email}: {str(e)}")
         return False
-    
 
 def send_admin_new_booking_email(
     booking_type: str, 
@@ -350,13 +352,11 @@ def send_admin_new_booking_email(
     amount: float, 
     details: str
 ) -> bool:
-    """
-    Sends a notification to the platform Admin whenever a successful booking/payment occurs.
-    """
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
         from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
         
+        # ⚠️ CHANGE THIS TO YOUR ACTUAL ADMIN RECEIVING EMAIL ⚠️
         to_email = settings.ADMIN_EMAIL
 
         html_content = f"""
@@ -384,8 +384,6 @@ def send_admin_new_booking_email(
         
         logger.info(f"Admin notification email sent for {booking_type}.")
         return True
-
     except Exception as e:
         logger.error(f"Failed to send admin notification email: {str(e)}")
         return False
-

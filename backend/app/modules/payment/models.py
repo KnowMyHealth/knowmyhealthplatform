@@ -23,12 +23,15 @@ class BookingType(str, enum.Enum):
     LAB_TEST = "LAB_TEST"
     HEALTH_PACKAGE = "HEALTH_PACKAGE"
 
+# --- NEW: Added Payment Mode to differentiate 10% vs 100% ---
+class PaymentMode(str, enum.Enum):
+    FULL = "FULL"
+    ADVANCE = "ADVANCE"
+
 class Payment(Base):
     __tablename__ = "payments"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
-    # FIX: Add ForeignKey to properly link to the User table
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
@@ -39,14 +42,16 @@ class Payment(Base):
     
     status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
     
+    # --- NEW: Track Payment Mode ---
+    payment_mode: Mapped[PaymentMode] = mapped_column(Enum(PaymentMode), default=PaymentMode.FULL, nullable=False)
+    
     booking_type: Mapped[BookingType] = mapped_column(Enum(BookingType), nullable=False)
     booking_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # NEW: Relationship to fetch user details easily
     user: Mapped["User"] = relationship("User")
 
     def __repr__(self):
-        return f"<Payment id={self.id} status={self.status} order={self.razorpay_order_id}>"
+        return f"<Payment id={self.id} mode={self.payment_mode} status={self.status}>"
