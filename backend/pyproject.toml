@@ -25,4 +25,5 @@ dependencies = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "httpx>=0.28.1",
+    "tzdata>=2026.2",
 ]
