@@ -11,9 +11,17 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+<<<<<<< HEAD
+=======
+from zoneinfo import ZoneInfo
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
 
-from app.core.config import settings
 from app.utils.pagination import PaginationParams
+from app.core.config import settings
+<<<<<<< HEAD
+from app.utils.pagination import PaginationParams
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
 from app.modules.payment.models import Payment, PaymentStatus, BookingType, PaymentMode
 from app.modules.payment.schemas import OrderCreateRequest, PaymentVerifyRequest
 from app.common.exceptions import BaseDomainException
@@ -52,7 +60,11 @@ class PaymentService:
                 booking_type=payload.booking_type,
                 booking_id=payload.booking_id,
                 status=PaymentStatus.PENDING,
+<<<<<<< HEAD
                 payment_mode=payload.payment_mode
+=======
+                payment_mode=payload.payment_mode # <-- NEW: Store 10% vs 100% intent
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
             )
             db.add(payment)
             await db.commit()
@@ -87,7 +99,11 @@ class PaymentService:
         if not payment:
             raise PaymentError("Transaction reference not found in database.")
 
+<<<<<<< HEAD
         # 3. IDEMPOTENCY CHECK: Prevent Replay Attacks
+=======
+        # 3. IDEMPOTENCY CHECK
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
         if payment.status != PaymentStatus.PENDING:
             raise PaymentError("This payment has already been processed.", status_code=400)
 
@@ -98,6 +114,7 @@ class PaymentService:
         # ==========================================
         # 5. DYNAMIC PAYMENT SUMMARY HTML GENERATOR
         # ==========================================
+<<<<<<< HEAD
         pay_mode_label = "Advance Payment (10%)" if payment.payment_mode == PaymentMode.ADVANCE else "Full Payment (100%)"
         
         if payment.payment_mode == PaymentMode.ADVANCE:
@@ -134,6 +151,11 @@ class PaymentService:
         
         # Localized timezone for India Standard Time
         ist_tz = ZoneInfo("Asia/Kolkata")
+=======
+        
+        # Helper variables for emails
+        pay_mode_label = "Advance Payment (10%)" if payment.payment_mode == PaymentMode.ADVANCE else "Full Payment (100%)"
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
 
         if payment.booking_type == BookingType.CONSULTATION:
             from app.modules.consultation.models import Consultation, ConsultationStatus
@@ -161,8 +183,12 @@ class PaymentService:
 
             if booking and booking.doctor and booking.patient_user:
                 doc_name = f"{booking.doctor.first_name} {booking.doctor.last_name}"
+<<<<<<< HEAD
                 
                 # Format strictly to IST
+=======
+                ist_tz = ZoneInfo("Asia/Kolkata")
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 local_dt = booking.scheduled_at.astimezone(ist_tz)
                 formatted_date = local_dt.strftime("%d %b %Y, %I:%M %p")
                 
@@ -172,7 +198,10 @@ class PaymentService:
                     p_prof = booking.patient_user.patient_profile
                     patient_name = f"{p_prof.first_name} {p_prof.last_name}"
 
+<<<<<<< HEAD
                 # Trigger Patient Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_consultation_booking_patient_email,
@@ -186,7 +215,10 @@ class PaymentService:
                     )
                 )
 
+<<<<<<< HEAD
                 # Trigger Doctor Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_consultation_booking_doctor_email,
@@ -199,7 +231,10 @@ class PaymentService:
                     )
                 )
 
+<<<<<<< HEAD
                 # Trigger Admin Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 admin_details = f"Consultation with Dr. {doc_name} at {formatted_date} ({booking.consultation_type.value}) - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
@@ -217,7 +252,11 @@ class PaymentService:
             from app.db.all_models import User
             from app.core.email import send_labtest_booking_email, send_admin_new_booking_email
 
+<<<<<<< HEAD
             # Assign ADVANCE_PAID vs PAID based on frontend intent
+=======
+            # --- NEW: Assign ADVANCE_PAID vs PAID based on frontend intent ---
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
             new_status = LabTestBookingStatus.ADVANCE_PAID if payment.payment_mode == PaymentMode.ADVANCE else LabTestBookingStatus.PAID
 
             await db.execute(
@@ -247,7 +286,10 @@ class PaymentService:
                 open_t = booking.lab_test.clinic_open_time.strftime("%I:%M %p") if booking.lab_test.clinic_open_time else "TBD"
                 close_t = booking.lab_test.clinic_close_time.strftime("%I:%M %p") if booking.lab_test.clinic_close_time else "TBD"
                 
+<<<<<<< HEAD
                 # Trigger Patient Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_labtest_booking_email,
@@ -261,7 +303,10 @@ class PaymentService:
                     )
                 )
 
+<<<<<<< HEAD
                 # Trigger Admin Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 admin_details = f"Lab Test: {test_name} | Date: {sch_date} | Lab: {booking.lab_test.organization} - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
@@ -279,7 +324,11 @@ class PaymentService:
             from app.db.all_models import User
             from app.core.email import send_health_package_booking_email, send_admin_new_booking_email
 
+<<<<<<< HEAD
             # Assign ADVANCE_PAID vs PAID based on frontend intent
+=======
+            # --- NEW: Assign ADVANCE_PAID vs PAID based on frontend intent ---
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
             new_status = HealthPackageBookingStatus.ADVANCE_PAID if payment.payment_mode == PaymentMode.ADVANCE else HealthPackageBookingStatus.PAID
 
             await db.execute(
@@ -309,7 +358,10 @@ class PaymentService:
                 open_t = booking.health_package.clinic_open_time.strftime("%I:%M %p") if booking.health_package.clinic_open_time else "TBD"
                 close_t = booking.health_package.clinic_close_time.strftime("%I:%M %p") if booking.health_package.clinic_close_time else "TBD"
                 
+<<<<<<< HEAD
                 # Trigger Patient Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_health_package_booking_email,
@@ -323,7 +375,10 @@ class PaymentService:
                     )
                 )
 
+<<<<<<< HEAD
                 # Trigger Admin Email
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
                 admin_details = f"Health Package: {package_name} | Date: {sch_date} | Org: {booking.health_package.organization} - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
@@ -336,7 +391,10 @@ class PaymentService:
                     )
                 )
 
+<<<<<<< HEAD
         # 7. Single Atomic Commit (Saves Payment and Booking Update simultaneously)
+=======
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
         await db.commit()
         await db.refresh(payment)
         
@@ -371,5 +429,10 @@ class PaymentService:
         items = (await db.execute(query)).scalars().all()
         
         return list(items), total_count
+<<<<<<< HEAD
 
         
+=======
+    
+    
+>>>>>>> d332920287e566af0a5a4f391e847d9f14ba37c1
