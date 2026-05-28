@@ -338,7 +338,7 @@ export default function DoctorDashboard() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
 
-  const [appointmentFilter, setAppointmentFilter] = useState<'ALL' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'>('ALL');
+  const [appointmentFilter, setAppointmentFilter] = useState<'ALL' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED'>('ALL');
 
   // Patient Management States
   const [patientList, setPatientList] = useState<PatientListItem[]>([]);
@@ -376,6 +376,10 @@ export default function DoctorDashboard() {
   }, []);
 
   const isPastScheduled = (scheduledAt: string) => now.getTime() > new Date(scheduledAt).getTime();
+
+  // An expired consultation (EXPIRED status, or a SCHEDULED one whose time has passed) can't receive a prescription
+  const isExpired = (apt: { status: string; scheduled_at: string }) =>
+    apt.status === 'EXPIRED' || (apt.status === 'SCHEDULED' && isPastScheduled(apt.scheduled_at));
 
   const getJoinStatus = (scheduledAt: string) => {
     const sTime = new Date(scheduledAt).getTime();
@@ -1012,7 +1016,7 @@ export default function DoctorDashboard() {
                           disabled={uploadingPrescriptionId === apt.id}
                           className="px-4 py-2.5 bg-violet-50 text-violet-700 font-bold rounded-xl flex items-center gap-2 hover:bg-violet-100 transition-colors border border-violet-200">
                           {uploadingPrescriptionId === apt.id ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                          Upload Rx
+                          Upload Prescription
                         </button>
                       )}
                       <span className="px-4 py-2.5 bg-emerald-50 text-emerald-700 font-bold rounded-xl flex items-center gap-2">
@@ -1060,7 +1064,7 @@ export default function DoctorDashboard() {
       <div className="p-6 sm:p-8">
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-2">
-            {(['ALL', 'SCHEDULED', 'COMPLETED', 'CANCELLED'] as const).map((f) => (
+            {(['ALL', 'SCHEDULED', 'COMPLETED', 'CANCELLED', 'EXPIRED'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setAppointmentFilter(f)}
@@ -1069,6 +1073,7 @@ export default function DoctorDashboard() {
                     ? f === 'SCHEDULED' ? 'bg-blue-100 text-blue-700'
                     : f === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700'
                     : f === 'CANCELLED' ? 'bg-red-100 text-red-600'
+                    : f === 'EXPIRED' ? 'bg-slate-200 text-slate-600'
                     : 'bg-slate-800 text-white'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}
@@ -1155,14 +1160,16 @@ export default function DoctorDashboard() {
                             {label}
                           </button>
                         )}
-                        <button
-                          onClick={() => { setPendingUploadId(apt.id); prescriptionInputRef.current?.click(); }}
-                          disabled={uploadingPrescriptionId === apt.id}
-                          className="px-4 py-2.5 text-sm font-bold rounded-xl bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-2 hover:bg-violet-100 transition-colors"
-                        >
-                          {uploadingPrescriptionId === apt.id ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-                          Upload Rx
-                        </button>
+                        {!isExpired(apt) && (
+                          <button
+                            onClick={() => { setPendingUploadId(apt.id); prescriptionInputRef.current?.click(); }}
+                            disabled={uploadingPrescriptionId === apt.id}
+                            className="px-4 py-2.5 text-sm font-bold rounded-xl bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-2 hover:bg-violet-100 transition-colors"
+                          >
+                            {uploadingPrescriptionId === apt.id ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                            Upload Prescription
+                          </button>
+                        )}
                       </>
                     )}
                     {apt.status === 'COMPLETED' && (
@@ -1179,7 +1186,7 @@ export default function DoctorDashboard() {
                             className="px-4 py-2.5 text-sm font-bold rounded-xl bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-2 hover:bg-violet-100 transition-colors"
                           >
                             {uploadingPrescriptionId === apt.id ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-                            Upload Rx
+                            Upload Prescription
                           </button>
                         )}
                         <span className="px-4 py-2.5 text-sm font-bold rounded-xl bg-emerald-50 text-emerald-700 flex items-center gap-2">
@@ -1190,6 +1197,11 @@ export default function DoctorDashboard() {
                     {apt.status === 'CANCELLED' && (
                       <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-red-50 text-red-600 flex items-center gap-2">
                         <XCircle size={15} /> Cancelled
+                      </span>
+                    )}
+                    {apt.status === 'EXPIRED' && (
+                      <span className="px-5 py-2.5 text-sm font-bold rounded-xl bg-slate-100 text-slate-500 flex items-center gap-2">
+                        <XCircle size={15} /> Expired
                       </span>
                     )}
                   </div>

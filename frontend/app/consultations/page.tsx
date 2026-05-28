@@ -583,7 +583,7 @@ export default function ConsultationsPage() {
             });
             const verifyJson = await verifyRes.json();
             if (verifyJson.success) {
-              setMyConsultations(prev => [consultation, ...prev]);
+              setMyConsultations(prev => [{ ...consultation, status: 'SCHEDULED' }, ...prev]);
               setBookingStep(3);
               if (bookingCloseTimerRef.current) clearTimeout(bookingCloseTimerRef.current);
               bookingCloseTimerRef.current = setTimeout(() => setIsBookingModalOpen(false), 3000);
