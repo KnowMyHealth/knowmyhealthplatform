@@ -1,3 +1,4 @@
+# app/modules/coupon/service.py
 from uuid import UUID
 from datetime import datetime, timezone
 from sqlalchemy import select, delete, func, update
@@ -68,7 +69,11 @@ class CouponService:
                 raise CouponNotFoundError()
 
             await db.commit()
-            return updated_coupon
+            
+            # Stale DB Return Fix: Explicitly re-fetch the coupon
+            refetch_stmt = select(Coupon).where(Coupon.id == coupon_id)
+            refreshed_coupon = (await db.execute(refetch_stmt)).scalar_one()
+            return refreshed_coupon
 
         except IntegrityError:
             await db.rollback()
@@ -83,10 +88,18 @@ class CouponService:
             raise CouponValidationError("Coupon code does not exist.")
         if not coupon.is_active:
             raise CouponValidationError("This coupon is no longer active.")
-        if coupon.valid_until and coupon.valid_until < datetime.now(timezone.utc):
-            raise CouponValidationError("This coupon has expired.")
+            
+        # 2. Check Expiration Date
+        if coupon.valid_until:
+            # Timezone Naive Risk Fix: Ensure aware datetime before comparison
+            valid_until_aware = coupon.valid_until
+            if valid_until_aware.tzinfo is None:
+                valid_until_aware = valid_until_aware.replace(tzinfo=timezone.utc)
+                
+            if valid_until_aware < datetime.now(timezone.utc):
+                raise CouponValidationError("This coupon has expired.")
 
-        # 2. CORPORATE COUPON RESTRICTION CHECK
+        # 3. CORPORATE COUPON RESTRICTION CHECK
         if coupon.partner_id:
             from app.modules.patient.models import Patient
             patient = (await db.execute(select(Patient).where(Patient.user_id == user_id))).scalar_one_or_none()
@@ -95,25 +108,25 @@ class CouponService:
             if not patient or patient.partner_id != coupon.partner_id:
                 raise CouponValidationError("This exclusive coupon code is only valid for authorized employees.")
 
-        # 3. Fetch Lab Test to verify eligibility and get price
+        # 4. Fetch Lab Test to verify eligibility and get price
         lab_test = (await db.execute(select(LabTest).where(LabTest.id == lab_test_id))).scalar_one_or_none()
         if not lab_test:
             raise CouponValidationError("Lab test not found.")
 
-        # 4. Check Restrictions (Category / Specific Test)
+        # 5. Check Restrictions (Category / Specific Test)
         if coupon.lab_test_id and coupon.lab_test_id != lab_test.id:
             raise CouponValidationError("This coupon is not valid for this specific test.")
         if coupon.category_id and coupon.category_id != lab_test.category_id:
             raise CouponValidationError("This coupon is not valid for this category of tests.")
 
-        # 5. Calculate Prices
+        # 6. Calculate Prices
         original_price = lab_test.price
         discount_amount = (original_price * coupon.discount_percentage) / 100
         final_price = max(0, original_price - discount_amount)
 
         return CouponValidateResponse(
             is_valid=True,
-            message="Corporate discount applied successfully!",
+            message="Discount applied successfully!",
             original_price=original_price,
             discount_percentage=coupon.discount_percentage,
             discount_amount=round(discount_amount, 2),

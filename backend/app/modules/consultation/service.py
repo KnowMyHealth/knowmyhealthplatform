@@ -60,11 +60,11 @@ class ConsultationService:
         if not is_available:
             raise ConsultationError("Doctor is not available at this time.")
 
-        # 5. Check if slot is already booked
+        # 5. Check if slot is already booked (Fix: Only SCHEDULED and COMPLETED count as booked, PENDING does not block)
         conflict_stmt = select(Consultation).where(
             Consultation.doctor_id == data.doctor_id,
             Consultation.scheduled_at == data.scheduled_at,
-            Consultation.status != ConsultationStatus.CANCELLED
+            Consultation.status.in_([ConsultationStatus.SCHEDULED, ConsultationStatus.COMPLETED])
         )
         if (await db.execute(conflict_stmt)).scalar_one_or_none():
             raise ConsultationError("This time slot is already taken.", status_code=409)
@@ -187,7 +187,9 @@ class ConsultationService:
         if not is_patient and not is_doctor and user_role != "ADMIN":
             raise ConsultationAccessDenied()
 
-        # 4. Check Status
+        # 4. Check Status (Fix: Explicitly block PENDING status for video joins)
+        if consultation.status == ConsultationStatus.PENDING:
+            raise ConsultationError("Payment is required before joining this consultation.", status_code=402)
         if consultation.status == ConsultationStatus.CANCELLED:
             raise ConsultationError("This consultation was cancelled.", status_code=400)
         if consultation.status == ConsultationStatus.COMPLETED:
@@ -280,11 +282,12 @@ class ConsultationService:
         start_of_day = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=tz)
         end_of_day = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=tz)
 
+        # Fix: Only treat SCHEDULED or COMPLETED consultations as blocked times
         cons_stmt = select(Consultation.scheduled_at).where(
             Consultation.doctor_id == doctor_id,
             Consultation.scheduled_at >= start_of_day,
             Consultation.scheduled_at <= end_of_day,
-            Consultation.status != ConsultationStatus.CANCELLED
+            Consultation.status.in_([ConsultationStatus.SCHEDULED, ConsultationStatus.COMPLETED])
         )
         booked_times = (await db.execute(cons_stmt)).scalars().all()
         booked_iso_strings = {bt.astimezone(tz).isoformat() for bt in booked_times}

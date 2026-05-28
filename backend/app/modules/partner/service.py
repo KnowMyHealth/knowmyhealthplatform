@@ -98,8 +98,10 @@ class PartnerService:
     # Admin: Approve Partner & Generate Login
     async def approve_partner_and_create_user(self, db: AsyncSession, partner_id: UUID, discount_percentage: float) -> Partner:
         partner = await self.get_partner_by_id(db, partner_id)
-        if partner.status == PartnerStatus.APPROVED:
-            raise PartnerUpdateError("Partner is already approved.")
+        
+        # Idempotency Fix: Ensure we don't try to create a Supabase user if they already have one
+        if partner.status == PartnerStatus.APPROVED or partner.user_id is not None:
+            raise PartnerUpdateError("Partner is already approved and has an account.")
 
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
         temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
@@ -120,9 +122,9 @@ class PartnerService:
 
             partner.user_id = new_supabase_uid
             partner.status = PartnerStatus.APPROVED
-            partner.discount_percentage = discount_percentage # <-- Overwrite with Admin's final rate
+            partner.discount_percentage = discount_percentage
 
-            # 3. Auto-generate the corporate coupon using the Admin's rate
+            # 3. Auto-generate the corporate coupon
             from app.modules.coupon.models import Coupon
             clean_company_name = "".join(c for c in partner.company_name if c.isalnum()).upper()[:8]
             coupon_code = f"KMH-{clean_company_name}-{int(partner.discount_percentage)}"
@@ -142,21 +144,24 @@ class PartnerService:
             await db.commit()
             await db.refresh(partner)
             
-            logger.info(f"Approved partner {partner_id}. Temp password: {temp_password}. Coupon Code: {coupon_code}")
+            logger.info(f"Approved partner {partner_id}. Coupon Code: {coupon_code}")
 
-            # 4. Trigger welcome email
+            # 4. Trigger welcome email safely
             import asyncio
             from app.core.email import send_partner_welcome_email
             
-            asyncio.create_task(
-                asyncio.to_thread(
-                    send_partner_welcome_email,
-                    to_email=partner.email,
-                    company_name=partner.company_name,
-                    temp_password=temp_password,
-                    coupon_code=coupon_code
-                )
-            )
+            def send_email_safe():
+                try:
+                    send_partner_welcome_email(
+                        to_email=partner.email,
+                        company_name=partner.company_name,
+                        temp_password=temp_password,
+                        coupon_code=coupon_code
+                    )
+                except Exception as email_err:
+                    logger.error(f"Failed to send welcome email to {partner.email}: {email_err}")
+
+            asyncio.create_task(asyncio.to_thread(send_email_safe))
 
             return partner
         except Exception as e:
@@ -166,14 +171,10 @@ class PartnerService:
             raise PartnerUpdateError(f"Failed to approve partner: {e}")
 
     async def bulk_add_patients_for_partner(self, db: AsyncSession, partner_user_id: UUID, csv_bytes: bytes) -> dict:
-        """
-        Parses a CSV file and bulk-registers employees under the partner organization.
-        """
-        # 1. Decode CSV bytes
         try:
             text_data = csv_bytes.decode("utf-8")
         except UnicodeDecodeError:
-            text_data = csv_bytes.decode("latin-1") # Fallback encoding
+            text_data = csv_bytes.decode("latin-1") 
 
         csv_file = io.StringIO(text_data)
         reader = csv.DictReader(csv_file)
@@ -181,13 +182,11 @@ class PartnerService:
         successful_uploads = []
         failed_uploads = []
 
-        # 2. Iterate through each row in the CSV
         for idx, row in enumerate(reader, start=1):
             email = row.get("email")
             first_name = row.get("first_name")
             last_name = row.get("last_name")
 
-            # Basic validation
             if not email or not first_name or not last_name:
                 failed_uploads.append({
                     "row": idx,
@@ -197,22 +196,19 @@ class PartnerService:
                 continue
 
             try:
-                # Safe date parsing
                 dob = None
                 if row.get("date_of_birth"):
                     try:
                         dob = date.fromisoformat(row["date_of_birth"].strip())
                     except ValueError:
-                        pass # Leave as None if bad format
+                        pass 
 
-                # Safe Gender mapping
                 gender = None
                 if row.get("gender"):
                     gender_str = row["gender"].strip().upper()
                     if gender_str in ["MALE", "FEMALE", "OTHER"]:
                         gender = Gender(gender_str)
 
-                # Map row dict to Pydantic validation schema
                 payload = PartnerPatientCreateRequest(
                     email=email.strip(),
                     first_name=first_name.strip(),
@@ -225,8 +221,6 @@ class PartnerService:
                     emergency_contact=row.get("emergency_contact").strip() if row.get("emergency_contact") else None
                 )
 
-                # Re-use our existing individual patient creator!
-                # This guarantees that logins, passwords, DB schemas, and onboarding emails are sent perfectly!
                 await self.add_patient_for_partner(db, partner_user_id, payload)
 
                 successful_uploads.append({
@@ -236,7 +230,6 @@ class PartnerService:
                 })
 
             except Exception as e:
-                # Capture any error (Supabase fails, invalid payload, etc.) and keep going
                 failed_uploads.append({
                     "row": idx,
                     "email": email,
@@ -250,7 +243,6 @@ class PartnerService:
             "successful": successful_uploads,
             "failed": failed_uploads
         }
-
 
     # ==========================================
     # PATIENT MANAGEMENT BY PARTNER
@@ -280,7 +272,7 @@ class PartnerService:
             new_patient = Patient(user_id=new_uid, partner_id=partner.id, **patient_data)
             db.add(new_patient)
 
-            # 3. Fetch the Partner's Coupon code to send to the Employee
+            # 3. Fetch the Partner's Coupon code
             from app.modules.coupon.models import Coupon
             coupon = (await db.execute(select(Coupon).where(Coupon.partner_id == partner.id))).scalar_one_or_none()
             coupon_code = coupon.code if coupon else "N/A"
@@ -290,21 +282,25 @@ class PartnerService:
             
             logger.info(f"Partner {partner.id} created patient {new_patient.id}.")
 
-            # 4. Trigger employee email with corporate coupon
+            # 4. Trigger employee email securely
             import asyncio
             from app.core.email import send_employee_welcome_email
             
             employee_name = f"{payload.first_name} {payload.last_name}"
-            asyncio.create_task(
-                asyncio.to_thread(
-                    send_employee_welcome_email,
-                    to_email=payload.email,
-                    employee_name=employee_name,
-                    company_name=partner.company_name,
-                    temp_password=temp_password,
-                    coupon_code=coupon_code
-                )
-            )
+            
+            def send_email_safe():
+                try:
+                    send_employee_welcome_email(
+                        to_email=payload.email,
+                        employee_name=employee_name,
+                        company_name=partner.company_name,
+                        temp_password=temp_password,
+                        coupon_code=coupon_code
+                    )
+                except Exception as email_err:
+                    logger.error(f"Failed to send welcome email to employee {payload.email}: {email_err}")
+
+            asyncio.create_task(asyncio.to_thread(send_email_safe))
 
             return new_patient
 
@@ -346,10 +342,13 @@ class PartnerService:
     async def delete_partner_patient(self, db: AsyncSession, partner_user_id: UUID, patient_id: UUID) -> None:
         patient = await self.get_partner_patient(db, partner_user_id, patient_id)
         
-        await db.execute(delete(User).where(User.id == patient.user_id))
-        await db.commit()
-        
+        # Orphaned Auth Fix: ALWAYS delete from Supabase first.
         try:
             supabase_admin.auth.admin.delete_user(str(patient.user_id))
         except Exception as e:
-            logger.warning(f"Failed to delete patient from Supabase: {e}")
+            logger.error(f"Failed to delete patient from Supabase: {e}")
+            raise PartnerUpdateError("Failed to delete authentication account. Please try again.")
+
+        # Once Supabase succeeds, delete the local DB record
+        await db.execute(delete(User).where(User.id == patient.user_id))
+        await db.commit()

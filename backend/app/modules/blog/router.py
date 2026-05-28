@@ -1,3 +1,4 @@
+# app/modules/blog/router.py
 from uuid import UUID
 from loguru import logger
 from fastapi import APIRouter, Depends, status, Body, Request
@@ -6,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.deps import get_db
 from app.db.all_models import User
 from app.utils.api_response import ApiResponse
-from app.core.security import RequireRole, get_current_user
+from app.core.security import RequireRole
 from app.core.rate_limiter import limiter
 from app.utils.pagination import PaginationParams
 from app.modules.user.schemas import Role
@@ -55,16 +56,41 @@ async def create_blog(
     blog = await service.create_blog(db, UUID(str(current_user.id)), payload)
     return ApiResponse.created(data=BlogSchema.model_validate(blog), message="Blog saved successfully.")
 
+# -------------------------------------------------------------------------
+# Data Leak Fix: Split list_blogs into a strictly public route and an admin route
+# -------------------------------------------------------------------------
+
 @router.get(
     "",
-    summary="List Blogs (Public)",
-    description="Returns published blogs. Admin can view unpublished drafts using ?is_published=false."
+    summary="List Published Blogs (Public)",
+    description="Returns only published blogs. Available to anyone on the internet."
 )
 @limiter.limit("60/minute")
-async def list_blogs(
+async def list_published_blogs(
     request: Request,
     params: PaginationParams = Depends(),
-    is_published: bool | None = True,
+    db: AsyncSession = Depends(get_db),
+    service: BlogService = Depends(get_blog_service)
+):
+    # Hardcode is_published=True to prevent ?is_published=false URL scraping
+    items, total = await service.list_blogs(db, params, is_published=True)
+    validated_items = [BlogSchema.model_validate(i) for i in items]
+    
+    return ApiResponse.paginated(
+        items=validated_items, total_items=total, params=params, message="Blogs retrieved successfully."
+    )
+
+@router.get(
+    "/admin",
+    summary="List All Blogs (Admin Only)",
+    description="Returns all blogs. Admins can view unpublished drafts using ?is_published=false."
+)
+@limiter.limit("30/minute")
+async def list_all_blogs_admin(
+    request: Request,
+    params: PaginationParams = Depends(),
+    is_published: bool | None = None,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
     db: AsyncSession = Depends(get_db),
     service: BlogService = Depends(get_blog_service)
 ):
@@ -72,8 +98,10 @@ async def list_blogs(
     validated_items = [BlogSchema.model_validate(i) for i in items]
     
     return ApiResponse.paginated(
-        items=validated_items, total_items=total, params=params, message="Blogs retrieved successfully."
+        items=validated_items, total_items=total, params=params, message="Admin blog list retrieved."
     )
+
+# -------------------------------------------------------------------------
 
 @router.get(
     "/{blog_id}",

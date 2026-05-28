@@ -20,13 +20,16 @@ from app.modules.partner.schemas import (
     PartnerSchema, 
     PartnerCreateRequest, 
     PartnerStatusUpdateRequest,
-    PartnerPatientCreateRequest
+    PartnerPatientCreateRequest,
+    PartnerApproveRequest
 )
 from app.modules.partner.service import PartnerService
 from app.modules.partner.dependencies import get_partner_service
-from app.modules.partner.schemas import PartnerApproveRequest
 
 router = APIRouter(prefix="/partners", tags=["Partners"])
+
+# 50 MB limit for CSV uploads (50 * 1024 * 1024 bytes)
+MAX_CSV_SIZE = 52428800 
 
 # -------------------------------------------------------------------------
 # PUBLIC: SUBMIT APPLICATION
@@ -113,7 +116,7 @@ async def delete_partner(
 async def approve_partner(
     request: Request,
     partner_id: UUID,
-    payload: PartnerApproveRequest = Body(...), # <-- Added request body
+    payload: PartnerApproveRequest = Body(...),
     current_user: User = Depends(RequireRole([Role.ADMIN])),
     db: AsyncSession = Depends(get_db),
     service: PartnerService = Depends(get_partner_service)
@@ -121,7 +124,7 @@ async def approve_partner(
     approved_partner = await service.approve_partner_and_create_user(
         db=db,
         partner_id=partner_id,
-        discount_percentage=payload.discount_percentage # <-- Pass to service
+        discount_percentage=payload.discount_percentage 
     )
     return ApiResponse.success(data=PartnerSchema.model_validate(approved_partner), message="Partner approved.")
 
@@ -142,9 +145,26 @@ async def bulk_upload_patients(
 ):
     if not file.filename.endswith(".csv"):
         raise BadRequestError("Only CSV files are allowed.")
+        
+    # DoS Fix: Check file size metadata if available
+    if file.size and file.size > MAX_CSV_SIZE:
+        raise BadRequestError("CSV file size exceeds the 50MB limit.")
 
     csv_bytes = await file.read()
+    
+    # DoS Fix: Secondary check after reading into memory
+    if len(csv_bytes) > MAX_CSV_SIZE:
+        raise BadRequestError("CSV file size exceeds the 50MB limit.")
+
     summary = await service.bulk_add_patients_for_partner(db, UUID(str(current_user.id)), csv_bytes)
+    
+    # UX Fix: Return a 422 Error if no rows succeeded
+    if summary["success_count"] == 0 and summary["failure_count"] > 0:
+        return ApiResponse.error(
+            message="Bulk upload failed. No rows were successfully imported.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            errors=summary["failed"]
+        )
     
     return ApiResponse.success(
         data=summary,

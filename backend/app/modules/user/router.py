@@ -1,3 +1,4 @@
+# app/modules/user/router.py
 from uuid import UUID
 from loguru import logger
 from fastapi import APIRouter, Depends, status, Body, Request
@@ -11,15 +12,16 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.db.deps import get_db
 from app.modules.user.exceptions import UserNotFoundError
 from app.utils.api_response import ApiResponse
-from app.utils.api_error import ForbiddenError
-from app.core.security import get_current_user
+from app.core.security import get_current_user, RequireRole
 from app.modules.user.schemas import UserSchema
 from app.modules.user.service import UsersService
 from app.modules.user.dependencies import get_users_service
 from app.modules.user.schemas import Role
 from app.core.rate_limiter import limiter
 from app.modules.user.schemas import AdminDashboardMetricsResponse
-from app.core.security import RequireRole
+
+# Use your existing User model for typing the DB user object
+from app.db.all_models import User
 
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -40,16 +42,17 @@ async def update_user_role(
     request: Request,
     user_id: UUID,
     role: Role = Body(...),
-    current_user = Depends(get_current_user),
+    # Security Fix: Use RequireRole instead of manual string checking
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    # Crash Fix: Inject DB session
+    db: AsyncSession = Depends(get_db),
     service: UsersService = Depends(get_users_service)
 ):
-    logger.debug("--> Called PATCH /users/{user_id}/role route")
+    logger.debug(f"--> Called PATCH /users/{user_id}/role route by Admin: {current_user.id}")
 
-    if current_user.role != "ADMIN":
-        raise ForbiddenError("Only admins can update roles")
-
+    # Crash Fix: Pass the active db session to the service instead of db=None
     updated_user = await service.update_user_role(
-        db=None,
+        db=db,
         user_id=user_id,
         role=role
     )
@@ -61,14 +64,21 @@ async def update_user_role(
         message="User role updated successfully."
     )
 
+# -------------------------------------------------------------------------
+# ALL LOGGED IN USERS: GET MY PROFILE
+# -------------------------------------------------------------------------
 
 @router.get("/me")
+# Rate Limiting Fix: Ensure even /me is rate-limited to prevent bot scraping
+@limiter.limit("30/minute")
 async def get_my_profile(
+    request: Request,
     auth_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: UsersService = Depends(get_users_service)
 ):
     logger.debug("--> Called GET /users/me route")
+    
     # Manually extract and convert
     user_id = UUID(str(auth_user.id))
     
@@ -80,6 +90,9 @@ async def get_my_profile(
 
     return ApiResponse.success(data=UserSchema.model_validate(user))
 
+# -------------------------------------------------------------------------
+# ADMIN: GET DASHBOARD METRICS
+# -------------------------------------------------------------------------
 
 @router.get(
     "/admin/dashboard/metrics",
@@ -90,7 +103,7 @@ async def get_my_profile(
 @limiter.limit("20/minute")
 async def get_dashboard_metrics(
     request: Request,
-    current_user = Depends(RequireRole([Role.ADMIN])),
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
     db: AsyncSession = Depends(get_db),
     service: UsersService = Depends(get_users_service)
 ):

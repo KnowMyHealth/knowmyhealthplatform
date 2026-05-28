@@ -1,3 +1,4 @@
+# app/modules/doctor/service.py
 import asyncio
 import uuid
 import string
@@ -68,7 +69,6 @@ class DoctorsService:
                 _, license_url = await upload_pdf_document(license_pdf)
 
             # 3. Create the Database object
-            # We dump the text fields, then manually add the license_url we just created
             doctor_data = payload.model_dump()
             doctor_data["license_url"] = license_url 
             
@@ -93,20 +93,16 @@ class DoctorsService:
         Returns a list of doctors and the total count for pagination.
         Optionally filter by status (e.g., 'pending').
         """
-        # 1. Build the base query
         query = select(Doctor)
         count_query = select(func.count()).select_from(Doctor)
 
-        # 2. Apply status filter if provided (e.g., to see only "pending" applications)
         if status:
             query = query.where(Doctor.status == status)
             count_query = count_query.where(Doctor.status == status)
 
-        # 3. Get total count
         total_result = await db.execute(count_query)
         total_count = total_result.scalar() or 0
 
-        # 4. Get paginated results
         query = (
             query
             .order_by(Doctor.created_at.desc())
@@ -130,18 +126,18 @@ class DoctorsService:
         """
         doctor = await self.get_doctor_by_id(db, doctor_id)
         
-        if doctor.status == DoctorStatus.APPROVED:
-            raise DoctorUpdateError("Doctor is already approved.")
+        # Idempotency Fix: Ensure we don't try to create a Supabase user if they already have one
+        if doctor.status == DoctorStatus.APPROVED or doctor.user_id is not None:
+            raise DoctorUpdateError("Doctor is already approved and has an account.")
 
         new_supabase_uid = None
         
-        # 1. Generate a secure temporary password (12 chars: Letters, Digits, Punctuation)
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
         temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
 
         try:
             try:
-                # 2. Create User in Supabase Auth
+                # Create User in Supabase Auth
                 auth_response = supabase_admin.auth.admin.create_user({
                     "email": doctor.email,
                     "password": temp_password, 
@@ -161,7 +157,7 @@ class DoctorsService:
                 raise DoctorUpdateError(f"Supabase User Creation Failed: {error_detail}")
 
             try:
-                # 3. Update Database (Role & Linking)
+                # Update Database (Role & Linking)
                 user_update_stmt = (
                     update(User)
                     .where(User.id == new_supabase_uid)
@@ -177,17 +173,20 @@ class DoctorsService:
                 
                 logger.info(f"Successfully approved doctor {doctor_id}")
 
-                # 4. Send the Welcome Email (Runs synchronously but wrapped safely)
-                # We use asyncio.to_thread because the Resend SDK is synchronous
+                # Send the Welcome Email safely
                 doctor_name = f"{doctor.first_name} {doctor.last_name}"
-                asyncio.create_task(
-                    asyncio.to_thread(
-                        send_doctor_welcome_email, 
-                        to_email=doctor.email, 
-                        doctor_name=doctor_name, 
-                        temp_password=temp_password
-                    )
-                )
+                
+                def send_email_safe():
+                    try:
+                        send_doctor_welcome_email(
+                            to_email=doctor.email, 
+                            doctor_name=doctor_name, 
+                            temp_password=temp_password
+                        )
+                    except Exception as email_err:
+                        logger.error(f"Failed to send welcome email to {doctor.email}: {email_err}")
+
+                asyncio.create_task(asyncio.to_thread(send_email_safe))
 
                 return doctor
 
@@ -195,7 +194,6 @@ class DoctorsService:
                 await db.rollback()
                 logger.error(f"Database error during doctor approval: {db_err}")
                 
-                # Rollback: Delete the Supabase user if our local DB failed
                 if new_supabase_uid:
                     supabase_admin.auth.admin.delete_user(str(new_supabase_uid))
                 
@@ -224,12 +222,9 @@ class DoctorsService:
             updated_doctor = result.scalar_one_or_none()
 
             if not updated_doctor:
-                logger.warning(f"Update status failed: Doctor {doctor_id} not found.")
                 raise DoctorNotFoundError(f"Doctor {doctor_id} not found.")
 
             await db.commit()
-            logger.info(f"Updated status for doctor {doctor_id} → {status.value}")
-
             return updated_doctor
 
         except SQLAlchemyError as e:
@@ -237,7 +232,6 @@ class DoctorsService:
             logger.error(f"Database error updating status for doctor {doctor_id}: {e}")
             raise DoctorUpdateError("A database error occurred while updating the status.")
         
-
     async def get_doctor_by_user_id(self, db: AsyncSession, user_id: UUID) -> Doctor:
         stmt = select(Doctor).where(Doctor.user_id == user_id)
         result = await db.execute(stmt)
@@ -247,7 +241,7 @@ class DoctorsService:
         return doctor
 
     async def set_doctor_availability(self, db: AsyncSession, doctor_id: UUID, schedule: list[dict]):
-        """Wipes old schedule and saves the new one."""
+        """Wipes old schedule and saves the new one atomically."""
         try:
             # 1. Delete existing schedule
             await db.execute(delete(DoctorAvailability).where(DoctorAvailability.doctor_id == doctor_id))
@@ -261,6 +255,7 @@ class DoctorsService:
                     end_time=slot["end_time"]
                 ))
             
+            # 3. Single atomic commit
             await db.commit()
         except Exception as e:
             await db.rollback()
@@ -272,7 +267,6 @@ class DoctorsService:
         return list(result.scalars().all())
     
     async def update_doctor_profile(self, db: AsyncSession, user_id: UUID, data: dict) -> Doctor:
-        """Updates the doctor's profile using their logged-in User ID."""
         doctor = await self.get_doctor_by_user_id(db, user_id)
         
         if not data:
@@ -289,7 +283,6 @@ class DoctorsService:
             updated_doctor = result.scalar_one_or_none()
             
             await db.commit()
-            logger.info(f"Doctor {doctor.id} updated their profile.")
             return updated_doctor
 
         except SQLAlchemyError as e:
@@ -298,22 +291,15 @@ class DoctorsService:
             raise DoctorUpdateError("Failed to update profile due to a database error.")
         
     async def get_doctor_revenue_analytics(self, db: AsyncSession, doctor_user_id: UUID) -> dict:
-        """
-        Retrieves aggregated earnings and transaction history using ONLY 
-        the local database tables (payments, consultations).
-        """
         doctor = await self.get_doctor_by_user_id(db, doctor_user_id)
         
-        # Local imports of models mapping to your Postgres tables
         from app.modules.payment.models import Payment, PaymentStatus, BookingType
         from app.modules.consultation.models import Consultation
         from app.modules.user.models import User
 
         current_year = datetime.now().year
 
-        # ---------------------------------------------------------
         # 1. LOCAL DB QUERY: Aggregate Monthly Earnings
-        # ---------------------------------------------------------
         monthly_stmt = (
             select(
                 func.extract('month', Payment.created_at).label('month'),
@@ -329,11 +315,10 @@ class DoctorsService:
             .group_by(func.extract('month', Payment.created_at))
         )
         
-        # Executes against local Postgres
         monthly_result = await db.execute(monthly_stmt)
         monthly_rows = monthly_result.all()
 
-        months_abbr = list(calendar.month_abbr)[1:]  # ["Jan", "Feb", ..., "Dec"]
+        months_abbr = list(calendar.month_abbr)[1:]
         monthly_earnings_map = {month: Decimal("0.00") for month in months_abbr}
         total_earnings = Decimal("0.00")
 
@@ -344,18 +329,12 @@ class DoctorsService:
                 monthly_earnings_map[month_name] = revenue_val
                 total_earnings += revenue_val
 
-        monthly_earnings_list = [
-            {"month": m, "amount": amt} for m, amt in monthly_earnings_map.items()
-        ]
+        monthly_earnings_list = [{"month": m, "amount": amt} for m, amt in monthly_earnings_map.items()]
 
-        # ---------------------------------------------------------
         # 2. LOCAL DB QUERY: Recent Transactions List
-        # ---------------------------------------------------------
         transactions_stmt = (
             select(Payment, Consultation)
-            .options(
-                selectinload(Consultation.patient_user).selectinload(User.patient_profile)
-            )
+            .options(selectinload(Consultation.patient_user).selectinload(User.patient_profile))
             .join(Consultation, Payment.booking_id == Consultation.id)
             .where(
                 Consultation.doctor_id == doctor.id,
@@ -366,7 +345,6 @@ class DoctorsService:
             .limit(10)
         )
 
-        # Executes against local Postgres
         transactions_result = await db.execute(transactions_stmt)
         transaction_rows = transactions_result.all()
 
@@ -387,8 +365,6 @@ class DoctorsService:
             else:
                 date_label = pay_time.strftime("%d %b, %I:%M %p")
 
-            # We read the transaction ID directly from the local database column.
-            # (No API request is being made here)
             raw_ref = payment.razorpay_payment_id or str(payment.id)
             clean_trx_id = f"TRX-{raw_ref[-6:].upper()}" if len(raw_ref) >= 6 else f"TRX-{raw_ref.upper()}"
 
@@ -408,25 +384,18 @@ class DoctorsService:
     
 
     async def get_doctor_dashboard_metrics(self, db: AsyncSession, doctor_user_id: UUID) -> dict:
-        """
-        Calculates KPIs for the doctor dashboard including total counts, 
-        monthly earnings, and period-over-period percentage/absolute changes.
-        """
         from datetime import datetime, timedelta, timezone
         from sqlalchemy import select, func
         from app.modules.consultation.models import Consultation
         from app.modules.payment.models import Payment, PaymentStatus, BookingType
 
         doctor = await self.get_doctor_by_user_id(db, doctor_user_id)
-
         now = datetime.now(timezone.utc)
         
-        # Time boundaries for Month-over-Month
         curr_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         prev_month_end = curr_month_start - timedelta(microseconds=1)
         prev_month_start = prev_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-        # Time boundaries for Day-over-Day (Today's Consults)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         yesterday_start = today_start - timedelta(days=1)
 
@@ -438,25 +407,16 @@ class DoctorsService:
                 perc = (abs_change / float(prev)) * 100.0
             return round(perc, 1), round(abs_change, 2), abs_change >= 0
 
-        # ---------------------------------------------------------
-        # 1. Total Patients (Unique patients ever seen by doctor)
-        # ---------------------------------------------------------
+        # Note: Sequential executes are intentional here because SQLAlchemy AsyncSession 
+        # cannot safely handle `asyncio.gather` concurrency on a single connection.
         tot_pat = (await db.execute(select(func.count(func.distinct(Consultation.patient_user_id))).where(Consultation.doctor_id == doctor.id))).scalar() or 0
         prev_tot_pat = (await db.execute(select(func.count(func.distinct(Consultation.patient_user_id))).where(Consultation.doctor_id == doctor.id, Consultation.created_at < curr_month_start))).scalar() or 0
-        
         pat_perc, pat_abs, pat_pos = calc_change(tot_pat, prev_tot_pat)
 
-        # ---------------------------------------------------------
-        # 2. Today's Consults (Day over Day)
-        # ---------------------------------------------------------
         todays_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id, Consultation.scheduled_at >= today_start, Consultation.scheduled_at < today_start + timedelta(days=1)))).scalar() or 0
         yesterdays_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id, Consultation.scheduled_at >= yesterday_start, Consultation.scheduled_at < today_start))).scalar() or 0
-        
         tod_perc, tod_abs, tod_pos = calc_change(todays_cons, yesterdays_cons)
 
-        # ---------------------------------------------------------
-        # 3. Monthly Earnings (Current Month vs Previous Month)
-        # ---------------------------------------------------------
         earn_base_stmt = select(func.sum(Payment.amount)).join(Consultation, Payment.booking_id == Consultation.id).where(
             Consultation.doctor_id == doctor.id, 
             Payment.booking_type == BookingType.CONSULTATION, 
@@ -465,18 +425,12 @@ class DoctorsService:
         
         curr_earn = (await db.execute(earn_base_stmt.where(Payment.created_at >= curr_month_start))).scalar() or 0.0
         prev_earn = (await db.execute(earn_base_stmt.where(Payment.created_at >= prev_month_start, Payment.created_at < curr_month_start))).scalar() or 0.0
-        
         earn_perc, earn_abs, earn_pos = calc_change(curr_earn, prev_earn)
 
-        # ---------------------------------------------------------
-        # 4. Total Consultations (Lifetime volume growth)
-        # ---------------------------------------------------------
         tot_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id))).scalar() or 0
         prev_tot_cons = (await db.execute(select(func.count()).select_from(Consultation).where(Consultation.doctor_id == doctor.id, Consultation.created_at < curr_month_start))).scalar() or 0
-        
         cons_perc, cons_abs, cons_pos = calc_change(tot_cons, prev_tot_cons)
 
-        # Build final dictionary
         return {
             "total_patients": {
                 "value": float(tot_pat),

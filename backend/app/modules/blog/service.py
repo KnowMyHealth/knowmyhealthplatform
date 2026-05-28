@@ -1,3 +1,4 @@
+# app/modules/blog/service.py
 from uuid import UUID
 from loguru import logger
 from sqlalchemy import select, delete, update, func
@@ -75,9 +76,13 @@ class BlogService:
                 raise BlogNotFoundError()
 
             await db.commit()
-            return blog
+            
+            # Stale DB Return Fix: Explicitly re-fetch to ensure ORM relations/defaults are hydrated
+            return await self.get_blog_by_id(db, blog_id)
+            
         except SQLAlchemyError as e:
             await db.rollback()
+            logger.error(f"Failed to update blog {blog_id}: {e}")
             raise BlogError("Failed to update blog.")
 
     async def delete_blog(self, db: AsyncSession, blog_id: UUID) -> None:
@@ -89,4 +94,5 @@ class BlogService:
             await db.commit()
         except SQLAlchemyError as e:
             await db.rollback()
+            logger.error(f"Failed to delete blog {blog_id}: {e}")
             raise BlogError("Failed to delete blog.")

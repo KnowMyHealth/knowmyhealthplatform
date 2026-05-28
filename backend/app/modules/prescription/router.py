@@ -1,9 +1,11 @@
+# app/modules/prescription/router.py
 from uuid import UUID
 from loguru import logger
 from fastapi import APIRouter, Depends, status, UploadFile, File, Body, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.api_response import ApiResponse
+from app.utils.api_error import ForbiddenError
 from app.core.security import get_current_user
 from app.db.deps import get_db
 
@@ -48,6 +50,7 @@ async def ocr_prescription(
         message="Prescription processed successfully"
     )
 
+
 @router.get("/{prescription_id}")
 @limiter.limit("60/minute")
 async def get_prescription(
@@ -60,6 +63,10 @@ async def get_prescription(
     logger.debug("--> GET /prescriptions/{id}")
 
     prescription = await service.get_prescription(db, prescription_id)
+
+    # Security Fix: Check ownership
+    if str(prescription.user_id) != str(current_user.id):
+        raise ForbiddenError("You do not have permission to access this prescription.")
 
     validated = PrescriptionSchema.model_validate(prescription)
 
@@ -91,6 +98,7 @@ async def list_prescriptions(
         message="Prescriptions retrieved successfully"
     )
 
+
 @router.patch("/{prescription_id}")
 @limiter.limit("30/minute")
 async def update_prescription(
@@ -102,6 +110,11 @@ async def update_prescription(
     service: PrescriptionService = Depends(get_prescription_service)
 ):
     logger.debug("--> PATCH /prescriptions/{id}")
+
+    # Security Fix: Check ownership before updating
+    existing = await service.get_prescription(db, prescription_id)
+    if str(existing.user_id) != str(current_user.id):
+        raise ForbiddenError("You do not have permission to modify this prescription.")
 
     update_data = body.model_dump(exclude_unset=True)
 
@@ -129,6 +142,11 @@ async def delete_prescription(
     service: PrescriptionService = Depends(get_prescription_service)
 ):
     logger.debug("--> DELETE /prescriptions/{id}")
+
+    # Security Fix: Check ownership before deleting
+    existing = await service.get_prescription(db, prescription_id)
+    if str(existing.user_id) != str(current_user.id):
+        raise ForbiddenError("You do not have permission to delete this prescription.")
 
     await service.delete_prescription(db, prescription_id)
 
