@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  X, User, Mail, Lock, Loader2, AlertCircle, 
-  Stethoscope, ChevronRight, ChevronLeft, UploadCloud, 
+import {
+  X, User, Mail, Lock, Loader2, AlertCircle,
+  Stethoscope, ChevronRight, ChevronLeft, UploadCloud,
   FileText, CheckCircle2, Briefcase, Phone, GraduationCap,
-  Sparkles, ShieldCheck
+  Sparkles, ShieldCheck, Video, MapPin
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -55,7 +55,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [docFormData, setDocFormData] = useState({
     first_name: '', last_name: '', email: '', contact: '', 
     specialization: '', license_id: '', years_of_experience: '', 
-    education: '', consultation_fee: '', bio: '', video_consultation_enabled: false
+    education: '', consultation_fee: '', bio: '', video_consultation_enabled: false,
+    offline_consultation_enabled: false, clinic_address: ''
   });
   const [docErrors, setDocErrors] = useState<Record<string, string>>({});
 
@@ -75,7 +76,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setDocFormData({
         first_name: '', last_name: '', email: '', contact: '', 
         specialization: '', license_id: '', years_of_experience: '', 
-        education: '', consultation_fee: '', bio: '', video_consultation_enabled: false
+        education: '', consultation_fee: '', bio: '', video_consultation_enabled: false,
+    offline_consultation_enabled: false, clinic_address: ''
       });
       setDocErrors({});
       setForgotEmail('');
@@ -167,6 +169,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
           newErrors.consultation_fee = 'Must be a positive number';
           isValid = false;
         }
+      }
+
+      if (docFormData.offline_consultation_enabled && !docFormData.clinic_address.trim()) {
+        newErrors.clinic_address = 'Clinic address is required for in-person visits';
+        isValid = false;
       }
     }
 
@@ -292,6 +299,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       if (docFormData.consultation_fee) payload.append('consultation_fee', docFormData.consultation_fee);
       if (docFormData.bio) payload.append('bio', docFormData.bio);
       payload.append('video_consultation_enabled', String(docFormData.video_consultation_enabled));
+      payload.append('offline_consultation_enabled', String(docFormData.offline_consultation_enabled));
+      if (docFormData.clinic_address) payload.append('clinic_address', docFormData.clinic_address);
 
       const response = await fetch(`${BACKEND_URL}/api/v1/doctors/apply`, {
         method: 'POST',
@@ -786,21 +795,68 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
                               </div>
                             </div>
                             
-                            {/* Video Consultation Toggle */}
-                            <div className="col-span-1 sm:col-span-2 mt-2 bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between">
-                              <div>
-                                <h4 className="text-sm font-bold text-emerald-950">Enable Video Consultations</h4>
-                                <p className="text-xs text-emerald-900/60 mt-0.5">Allow patients to book online video appointments with you.</p>
+                            {/* Consultation Type Toggles */}
+                            <div className="space-y-3">
+                              <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100">
+                                    <Video size={20} />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-bold text-emerald-950">Video Consultations</h4>
+                                    <p className="text-xs text-emerald-900/60 mt-0.5">Online video appointments.</p>
+                                  </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={docFormData.video_consultation_enabled}
+                                    onChange={(e) => setDocFormData({...docFormData, video_consultation_enabled: e.target.checked})}
+                                  />
+                                  <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
+                                </label>
                               </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input 
-                                  type="checkbox" 
-                                  className="sr-only peer" 
-                                  checked={docFormData.video_consultation_enabled}
-                                  onChange={(e) => setDocFormData({...docFormData, video_consultation_enabled: e.target.checked})}
-                                />
-                                <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
-                              </label>
+
+                              <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-5 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100">
+                                    <MapPin size={20} />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-sm font-bold text-emerald-950">In-Person Visits</h4>
+                                    <p className="text-xs text-emerald-900/60 mt-0.5">Patients visit your clinic.</p>
+                                  </div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={docFormData.offline_consultation_enabled}
+                                    onChange={(e) => setDocFormData({...docFormData, offline_consultation_enabled: e.target.checked, ...(e.target.checked ? {} : { clinic_address: '' })})}
+                                  />
+                                  <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500"></div>
+                                </label>
+                              </div>
+
+                              <AnimatePresence>
+                                {docFormData.offline_consultation_enabled && (
+                                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                                    <label className="block text-[11px] font-bold text-emerald-950 mb-1.5 mt-1 uppercase tracking-wide">Clinic Address *</label>
+                                    <div className="relative group">
+                                      <MapPin className={`absolute left-3.5 top-4 transition-colors ${docErrors.clinic_address ? 'text-red-400' : 'text-emerald-600/50 group-focus-within:text-emerald-500'}`} size={18} />
+                                      <textarea
+                                        value={docFormData.clinic_address}
+                                        onChange={e => setDocFormData({...docFormData, clinic_address: e.target.value})}
+                                        rows={2}
+                                        placeholder="123 Health Ave, Medical District, City"
+                                        className={`w-full pl-10 pr-3 py-3 bg-gray-50/50 hover:bg-gray-50 border rounded-xl outline-none font-medium text-gray-900 transition-all text-sm resize-none ${docErrors.clinic_address ? 'border-red-300 ring-4 ring-red-500/10' : 'border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:bg-white'}`}
+                                      />
+                                    </div>
+                                    {docErrors.clinic_address && <p className="text-xs text-red-500 mt-1 font-medium">{docErrors.clinic_address}</p>}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
                             </div>
                           </motion.div>
                         )}
