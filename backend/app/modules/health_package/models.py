@@ -10,6 +10,7 @@ from app.db.base import Base
 
 class HealthPackageBookingStatus(str, enum.Enum):
     PENDING = "PENDING"
+    ADVANCE_PAID = "ADVANCE_PAID"
     PAID = "PAID"
     CANCELLED = "CANCELLED"
     COMPLETED = "COMPLETED"

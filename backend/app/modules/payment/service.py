@@ -1,18 +1,18 @@
 # app/modules/payment/service.py
 import razorpay
 import secrets
+import asyncio
 from uuid import UUID
-from zoneinfo import ZoneInfo
 from decimal import Decimal
 from loguru import logger
 from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
-from app.utils.pagination import PaginationParams
 from sqlalchemy.ext.asyncio import AsyncSession
-import asyncio
+from zoneinfo import ZoneInfo
 
+from app.utils.pagination import PaginationParams
 from app.core.config import settings
-from app.modules.payment.models import Payment, PaymentStatus, BookingType
+from app.modules.payment.models import Payment, PaymentStatus, BookingType, PaymentMode
 from app.modules.payment.schemas import OrderCreateRequest, PaymentVerifyRequest
 from app.common.exceptions import BaseDomainException
 
@@ -47,7 +47,8 @@ class PaymentService:
                 razorpay_order_id=rzp_order["id"],
                 booking_type=payload.booking_type,
                 booking_id=payload.booking_id,
-                status=PaymentStatus.PENDING
+                status=PaymentStatus.PENDING,
+                payment_mode=payload.payment_mode # <-- NEW: Store 10% vs 100% intent
             )
             db.add(payment)
             await db.commit()
@@ -81,7 +82,7 @@ class PaymentService:
         if not payment:
             raise PaymentError("Transaction reference not found in database.")
 
-        # 3. IDEMPOTENCY CHECK (Prevents Replay Attacks)
+        # 3. IDEMPOTENCY CHECK
         if payment.status != PaymentStatus.PENDING:
             raise PaymentError("This payment has already been processed.", status_code=400)
 
@@ -92,16 +93,18 @@ class PaymentService:
         # ==========================================
         # BOOKING STATUS ROUTING LOGIC
         # ==========================================
+        
+        # Helper variables for emails
+        pay_mode_label = "Advance Payment (10%)" if payment.payment_mode == PaymentMode.ADVANCE else "Full Payment (100%)"
+
         if payment.booking_type == BookingType.CONSULTATION:
             from app.modules.consultation.models import Consultation, ConsultationStatus
             from app.db.all_models import User
             from app.core.email import (
                 send_consultation_booking_patient_email, 
                 send_consultation_booking_doctor_email,
-                send_admin_new_booking_email # <-- Import admin email
+                send_admin_new_booking_email
             )
-            from zoneinfo import ZoneInfo
-            import asyncio
 
             await db.execute(
                 update(Consultation)
@@ -118,8 +121,6 @@ class PaymentService:
 
             if booking and booking.doctor and booking.patient_user:
                 doc_name = f"{booking.doctor.first_name} {booking.doctor.last_name}"
-                
-                # IST Timezone Conversion
                 ist_tz = ZoneInfo("Asia/Kolkata")
                 local_dt = booking.scheduled_at.astimezone(ist_tz)
                 formatted_date = local_dt.strftime("%d %b %Y, %I:%M %p")
@@ -129,7 +130,6 @@ class PaymentService:
                     p_prof = booking.patient_user.patient_profile
                     patient_name = f"{p_prof.first_name} {p_prof.last_name}"
 
-                # Send Patient Email
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_consultation_booking_patient_email,
@@ -142,7 +142,6 @@ class PaymentService:
                     )
                 )
 
-                # Send Doctor Email
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_consultation_booking_doctor_email,
@@ -154,8 +153,7 @@ class PaymentService:
                     )
                 )
 
-                # Send Admin Email
-                admin_details = f"Consultation with Dr. {doc_name} at {formatted_date} ({booking.consultation_type.value})"
+                admin_details = f"Consultation with Dr. {doc_name} at {formatted_date} ({booking.consultation_type.value}) - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_admin_new_booking_email,
@@ -170,13 +168,15 @@ class PaymentService:
         elif payment.booking_type == BookingType.LAB_TEST:
             from app.modules.labtest.models import LabTestBooking, LabTestBookingStatus
             from app.db.all_models import User
-            from app.core.email import send_labtest_booking_email, send_admin_new_booking_email # <-- Import admin email
-            import asyncio
+            from app.core.email import send_labtest_booking_email, send_admin_new_booking_email
+
+            # --- NEW: Assign ADVANCE_PAID vs PAID based on frontend intent ---
+            new_status = LabTestBookingStatus.ADVANCE_PAID if payment.payment_mode == PaymentMode.ADVANCE else LabTestBookingStatus.PAID
 
             await db.execute(
                 update(LabTestBooking)
                 .where(LabTestBooking.id == payment.booking_id)
-                .values(status=LabTestBookingStatus.PAID)
+                .values(status=new_status)
             )
 
             stmt_booking = select(LabTestBooking).options(
@@ -198,7 +198,6 @@ class PaymentService:
                 open_t = booking.lab_test.clinic_open_time.strftime("%I:%M %p") if booking.lab_test.clinic_open_time else "TBD"
                 close_t = booking.lab_test.clinic_close_time.strftime("%I:%M %p") if booking.lab_test.clinic_close_time else "TBD"
                 
-                # Send Patient Email
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_labtest_booking_email,
@@ -211,8 +210,7 @@ class PaymentService:
                     )
                 )
 
-                # Send Admin Email
-                admin_details = f"Lab Test: {test_name} | Date: {sch_date} | Lab: {booking.lab_test.organization}"
+                admin_details = f"Lab Test: {test_name} | Date: {sch_date} | Lab: {booking.lab_test.organization} - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_admin_new_booking_email,
@@ -227,13 +225,15 @@ class PaymentService:
         elif payment.booking_type == BookingType.HEALTH_PACKAGE:
             from app.modules.health_package.models import HealthPackageBooking, HealthPackageBookingStatus
             from app.db.all_models import User
-            from app.core.email import send_health_package_booking_email, send_admin_new_booking_email # <-- Import admin email
-            import asyncio
+            from app.core.email import send_health_package_booking_email, send_admin_new_booking_email
+
+            # --- NEW: Assign ADVANCE_PAID vs PAID based on frontend intent ---
+            new_status = HealthPackageBookingStatus.ADVANCE_PAID if payment.payment_mode == PaymentMode.ADVANCE else HealthPackageBookingStatus.PAID
 
             await db.execute(
                 update(HealthPackageBooking)
                 .where(HealthPackageBooking.id == payment.booking_id)
-                .values(status=HealthPackageBookingStatus.PAID)
+                .values(status=new_status)
             )
 
             stmt_booking = select(HealthPackageBooking).options(
@@ -255,7 +255,6 @@ class PaymentService:
                 open_t = booking.health_package.clinic_open_time.strftime("%I:%M %p") if booking.health_package.clinic_open_time else "TBD"
                 close_t = booking.health_package.clinic_close_time.strftime("%I:%M %p") if booking.health_package.clinic_close_time else "TBD"
                 
-                # Send Patient Email
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_health_package_booking_email,
@@ -268,8 +267,7 @@ class PaymentService:
                     )
                 )
 
-                # Send Admin Email
-                admin_details = f"Health Package: {package_name} | Date: {sch_date} | Org: {booking.health_package.organization}"
+                admin_details = f"Health Package: {package_name} | Date: {sch_date} | Org: {booking.health_package.organization} - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_admin_new_booking_email,
@@ -281,12 +279,10 @@ class PaymentService:
                     )
                 )
 
-        # 5. Atomic Commit (Commits Payment update + Booking Update together)
         await db.commit()
         await db.refresh(payment)
         
         return payment
-    
     
     async def list_all_payments(
         self,
@@ -316,3 +312,5 @@ class PaymentService:
         items = (await db.execute(query)).scalars().all()
         
         return list(items), total_count
+    
+    
