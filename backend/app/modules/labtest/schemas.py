@@ -3,19 +3,18 @@ from uuid import UUID
 from datetime import datetime, date, time
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.modules.labtest.models import LabTestBookingStatus
 
 # --- Category Schemas ---
 class LabTestCategorySchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     description: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class CategoryCreateRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -23,6 +22,8 @@ class CategoryCreateRequest(BaseModel):
 
 # --- Lab Test Schemas ---
 class LabTestSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     category_id: UUID
     name: str
@@ -38,9 +39,6 @@ class LabTestSchema(BaseModel):
     updated_at: datetime
     category: Optional[LabTestCategorySchema] = None
 
-    class Config:
-        from_attributes = True
-
 class LabTestCreateRequest(BaseModel):
     category_id: UUID
     name: str = Field(..., min_length=2, max_length=255)
@@ -54,6 +52,8 @@ class LabTestCreateRequest(BaseModel):
     clinic_close_time: Optional[time] = Field(None, description="End of opening hours, e.g. '18:00'")
 
 class LabTestUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     category_id: Optional[UUID] = None
     name: Optional[str] = Field(None, min_length=2, max_length=255)
     organization: Optional[str] = Field(None, min_length=2, max_length=255)
@@ -65,27 +65,25 @@ class LabTestUpdateRequest(BaseModel):
     clinic_open_time: Optional[time] = None
     clinic_close_time: Optional[time] = None
 
-    class Config:
-        extra = "forbid"
-
 # --- Nested Patient/User Schemas for Admin View ---
 class BookingPatientProfileSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     first_name: str
     last_name: str
     phone_number: Optional[str] = None
     
-    class Config:
-        from_attributes = True
 
 class BookingUserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     email: str
     patient_profile: Optional[BookingPatientProfileSchema] = None
-    
-    class Config:
-        from_attributes = True
 
 # --- Lab Test Booking Schemas ---
 class LabTestBookingSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     patient_user_id: UUID
     lab_test_id: UUID
@@ -94,9 +92,6 @@ class LabTestBookingSchema(BaseModel):
     created_at: datetime
     lab_test: Optional[LabTestSchema] = None
     patient_user: Optional[BookingUserSchema] = None 
-
-    class Config:
-        from_attributes = True
 
 class BookLabTestRequest(BaseModel):
     lab_test_id: UUID

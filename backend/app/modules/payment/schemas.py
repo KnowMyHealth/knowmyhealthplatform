@@ -2,7 +2,7 @@
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.modules.payment.models import PaymentStatus, BookingType
 
 class OrderCreateRequest(BaseModel):
@@ -23,21 +23,22 @@ class PaymentVerifyRequest(BaseModel):
 
 
 class PaymentPatientProfileSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     first_name: str
     last_name: str
     phone_number: str | None = None
 
-    class Config:
-        from_attributes = True
 
 class PaymentUserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     email: str
     patient_profile: PaymentPatientProfileSchema | None = None
 
-    class Config:
-        from_attributes = True
-
 class AdminTransactionSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     amount: Decimal
     currency: str
@@ -48,6 +49,3 @@ class AdminTransactionSchema(BaseModel):
     booking_id: UUID
     created_at: datetime
     user: PaymentUserSchema | None = None
-
-    class Config:
-        from_attributes = True

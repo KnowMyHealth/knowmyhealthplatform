@@ -22,4 +22,7 @@ dependencies = [
     "resend>=2.27.0",
     "agora-token-builder>=1.0.0",
     "razorpay>=2.0.1",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.4.0",
+    "httpx>=0.28.1",
 ]

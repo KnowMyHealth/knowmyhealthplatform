@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime, date
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.modules.patient.models import Gender
 
@@ -9,6 +9,8 @@ from app.modules.patient.models import Gender
 # RESPONSE SCHEMA
 # -------------------------------------------------------------------------
 class PatientSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: UUID
     first_name: str
@@ -21,9 +23,6 @@ class PatientSchema(BaseModel):
     emergency_contact: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # -------------------------------------------------------------------------
@@ -44,6 +43,8 @@ class PatientCreateRequest(BaseModel):
 # UPDATE SCHEMA
 # -------------------------------------------------------------------------
 class PatientUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     first_name: Optional[str] = Field(None, min_length=1, max_length=100)
     last_name: Optional[str] = Field(None, min_length=1, max_length=100)
     date_of_birth: Optional[date] = None
@@ -52,6 +53,4 @@ class PatientUpdateRequest(BaseModel):
     phone_number: Optional[str] = Field(None, max_length=20)
     address: Optional[str] = None
     emergency_contact: Optional[str] = Field(None, max_length=20)
-
-    class Config:
-        extra = "forbid"
+    

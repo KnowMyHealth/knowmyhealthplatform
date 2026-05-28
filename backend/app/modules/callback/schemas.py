@@ -2,11 +2,13 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.modules.callback.models import CallbackStatus
 
 class CallbackRequestSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     phone: str
@@ -14,9 +16,6 @@ class CallbackRequestSchema(BaseModel):
     admin_notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class CallbackCreateRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, description="Name of the person requesting callback")
@@ -29,8 +28,7 @@ class CallbackCreateRequest(BaseModel):
     )
 
 class CallbackUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     status: CallbackStatus
     admin_notes: Optional[str] = None
-
-    class Config:
-        extra = "forbid"

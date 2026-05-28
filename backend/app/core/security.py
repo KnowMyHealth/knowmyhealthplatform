@@ -65,7 +65,7 @@ def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security)):
             detail="Authentication failed due to internal error",
         )
 
-async def get_user_id_for_rate_limiting(request: Request) -> str:
+def get_user_id_for_rate_limiting(request: Request) -> str:
     ip = request.client.host if request.client else "127.0.0.1"
     auth_header = request.headers.get("Authorization")
     if not auth_header:

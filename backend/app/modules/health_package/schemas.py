@@ -3,10 +3,12 @@ from uuid import UUID
 from datetime import datetime, date, time
 from decimal import Decimal
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from app.modules.health_package.models import HealthPackageBookingStatus
 
 class HealthPackageSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     title: str
     organization: str
@@ -21,9 +23,6 @@ class HealthPackageSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 class HealthPackageCreateRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     organization: str = Field(..., min_length=2, max_length=255)
@@ -37,6 +36,8 @@ class HealthPackageCreateRequest(BaseModel):
     clinic_close_time: Optional[time] = Field(None, description="End of opening hours, e.g. '18:00'")
 
 class HealthPackageUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: Optional[str] = Field(None, min_length=2, max_length=255)
     organization: Optional[str] = Field(None, min_length=2, max_length=255)
     description: Optional[str] = None
@@ -48,27 +49,24 @@ class HealthPackageUpdateRequest(BaseModel):
     clinic_open_time: Optional[time] = None
     clinic_close_time: Optional[time] = None
 
-    class Config:
-        extra = "forbid"
-
 # --- Nested Patient/User Schemas for Admin View ---
 class BookingPatientProfileSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     first_name: str
     last_name: str
     phone_number: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
 
 class BookingUserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     email: str
     patient_profile: Optional[BookingPatientProfileSchema] = None
-    
-    class Config:
-        from_attributes = True
 
 # --- Health Package Booking Schemas ---
 class HealthPackageBookingSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     patient_user_id: UUID
     health_package_id: UUID
@@ -77,9 +75,6 @@ class HealthPackageBookingSchema(BaseModel):
     created_at: datetime
     health_package: Optional[HealthPackageSchema] = None
     patient_user: Optional[BookingUserSchema] = None 
-
-    class Config:
-        from_attributes = True
 
 class BookHealthPackageRequest(BaseModel):
     health_package_id: UUID

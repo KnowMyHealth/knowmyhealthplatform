@@ -2,7 +2,7 @@ import enum
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 class Role(str, enum.Enum):
     PATIENT = "PATIENT"
@@ -15,6 +15,8 @@ class Role(str, enum.Enum):
 # -------------------------------------------------------------------------
 
 class UserSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: UUID
     email: EmailStr
     role: Role = Field(default=Role.PATIENT)
@@ -22,8 +24,6 @@ class UserSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True  # Pydantic v2
 
 
 # -------------------------------------------------------------------------
@@ -31,11 +31,10 @@ class UserSchema(BaseModel):
 # -------------------------------------------------------------------------
 
 class UserUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
-
-    class Config:
-        extra = "forbid"
 
 
 # -------------------------------------------------------------------------

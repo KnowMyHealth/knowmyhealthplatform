@@ -2,9 +2,11 @@ from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class CouponSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     code: str
     discount_percentage: Decimal
@@ -14,9 +16,6 @@ class CouponSchema(BaseModel):
     valid_until: Optional[datetime] = None
     is_active: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class CouponCreateRequest(BaseModel):
     code: str = Field(..., min_length=3, max_length=50, description="Coupon code, e.g. SAVE20")
@@ -41,12 +40,12 @@ class CouponValidateResponse(BaseModel):
 
 
 class CouponUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     code: Optional[str] = Field(None, min_length=3, max_length=50, description="Coupon code")
     discount_percentage: Optional[Decimal] = Field(None, gt=0, le=100)
     category_id: Optional[UUID] = None
     lab_test_id: Optional[UUID] = None
     valid_until: Optional[datetime] = None
     is_active: Optional[bool] = None
-
-    class Config:
-        extra = "forbid"
+    

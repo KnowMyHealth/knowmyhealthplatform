@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 from typing import List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import enum
 
 class MessageRole(str, enum.Enum):
@@ -28,13 +28,13 @@ class FinalReport(BaseModel):
     general_advice: str = Field(..., description="General home care advice or warning to see a doctor.")
 
 class SymptomAssessmentSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     possible_causes: List[str]
     general_advice: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
 class SymptomAssessmentDetailSchema(SymptomAssessmentSchema):
     # This includes the nested lab test data

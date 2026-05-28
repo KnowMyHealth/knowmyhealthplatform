@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime, time
 from decimal import Decimal
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from fastapi import Form 
 
 from app.modules.doctor.models import DoctorStatus
@@ -12,6 +12,8 @@ from app.modules.doctor.models import DoctorStatus
 # RESPONSE SCHEMA
 # -------------------------------------------------------------------------
 class DoctorSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: Optional[UUID] = None
     first_name: str
@@ -33,9 +35,6 @@ class DoctorSchema(BaseModel):
     status: DoctorStatus
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 # -------------------------------------------------------------------------
 # CREATE SCHEMA
@@ -95,6 +94,8 @@ class DoctorCreateRequest(BaseModel):
 # UPDATE SCHEMA
 # -------------------------------------------------------------------------
 class DoctorUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -109,9 +110,6 @@ class DoctorUpdateRequest(BaseModel):
     offline_consultation_enabled: Optional[bool] = None
     clinic_address: Optional[str] = None
 
-    class Config:
-        extra = "forbid"
-
 # -------------------------------------------------------------------------
 # ADMIN STATUS UPDATE SCHEMA
 # -------------------------------------------------------------------------
@@ -120,12 +118,11 @@ class DoctorStatusUpdateRequest(BaseModel):
 
 
 class AvailabilitySchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     day_of_week: int = Field(..., ge=0, le=6, description="0=Monday, 6=Sunday")
     start_time: time
     end_time: time
-
-    class Config:
-        from_attributes = True
 
 class SetAvailabilityRequest(BaseModel):
     schedule: list[AvailabilitySchema] = Field(..., description="List of time windows")

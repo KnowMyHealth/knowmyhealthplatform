@@ -3,12 +3,14 @@ from decimal import Decimal
 from uuid import UUID
 from datetime import datetime, date
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 from app.modules.partner.models import PartnerStatus, PartnerType
 from app.modules.patient.models import Gender
 
 class PartnerSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     user_id: Optional[UUID] = None
     company_name: str
@@ -23,9 +25,6 @@ class PartnerSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 class PartnerCreateRequest(BaseModel):
     company_name: str = Field(..., min_length=2, max_length=255)
     contact_person: str = Field(..., min_length=2, max_length=255)
@@ -37,15 +36,14 @@ class PartnerCreateRequest(BaseModel):
     discount_percentage: Decimal = Field(default=10.0, ge=0, le=100)
 
 class PartnerUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     company_name: Optional[str] = Field(None, min_length=2, max_length=255)
     contact_person: Optional[str] = Field(None, min_length=2, max_length=255)
     phone: Optional[str] = Field(None, min_length=5, max_length=50)
     address: Optional[str] = None
     website: Optional[str] = None
     discount_percentage: Optional[Decimal] = None
-
-    class Config:
-        extra = "forbid"
 
 class PartnerStatusUpdateRequest(BaseModel):
     status: PartnerStatus

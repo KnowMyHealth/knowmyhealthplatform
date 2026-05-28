@@ -1,7 +1,7 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class BlogGenerateRequest(BaseModel):
     research_topic: str = Field(..., min_length=3, description="Topic for the AI to research.")
@@ -10,6 +10,8 @@ class BlogGenerateRequest(BaseModel):
     additional_instructions: Optional[str] = Field(None, description="Any specific rules for the AI.")
 
 class BlogSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     author_id: Optional[UUID] = None
     title: str
@@ -20,9 +22,6 @@ class BlogSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
-
 class BlogCreateRequest(BaseModel):
     title: str = Field(..., min_length=3)
     category: str = Field(..., min_length=2)
@@ -31,11 +30,10 @@ class BlogCreateRequest(BaseModel):
     is_published: bool = False
 
 class BlogUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    
     title: Optional[str] = None
     category: Optional[str] = None
     content: Optional[str] = None
     cover_image_url: Optional[str] = None
     is_published: Optional[bool] = None
-
-    class Config:
-        extra = "forbid"
