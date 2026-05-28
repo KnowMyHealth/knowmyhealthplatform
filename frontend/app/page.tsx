@@ -101,7 +101,7 @@ function TestimonialCard({ name, role, text, rating }: typeof testimonials[0]) {
 
 export default function Home() {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-  const { isLoggedIn, userRole, isLoading } = useAuth();
+  const { isLoggedIn, userRole, isLoading, openAuthModal } = useAuth();
   const router = useRouter();
   const [partnerForm, setPartnerForm] = useState(defaultPartnerForm);
   const [partnerStatus, setPartnerStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
@@ -220,7 +220,9 @@ export default function Home() {
               Experience the future of healthcare with AI-powered diagnostics, secure record management, and expert consultations all in one premium platform.
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <button className="group flex items-center space-x-3 px-8 py-4 bg-emerald-900 text-white rounded-full font-semibold hover:bg-emerald-950 transition-all shadow-[0_10px_20px_-10px_rgba(2,44,34,0.5)] hover:shadow-[0_15px_30px_-10px_rgba(2,44,34,0.6)]">
+              <button
+                onClick={() => isLoggedIn ? router.push('/complaints') : openAuthModal()}
+                className="group flex items-center space-x-3 px-8 py-4 bg-emerald-900 text-white rounded-full font-semibold hover:bg-emerald-950 transition-all shadow-[0_10px_20px_-10px_rgba(2,44,34,0.5)] hover:shadow-[0_15px_30px_-10px_rgba(2,44,34,0.6)]">
                 <span>Provide your Symptoms Now</span>
                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </button>
