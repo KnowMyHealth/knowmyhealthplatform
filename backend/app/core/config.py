@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: SecretStr
     RAZORPAY_KEY_SECRET: SecretStr
 
+    ADMIN_EMAIL: str
+
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(__file__), "../../.env"),
         env_file_encoding="utf-8",

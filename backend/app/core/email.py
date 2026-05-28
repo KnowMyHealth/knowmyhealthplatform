@@ -300,7 +300,6 @@ def send_consultation_booking_patient_email(
         logger.error(f"Failed to send patient consultation email to {to_email}: {str(e)}")
         return False
 
-
 def send_consultation_booking_doctor_email(
     to_email: str, 
     doctor_name: str, 
@@ -342,3 +341,51 @@ def send_consultation_booking_doctor_email(
     except Exception as e:
         logger.error(f"Failed to send doctor consultation email to {to_email}: {str(e)}")
         return False
+    
+
+def send_admin_new_booking_email(
+    booking_type: str, 
+    patient_name: str, 
+    patient_email: str, 
+    amount: float, 
+    details: str
+) -> bool:
+    """
+    Sends a notification to the platform Admin whenever a successful booking/payment occurs.
+    """
+    try:
+        resend.api_key = settings.RESEND_API_KEY.get_secret_value()
+        from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+        
+        to_email = settings.ADMIN_EMAIL
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
+            <h2 style="color: #2b6cb0;">New {booking_type} Received! 🚀</h2>
+            <p>A new payment was successfully processed on the platform.</p>
+            
+            <div style="background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Patient:</strong> {patient_name} ({patient_email})</p>
+                <p style="margin: 5px 0;"><strong>Amount Paid:</strong> ₹{amount}</p>
+                <p style="margin: 5px 0;"><strong>Details:</strong> {details}</p>
+            </div>
+            
+            <p>Log in to the Admin Dashboard to view full transaction and booking details.</p>
+            <p>Best Regards,<br/><strong>KMH Automated System</strong></p>
+        </div>
+        """
+
+        response = resend.Emails.send({
+            "from": from_email,
+            "to": [to_email],
+            "subject": f"💰 New Booking: {booking_type} - {patient_name}",
+            "html": html_content
+        })
+        
+        logger.info(f"Admin notification email sent for {booking_type}.")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send admin notification email: {str(e)}")
+        return False
+
