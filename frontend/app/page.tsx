@@ -160,16 +160,28 @@ export default function Home() {
     }
   };
 
-  // Handle OAuth redirect — picks up session from hash fragment or code
+  // Handle OAuth redirect — Supabase auto-exchanges ?code= / hash tokens via
+  // detectSessionInUrl. Once a session exists, strip the leftover code/token
+  // from the URL so it doesn't sit in the address bar.
   useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.includes('access_token')) return;
+    const hasOAuthParam =
+      window.location.hash.includes('access_token') ||
+      new URLSearchParams(window.location.search).has('code');
+    if (!hasOAuthParam) return;
+
+    let cancelled = false;
+    const clean = () => window.history.replaceState(null, '', window.location.pathname);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        // Clear the hash without triggering a reload
-        window.history.replaceState(null, '', window.location.pathname);
-      }
+      if (cancelled) return;
+      if (session) clean();
     });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) clean();
+    });
+
+    return () => { cancelled = true; subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
