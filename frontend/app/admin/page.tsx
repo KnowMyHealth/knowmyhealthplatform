@@ -1021,26 +1021,20 @@ export default function AdminPortal() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     try {
-      const resPub = await fetch(`${BACKEND_URL}/api/v1/blogs?limit=100&is_published=true`, {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      const dataPub = await resPub.json();
-      const pubItems = Array.isArray(dataPub.data) ? dataPub.data : (dataPub.data?.items || []);
-      
-      const resDraft = await fetch(`${BACKEND_URL}/api/v1/blogs?limit=100&is_published=false`, {
-        headers: { 
+      // ONE API call fetches both published and drafts for Admins (public /blogs no longer leaks drafts)
+      const res = await fetch(`${BACKEND_URL}/api/v1/blogs/admin?limit=100`, {
+        headers: {
           Authorization: `Bearer ${session.access_token}`,
           'ngrok-skip-browser-warning': 'true'
         }
       });
-      const dataDraft = await resDraft.json();
-      const draftItems = Array.isArray(dataDraft.data) ? dataDraft.data : (dataDraft.data?.items || []);
+      const json = await res.json();
+      const items = Array.isArray(json.data) ? json.data : (json.data?.items || []);
 
-      const combined = [...pubItems, ...draftItems];
       // Sort newest first
-      combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      
-      setBlogsList(combined.map(b => ({
+      items.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      setBlogsList(items.map((b: any) => ({
         id: b.id,
         title: b.title,
         category: b.category || 'Uncategorized',

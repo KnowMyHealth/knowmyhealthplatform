@@ -108,16 +108,16 @@ function PrescriptionCard({
             </div>
           </div>
 
-          {/* Rx badge */}
+          {/* Prescription badge */}
           {hasPrescription ? (
             <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-extrabold border border-emerald-200/60">
               <FileText size={11} />
-              Rx Ready
+              Prescription Ready
             </span>
           ) : (
             <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200/60">
               <FileText size={11} />
-              Awaiting Rx
+              Awaiting Prescription
             </span>
           )}
         </div>

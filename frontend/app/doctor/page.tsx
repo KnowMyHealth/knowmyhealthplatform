@@ -1008,7 +1008,7 @@ export default function DoctorDashboard() {
                       {apt.prescription_url ? (
                         <a href={apt.prescription_url} target="_blank" rel="noopener noreferrer"
                           className="px-4 py-2.5 bg-blue-50 text-blue-700 font-bold rounded-xl flex items-center gap-2 hover:bg-blue-100 transition-colors border border-blue-100">
-                          <FileText size={16} /> View Rx
+                          <FileText size={16} /> View Prescription
                         </a>
                       ) : (
                         <button
@@ -1177,7 +1177,7 @@ export default function DoctorDashboard() {
                         {apt.prescription_url ? (
                           <a href={apt.prescription_url} target="_blank" rel="noopener noreferrer"
                             className="px-4 py-2.5 text-sm font-bold rounded-xl bg-blue-50 text-blue-700 border border-blue-100 flex items-center gap-2 hover:bg-blue-100 transition-colors">
-                            <FileText size={15} /> View Rx
+                            <FileText size={15} /> View Prescription
                           </a>
                         ) : (
                           <button

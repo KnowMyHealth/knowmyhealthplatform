@@ -130,8 +130,8 @@ function BulkUploadModal({ onClose, onComplete }: {
       setError('Please upload a valid CSV file.');
       return;
     }
-    if (f.size > 5 * 1024 * 1024) {
-      setError('File size must be under 5 MB.');
+    if (f.size > 50 * 1024 * 1024) {
+      setError('File size must be under 50 MB.');
       return;
     }
     setError('');
@@ -161,6 +161,17 @@ function BulkUploadModal({ onClose, onComplete }: {
       });
       const json = await res.json();
       if (!res.ok) {
+        // 422 = every row failed validation. Render the failed rows instead of a bare error.
+        if (res.status === 422 && json.errors) {
+          setResult({
+            total_rows: json.errors.length,
+            success_count: 0,
+            failure_count: json.errors.length,
+            successful: [],
+            failed: json.errors
+          });
+          return;
+        }
         setError(json?.detail ?? json?.message ?? 'Upload failed. Please try again.');
         return;
       }
