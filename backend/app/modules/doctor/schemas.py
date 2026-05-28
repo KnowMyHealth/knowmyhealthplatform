@@ -1,4 +1,4 @@
-# app/modules/doctor/schemas.py
+# backend/app/modules/doctor/schemas.py
 from uuid import UUID
 from datetime import datetime, time
 from decimal import Decimal
@@ -51,6 +51,11 @@ class DoctorCreateRequest(BaseModel):
     contact: Optional[str] = None
     education: Optional[str] = None
     years_of_experience: Optional[int] = None
+    
+    # NEW FIELDS EXPOSED TO THE FORM
+    video_consultation_enabled: bool = False
+    offline_consultation_enabled: bool = False
+    clinic_address: Optional[str] = None
 
     @classmethod
     def as_form(
@@ -65,6 +70,10 @@ class DoctorCreateRequest(BaseModel):
         contact: Optional[str] = Form(None),
         education: Optional[str] = Form(None),
         years_of_experience: Optional[int] = Form(None),
+        # EXTRACT THESE NEW FIELDS FROM MULTIPART/FORM-DATA
+        video_consultation_enabled: bool = Form(False),
+        offline_consultation_enabled: bool = Form(False),
+        clinic_address: Optional[str] = Form(None),
     ):
         return cls(
             first_name=first_name,
@@ -76,7 +85,10 @@ class DoctorCreateRequest(BaseModel):
             bio=bio,
             contact=contact,
             education=education,
-            years_of_experience=years_of_experience
+            years_of_experience=years_of_experience,
+            video_consultation_enabled=video_consultation_enabled,
+            offline_consultation_enabled=offline_consultation_enabled,
+            clinic_address=clinic_address
         )
 
 # -------------------------------------------------------------------------
