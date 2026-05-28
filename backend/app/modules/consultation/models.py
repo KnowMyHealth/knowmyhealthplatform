@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.modules.doctor.models import Doctor
 
 class ConsultationStatus(str, enum.Enum):
+    PENDING = "PENDING"          # <-- ADDED
     SCHEDULED = "SCHEDULED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
@@ -33,7 +34,9 @@ class Consultation(Base):
     doctor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("doctors.id", ondelete="CASCADE"), nullable=False)
     
     scheduled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    status: Mapped[ConsultationStatus] = mapped_column(Enum(ConsultationStatus), default=ConsultationStatus.SCHEDULED, nullable=False)
+    
+    # <-- UPDATED DEFAULT TO PENDING
+    status: Mapped[ConsultationStatus] = mapped_column(Enum(ConsultationStatus), default=ConsultationStatus.PENDING, nullable=False)
     consultation_type: Mapped[ConsultationType] = mapped_column(Enum(ConsultationType), default=ConsultationType.ONLINE, nullable=False)
     
     # The unique Agora channel room name (Nullable for OFFLINE consultations)

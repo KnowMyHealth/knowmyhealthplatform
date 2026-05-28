@@ -90,16 +90,59 @@ class PaymentService:
         # ==========================================
         if payment.booking_type == BookingType.CONSULTATION:
             from app.modules.consultation.models import Consultation, ConsultationStatus
+            from app.db.all_models import User
+            import asyncio
+            from app.core.email import send_consultation_booking_patient_email, send_consultation_booking_doctor_email
+
             await db.execute(
                 update(Consultation)
                 .where(Consultation.id == payment.booking_id)
                 .values(status=ConsultationStatus.SCHEDULED)
             )
+
+            # Trigger Confirmation Emails ONLY upon successful payment
+            stmt_booking = select(Consultation).options(
+                selectinload(Consultation.doctor),
+                selectinload(Consultation.patient_user).selectinload(User.patient_profile)
+            ).where(Consultation.id == payment.booking_id)
+            
+            booking = (await db.execute(stmt_booking)).scalar_one_or_none()
+
+            if booking and booking.doctor and booking.patient_user:
+                doc_name = f"{booking.doctor.first_name} {booking.doctor.last_name}"
+                formatted_date = booking.scheduled_at.strftime("%d %b %Y, %I:%M %p")
+                
+                patient_name = "Patient"
+                if booking.patient_user.patient_profile:
+                    p_prof = booking.patient_user.patient_profile
+                    patient_name = f"{p_prof.first_name} {p_prof.last_name}"
+
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        send_consultation_booking_patient_email,
+                        to_email=booking.patient_user.email,
+                        patient_name=patient_name,
+                        doctor_name=doc_name,
+                        scheduled_date=formatted_date,
+                        consultation_type=booking.consultation_type.value,
+                        clinic_address=booking.doctor.clinic_address
+                    )
+                )
+
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        send_consultation_booking_doctor_email,
+                        to_email=booking.doctor.email,
+                        doctor_name=doc_name,
+                        patient_name=patient_name,
+                        scheduled_date=formatted_date,
+                        consultation_type=booking.consultation_type.value
+                    )
+                )
         
         elif payment.booking_type == BookingType.LAB_TEST:
             from app.modules.labtest.models import LabTestBooking, LabTestBookingStatus
             from app.db.all_models import User
-            from sqlalchemy.orm import selectinload
             import asyncio
             from app.core.email import send_labtest_booking_email
 
@@ -137,11 +180,9 @@ class PaymentService:
                     )
                 )
 
-        # NEW: CONFIRM HEALTH PACKAGE BOOKING
         elif payment.booking_type == BookingType.HEALTH_PACKAGE:
             from app.modules.health_package.models import HealthPackageBooking, HealthPackageBookingStatus
             from app.db.all_models import User
-            from sqlalchemy.orm import selectinload
             import asyncio
             from app.core.email import send_health_package_booking_email
 
@@ -190,10 +231,6 @@ class PaymentService:
         status: PaymentStatus | None = None,
         booking_type: BookingType | None = None
     ) -> tuple[list[Payment], int]:
-        """
-        ADMIN USE ONLY: Lists all platform transactions.
-        Eager loads the user and their patient profile.
-        """
         from app.db.all_models import User
         
         query = select(Payment).options(

@@ -72,13 +72,14 @@ class ConsultationService:
         # 6. Generate channel name ONLY if it is an online consultation
         channel_name = f"kmh_{uuid.uuid4().hex[:12]}" if data.consultation_type == ConsultationType.ONLINE else None
 
-        # 7. Create
+        # 7. Create (Status defaults to PENDING now)
         consultation = Consultation(
             patient_user_id=patient_user_id,
             doctor_id=data.doctor_id,
             scheduled_at=data.scheduled_at,
             consultation_type=data.consultation_type,
-            channel_name=channel_name
+            channel_name=channel_name,
+            status=ConsultationStatus.PENDING
         )
         db.add(consultation)
         await db.commit()
@@ -90,48 +91,6 @@ class ConsultationService:
         ).where(Consultation.id == consultation.id)
         
         saved_consultation = (await db.execute(fetch_stmt)).scalar_one()
-
-        # -------------------------------------------------------------
-        # 9. TRIGGER CONFIRMATION EMAILS (Background Tasks)
-        # -------------------------------------------------------------
-        try:
-            # Format display strings
-            formatted_date = saved_consultation.scheduled_at.strftime("%d %b %Y, %I:%M %p")
-            doc_name = f"{saved_consultation.doctor.first_name} {saved_consultation.doctor.last_name}"
-            
-            # Safely grab patient info
-            patient_name = "Patient"
-            if saved_consultation.patient_user.patient_profile:
-                patient_name = f"{saved_consultation.patient_user.patient_profile.first_name} {saved_consultation.patient_user.patient_profile.last_name}"
-            
-            # Fire Patient Email
-            asyncio.create_task(
-                asyncio.to_thread(
-                    send_consultation_booking_patient_email,
-                    to_email=saved_consultation.patient_user.email,
-                    patient_name=patient_name,
-                    doctor_name=doc_name,
-                    scheduled_date=formatted_date,
-                    consultation_type=saved_consultation.consultation_type.value,
-                    clinic_address=saved_consultation.doctor.clinic_address
-                )
-            )
-
-            # Fire Doctor Email
-            asyncio.create_task(
-                asyncio.to_thread(
-                    send_consultation_booking_doctor_email,
-                    to_email=saved_consultation.doctor.email,
-                    doctor_name=doc_name,
-                    patient_name=patient_name,
-                    scheduled_date=formatted_date,
-                    consultation_type=saved_consultation.consultation_type.value
-                )
-            )
-        except Exception as e:
-            # We log the error but don't crash the booking flow if email fails
-            logger.error(f"Failed to trigger confirmation emails for consultation {saved_consultation.id}: {e}")
-        # -------------------------------------------------------------
 
         return saved_consultation
 
