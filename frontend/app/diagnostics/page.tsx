@@ -3,10 +3,10 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Search, Plus, ShoppingCart, Brain, Loader2, X, 
-  CheckCircle2, ArrowRight, Activity, ShieldCheck, 
-  Clock, Check, Zap, Info, Ticket 
+import {
+  Search, Plus, ShoppingCart, Brain, Loader2, X,
+  CheckCircle2, ArrowRight, Activity, ShieldCheck,
+  Clock, Check, Zap, Info, Ticket, AlertCircle
 } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -81,6 +81,7 @@ function DiagnosticsContent() {
   // Checkout States
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [paymentMode, setPaymentMode] = useState<'FULL' | 'ADVANCE'>('ADVANCE');
   const [scheduledDate, setScheduledDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -256,6 +257,7 @@ function DiagnosticsContent() {
 
       // Step 2: Create payment order using the first booking id and the full cart total
       const finalTotal = Math.max(0, cartTotal - couponDiscount);
+      const payableAmount = paymentMode === 'ADVANCE' ? Math.round(finalTotal * 0.1) : finalTotal;
       const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
         method: 'POST',
         headers: {
@@ -264,9 +266,10 @@ function DiagnosticsContent() {
           'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
-          amount: finalTotal,
+          amount: payableAmount,
           booking_type: 'LAB_TEST',
-          booking_id: bookingIds[0]
+          booking_id: bookingIds[0],
+          payment_mode: paymentMode
         })
       });
 
@@ -838,7 +841,7 @@ function DiagnosticsContent() {
                       {couponSuccess && <p className="text-[11px] text-emerald-600 font-bold mt-2 ml-1">{couponSuccess}</p>}
                     </div>
 
-                    <div className="space-y-3 mb-6">
+                    <div className="space-y-3 mb-5">
                       <div className="flex justify-between text-sm text-emerald-900/60 font-medium">
                         <span>Total MRP</span>
                         <span className="line-through">₹{cartOriginalTotal}</span>
@@ -853,11 +856,70 @@ function DiagnosticsContent() {
                           <span>- ₹{couponDiscount.toFixed(2)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between text-2xl font-black text-emerald-950 pt-4 border-t border-emerald-200/50">
-                        <span>To Pay</span>
+                      <div className="flex justify-between text-sm font-bold text-emerald-900/70 pt-3 border-t border-emerald-200/50">
+                        <span>Order Total</span>
                         <span>₹{Math.max(0, cartTotal - couponDiscount).toFixed(2)}</span>
                       </div>
                     </div>
+
+                    {/* Payment mode toggle */}
+                    {(() => {
+                      const finalTotal = Math.max(0, cartTotal - couponDiscount);
+                      const payNow = paymentMode === 'ADVANCE' ? Math.round(finalTotal * 0.1) : finalTotal;
+                      const balance = finalTotal - payNow;
+                      return (
+                        <>
+                          <div className="mb-4">
+                            <p className="text-xs font-bold text-emerald-900/50 uppercase tracking-wider mb-2">Payment Option</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {([
+                                { mode: 'ADVANCE' as const, label: 'Advance 10%', sub: `₹${Math.round(finalTotal * 0.1)}`, badge: 'Save now' },
+                                { mode: 'FULL' as const, label: 'Full Payment', sub: `₹${finalTotal.toFixed(0)}`, badge: '' },
+                              ]).map(opt => {
+                                const active = paymentMode === opt.mode;
+                                return (
+                                  <button
+                                    key={opt.mode}
+                                    type="button"
+                                    onClick={() => setPaymentMode(opt.mode)}
+                                    disabled={isCheckingOut}
+                                    className={`relative py-3.5 rounded-2xl text-center transition-all disabled:opacity-60 border-2 ${
+                                      active
+                                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600 border-emerald-600 shadow-lg shadow-emerald-600/30 scale-[1.02]'
+                                        : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/70'
+                                    }`}
+                                  >
+                                    {opt.badge && (
+                                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide shadow-sm whitespace-nowrap">{opt.badge}</span>
+                                    )}
+                                    {active && <Check size={14} className="absolute top-2 right-2 text-white" strokeWidth={3} />}
+                                    <p className={`text-sm font-extrabold ${active ? 'text-white' : 'text-emerald-800'}`}>{opt.label}</p>
+                                    <p className={`text-base font-black ${active ? 'text-white' : 'text-emerald-600'}`}>{opt.sub}</p>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Pay-now summary */}
+                          <div className="mb-6 p-4 rounded-2xl bg-emerald-950 text-white">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm font-bold text-emerald-200">Pay Now</span>
+                              <span className="text-2xl font-black">₹{payNow.toFixed(2)}</span>
+                            </div>
+                            {paymentMode === 'ADVANCE' && (
+                              <div className="flex items-start gap-2 mt-3 pt-3 border-t border-white/10">
+                                <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-300" />
+                                <p className="text-xs text-emerald-100/80 leading-relaxed">
+                                  Reserve your slot with just 10% now. Pay the remaining <strong className="text-white">₹{balance.toFixed(0)}</strong> at our clinic during your visit.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+
                     {checkoutError && (
                       <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                         className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium mb-4">
@@ -872,7 +934,7 @@ function DiagnosticsContent() {
                     >
                       {isCheckingOut
                         ? <><Loader2 size={20} className="animate-spin" /><span>Processing...</span></>
-                        : <><span>Proceed to Pay</span><ArrowRight size={20} /></>
+                        : <><span>Pay ₹{(paymentMode === 'ADVANCE' ? Math.round(Math.max(0, cartTotal - couponDiscount) * 0.1) : Math.max(0, cartTotal - couponDiscount)).toFixed(0)}</span><ArrowRight size={20} /></>
                       }
                     </button>
                   </div>

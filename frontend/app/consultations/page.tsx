@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, MapPin, Video, Calendar as CalendarIcon, Star, Clock,
-  ChevronRight, ChevronLeft, Phone, X, CheckCircle2,
+  ChevronRight, ChevronLeft, Phone, X, CheckCircle2, Check,
   Loader2, Mic, MicOff, VideoOff, Users, AlertCircle,
   Sun, Sunrise, Moon, MoonStar
 } from 'lucide-react';
@@ -299,6 +299,7 @@ export default function ConsultationsPage() {
   
   const [myConsultations, setMyConsultations] = useState<any[]>([]);
   const [selectedConsultationType, setSelectedConsultationType] = useState<'ONLINE' | 'OFFLINE'>('ONLINE');
+  const [paymentMode, setPaymentMode] = useState<'FULL' | 'ADVANCE'>('FULL');
   const [isBooking, setIsBooking] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
@@ -427,6 +428,7 @@ export default function ConsultationsPage() {
   const handleBookClick = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
     setSelectedConsultationType('ONLINE');
+    setPaymentMode('FULL');
 
     const today = new Date();
     const tzOffset = today.getTimezoneOffset() * 60000;
@@ -527,7 +529,9 @@ export default function ConsultationsPage() {
 
       const consultation = bookJson.data;
 
-      // Step 2: Create a Razorpay order
+      // Step 2: Create a Razorpay order (advance allowed only for in-clinic visits)
+      const fee = selectedDoctor.consultation_fee;
+      const payableAmount = paymentMode === 'ADVANCE' ? Math.round(fee * 0.1) : fee;
       const orderRes = await fetch(`${BACKEND_URL}/api/v1/payments/order`, {
         method: 'POST',
         headers: {
@@ -536,9 +540,10 @@ export default function ConsultationsPage() {
           'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
-          amount: selectedDoctor.consultation_fee,
+          amount: payableAmount,
           booking_type: 'CONSULTATION',
-          booking_id: consultation.id
+          booking_id: consultation.id,
+          payment_mode: paymentMode
         })
       });
 
@@ -973,11 +978,11 @@ export default function ConsultationsPage() {
                       {/* Consult type toggle */}
                       {selectedDoctor.offline_consultation_enabled && (
                         <div className="flex gap-2 mb-5 p-1 bg-slate-100 rounded-xl">
-                          <button onClick={() => setSelectedConsultationType('ONLINE')}
+                          <button onClick={() => { setSelectedConsultationType('ONLINE'); setPaymentMode('FULL'); }}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${selectedConsultationType === 'ONLINE' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}>
                             <Video size={14} /> Video
                           </button>
-                          <button onClick={() => setSelectedConsultationType('OFFLINE')}
+                          <button onClick={() => { setSelectedConsultationType('OFFLINE'); setPaymentMode('ADVANCE'); }}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition-all ${selectedConsultationType === 'OFFLINE' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500'}`}>
                             <MapPin size={14} /> In-Clinic
                           </button>
@@ -1162,13 +1167,69 @@ export default function ConsultationsPage() {
                       {' at '}
                       {selectedTime && new Date(selectedTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                     </p>
-                    <p className="text-2xl font-black text-slate-900 mb-6">₹{selectedDoctor.consultation_fee}</p>
+                    {selectedConsultationType === 'ONLINE' && (
+                      <p className="text-2xl font-black text-slate-900 mb-6">₹{selectedDoctor.consultation_fee}</p>
+                    )}
                     <div className="flex items-center justify-center gap-2 text-sm text-slate-400 mb-4">
                       {selectedConsultationType === 'OFFLINE'
                         ? <><MapPin size={14} className="text-amber-500" /> {selectedDoctor.clinic_address || 'Clinic location TBD'}</>
                         : <><Video size={14} className="text-blue-500" /> Link will be shared before the call</>
                       }
                     </div>
+
+                    {/* Payment mode toggle — in-clinic visits only */}
+                    {selectedConsultationType === 'OFFLINE' && (() => {
+                      const fee = selectedDoctor.consultation_fee;
+                      const payNow = paymentMode === 'ADVANCE' ? Math.round(fee * 0.1) : fee;
+                      return (
+                        <div className="mb-5 text-left">
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Payment Option</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {([
+                              { mode: 'ADVANCE' as const, label: 'Advance 10%', sub: `₹${Math.round(fee * 0.1)}`, badge: 'Save now' },
+                              { mode: 'FULL' as const, label: 'Full Payment', sub: `₹${fee}`, badge: '' },
+                            ]).map(opt => {
+                              const active = paymentMode === opt.mode;
+                              return (
+                                <button
+                                  key={opt.mode}
+                                  type="button"
+                                  onClick={() => setPaymentMode(opt.mode)}
+                                  disabled={isBooking}
+                                  className={`relative py-3.5 rounded-2xl text-center transition-all disabled:opacity-60 border-2 ${
+                                    active
+                                      ? 'bg-gradient-to-br from-emerald-500 to-teal-600 border-emerald-600 shadow-lg shadow-emerald-600/30 scale-[1.02]'
+                                      : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/70'
+                                  }`}
+                                >
+                                  {opt.badge && (
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide shadow-sm whitespace-nowrap">{opt.badge}</span>
+                                  )}
+                                  {active && <Check size={14} className="absolute top-2 right-2 text-white" strokeWidth={3} />}
+                                  <p className={`text-sm font-extrabold ${active ? 'text-white' : 'text-emerald-800'}`}>{opt.label}</p>
+                                  <p className={`text-base font-black ${active ? 'text-white' : 'text-emerald-600'}`}>{opt.sub}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="mt-4 p-4 rounded-2xl bg-emerald-950 text-white">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm font-bold text-emerald-200">Pay Now</span>
+                              <span className="text-2xl font-black">₹{payNow}</span>
+                            </div>
+                            {paymentMode === 'ADVANCE' && (
+                              <div className="flex items-start gap-2 mt-3 pt-3 border-t border-white/10">
+                                <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-300" />
+                                <p className="text-xs text-emerald-100/80 leading-relaxed">
+                                  Reserve your slot with just 10% now. Pay the remaining <strong className="text-white">₹{fee - payNow}</strong> at the clinic during your visit.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {paymentError && (
                       <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                         className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium mb-4 text-left">
@@ -1179,7 +1240,7 @@ export default function ConsultationsPage() {
                     <button onClick={handleConfirmBooking} disabled={isBooking}
                       className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mb-3">
                       {isBooking ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
-                      {isBooking ? 'Processing...' : 'Pay & Confirm Appointment'}
+                      {isBooking ? 'Processing...' : `Pay ₹${paymentMode === 'ADVANCE' ? Math.round(selectedDoctor.consultation_fee * 0.1) : selectedDoctor.consultation_fee} & Confirm`}
                     </button>
                     <button onClick={() => { setBookingStep(1); setPaymentError(null); }} disabled={isBooking} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm disabled:opacity-30">
                       ← Change date or time

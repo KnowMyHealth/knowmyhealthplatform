@@ -338,7 +338,9 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(tomorrowStr);
+  const [paymentMode, setPaymentMode] = useState<'FULL' | 'ADVANCE'>('ADVANCE');
   const fp = finalPrice(pkg);
+  const payableAmount = paymentMode === 'ADVANCE' ? Math.round(fp * 0.1) : fp;
   const category = getCategory(pkg.title);
   const meta = CATEGORY_META[category];
   const Icon = meta.icon;
@@ -383,9 +385,10 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
           'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
-          amount: fp,
+          amount: payableAmount,
           booking_type: 'HEALTH_PACKAGE',
-          booking_id: bookingId
+          booking_id: bookingId,
+          payment_mode: paymentMode
         })
       });
 
@@ -524,6 +527,56 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none disabled:opacity-50"
                 />
               </div>
+
+              {/* Payment mode toggle */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Payment Option</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { mode: 'ADVANCE' as const, label: 'Advance 10%', sub: `₹${Math.round(fp * 0.1).toLocaleString('en-IN')}`, badge: 'Save now' },
+                    { mode: 'FULL' as const, label: 'Full Payment', sub: `₹${fp.toLocaleString('en-IN')}`, badge: '' },
+                  ]).map(opt => {
+                    const active = paymentMode === opt.mode;
+                    return (
+                      <button
+                        key={opt.mode}
+                        type="button"
+                        onClick={() => setPaymentMode(opt.mode)}
+                        disabled={isPaying}
+                        className={`relative py-3.5 rounded-2xl text-center transition-all disabled:opacity-60 border-2 ${
+                          active
+                            ? 'bg-gradient-to-br from-emerald-500 to-teal-600 border-emerald-600 shadow-lg shadow-emerald-600/30 scale-[1.02]'
+                            : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/70'
+                        }`}
+                      >
+                        {opt.badge && (
+                          <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide shadow-sm whitespace-nowrap">{opt.badge}</span>
+                        )}
+                        {active && <Check size={14} className="absolute top-2 right-2 text-white" strokeWidth={3} />}
+                        <p className={`text-sm font-extrabold ${active ? 'text-white' : 'text-emerald-800'}`}>{opt.label}</p>
+                        <p className={`text-base font-black ${active ? 'text-white' : 'text-emerald-600'}`}>{opt.sub}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Pay-now summary */}
+              <div className="p-4 rounded-2xl bg-emerald-950 text-white">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-bold text-emerald-200">Pay Now</span>
+                  <span className="text-2xl font-black">₹{payableAmount.toLocaleString('en-IN')}</span>
+                </div>
+                {paymentMode === 'ADVANCE' && (
+                  <div className="flex items-start gap-2 mt-3 pt-3 border-t border-white/10">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-300" />
+                    <p className="text-xs text-emerald-100/80 leading-relaxed">
+                      Reserve your slot with just 10% now. Pay the remaining <strong className="text-white">₹{(fp - payableAmount).toLocaleString('en-IN')}</strong> at the time of your visit.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {paymentError && (
                 <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium">
@@ -538,7 +591,7 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
               >
                 {isPaying
                   ? <><Loader2 size={16} className="animate-spin" /> Processing...</>
-                  : <>Pay ₹{fp.toLocaleString('en-IN')} & Book <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" /></>
+                  : <>Pay ₹{payableAmount.toLocaleString('en-IN')} & Book <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" /></>
                 }
               </button>
               <p className="text-xs text-center text-slate-400">Secure payment powered by Razorpay. A confirmation email will be sent after payment.</p>
