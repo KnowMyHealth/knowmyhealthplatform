@@ -159,23 +159,24 @@ function DiagnosticsContent() {
         const results = await Promise.all(slotPromises);
         
         let commonSlots: string[] | null = null;
-        
-        results.forEach(res => {
+
+        (results as any[]).forEach(res => {
           if (res.success && Array.isArray(res.data)) {
-            const unbookedTimes = res.data.filter((s: any) => !s.is_booked).map((s: any) => s.time);
+            const unbookedTimes: string[] = res.data.filter((s: any) => !s.is_booked).map((s: any) => s.time as string);
             if (commonSlots === null) {
               commonSlots = unbookedTimes;
             } else {
-              commonSlots = commonSlots.filter(t => unbookedTimes.includes(t));
+              commonSlots = (commonSlots as string[]).filter(t => unbookedTimes.includes(t));
             }
           } else {
             commonSlots = [];
           }
         });
         
-        if (commonSlots) {
-          setAvailableSlots(commonSlots.map(time => ({ time, is_booked: false })));
-          if (!commonSlots.includes(selectedTime)) {
+        const slots = commonSlots as string[] | null;
+        if (slots && slots.length >= 0) {
+          setAvailableSlots(slots.map(time => ({ time, is_booked: false })));
+          if (!slots.includes(selectedTime)) {
             setSelectedTime('');
           }
         } else {
