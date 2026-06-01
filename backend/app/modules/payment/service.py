@@ -242,7 +242,11 @@ class PaymentService:
                     patient_name = f"{p_prof.first_name} {p_prof.last_name}"
                 
                 test_name = booking.lab_test.name
-                sch_date = str(booking.scheduled_date)
+                
+                # --- TIMEZONE FIX: Format scheduled_at to IST beautifully ---
+                local_dt = booking.scheduled_at.astimezone(ist_tz)
+                sch_date_formatted = local_dt.strftime("%d %b %Y, %I:%M %p")
+                
                 c_addr = booking.lab_test.clinic_address or "Clinic address pending"
                 open_t = booking.lab_test.clinic_open_time.strftime("%I:%M %p") if booking.lab_test.clinic_open_time else "TBD"
                 close_t = booking.lab_test.clinic_close_time.strftime("%I:%M %p") if booking.lab_test.clinic_close_time else "TBD"
@@ -254,7 +258,7 @@ class PaymentService:
                         to_email=booking.patient_user.email,
                         patient_name=patient_name,
                         test_name=test_name,
-                        scheduled_date=sch_date,
+                        scheduled_date=sch_date_formatted,
                         clinic_address=c_addr,
                         clinic_timing=f"{open_t} - {close_t}",
                         payment_summary_html=payment_summary_html
@@ -262,7 +266,7 @@ class PaymentService:
                 )
 
                 # Trigger Admin Email
-                admin_details = f"Lab Test: {test_name} | Date: {sch_date} | Lab: {booking.lab_test.organization} - {pay_mode_label}"
+                admin_details = f"Lab Test: {test_name} | Date: {sch_date_formatted} | Lab: {booking.lab_test.organization} - {pay_mode_label}"
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_admin_new_booking_email,
@@ -304,7 +308,10 @@ class PaymentService:
                     patient_name = f"{p_prof.first_name} {p_prof.last_name}"
                 
                 package_name = booking.health_package.title
+                
+                # Health packages still use scheduled_date (Date object), so standard str format is fine
                 sch_date = str(booking.scheduled_date)
+                
                 c_addr = booking.health_package.clinic_address or "Clinic address pending"
                 open_t = booking.health_package.clinic_open_time.strftime("%I:%M %p") if booking.health_package.clinic_open_time else "TBD"
                 close_t = booking.health_package.clinic_close_time.strftime("%I:%M %p") if booking.health_package.clinic_close_time else "TBD"
@@ -371,5 +378,3 @@ class PaymentService:
         items = (await db.execute(query)).scalars().all()
         
         return list(items), total_count
-    
-    

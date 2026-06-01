@@ -1,6 +1,7 @@
 # app/modules/labtest/router.py
 from uuid import UUID
-from fastapi import APIRouter, Depends, status, Request, Body
+from datetime import date
+from fastapi import APIRouter, Depends, status, Request, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
@@ -20,7 +21,9 @@ from app.modules.labtest.schemas import (
     LabTestCategorySchema, 
     CategoryCreateRequest,
     LabTestBookingSchema,
-    BookLabTestRequest
+    BookLabTestRequest,
+    SetLabTestAvailabilityRequest,
+    AvailabilitySchema
 )
 from app.modules.labtest.service import LabTestService
 from app.modules.labtest.dependencies import get_labtest_service
@@ -95,6 +98,45 @@ async def list_lab_tests(
     items, total = await service.list_tests(db, params, category_id, is_active)
     validated_items = [LabTestSchema.model_validate(i) for i in items]
     return ApiResponse.paginated(items=validated_items, total_items=total, params=params)
+
+@router.post("/{test_id}/availability", summary="Set Availability for a Lab Test (Admin)")
+@limiter.limit("20/minute")
+async def set_test_availability(
+    request: Request,
+    test_id: UUID,
+    payload: SetLabTestAvailabilityRequest = Body(...),
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: LabTestService = Depends(get_labtest_service)
+):
+    await service.set_test_availability(db, test_id, [s.model_dump() for s in payload.schedule])
+    return ApiResponse.success(message="Test availability schedule updated.")
+
+@router.get("/{test_id}/availability", summary="Get Availability for a Lab Test")
+@limiter.limit("60/minute")
+async def get_test_availability(
+    request: Request,
+    test_id: UUID,
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: LabTestService = Depends(get_labtest_service)
+):
+    availabilities = await service.get_test_availability(db, test_id)
+    return ApiResponse.success(data=[AvailabilitySchema.model_validate(a) for a in availabilities])
+
+@router.get("/{test_id}/slots", summary="Get Lab Test Time Slots")
+@limiter.limit("60/minute")
+async def get_test_slots(
+    request: Request,
+    test_id: UUID,
+    date: date, 
+    timezone_offset: int = Query(0, description="Timezone offset from UTC in minutes (e.g., -330 for India)"),
+    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    service: LabTestService = Depends(get_labtest_service)
+):
+    slots = await service.get_available_slots(db, test_id, date, timezone_offset)
+    return ApiResponse.success(data=slots)
 
 @router.get("/{test_id}", summary="Get Lab Test Details")
 @limiter.limit("60/minute")

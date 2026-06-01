@@ -5,7 +5,7 @@ import datetime
 from decimal import Decimal
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
-from sqlalchemy import String, Boolean, ForeignKey, Text, func, Numeric, Integer, Enum, Date, TIME
+from sqlalchemy import String, Boolean, ForeignKey, Text, func, Numeric, Integer, Enum, TIME
 
 from app.db.base import Base
 
@@ -53,12 +53,30 @@ class LabTest(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     category: Mapped["LabTestCategory"] = relationship("LabTestCategory", back_populates="tests")
+    
+    availabilities: Mapped[list["LabTestAvailability"]] = relationship(
+        "LabTestAvailability", back_populates="lab_test", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<LabTest id={self.id} name={self.name} org={self.organization}>"
 
 
-# NEW MODEL: Tracks Patient Bookings for Lab Tests
+# NEW MODEL: Admin Availability Schedule for Tests
+class LabTestAvailability(Base):
+    __tablename__ = "lab_test_availability"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lab_test_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lab_tests.id", ondelete="CASCADE"), nullable=False)
+    
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False) # 0 = Monday, 6 = Sunday
+    start_time: Mapped[datetime.time] = mapped_column(TIME, nullable=False)
+    end_time: Mapped[datetime.time] = mapped_column(TIME, nullable=False)
+
+    lab_test: Mapped["LabTest"] = relationship("LabTest", back_populates="availabilities")
+
+
+# MODEL: Tracks Patient Bookings for Lab Tests
 class LabTestBooking(Base):
     __tablename__ = "lab_test_bookings"
 
@@ -67,11 +85,12 @@ class LabTestBooking(Base):
     lab_test_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("lab_tests.id", ondelete="CASCADE"), nullable=False)
     
     status: Mapped[LabTestBookingStatus] = mapped_column(Enum(LabTestBookingStatus), default=LabTestBookingStatus.PENDING, nullable=False)
-    scheduled_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    
+    # Track full datetime slot instead of just Date
+    scheduled_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
     created_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    # Relationships to fetch nested data easily
     patient_user = relationship("User")
     lab_test = relationship("LabTest")

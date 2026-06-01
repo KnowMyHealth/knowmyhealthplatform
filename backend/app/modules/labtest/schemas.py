@@ -1,8 +1,8 @@
 # app/modules/labtest/schemas.py
 from uuid import UUID
-from datetime import datetime, date, time
+from datetime import datetime, time
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 from app.modules.labtest.models import LabTestBookingStatus
 
@@ -65,18 +65,25 @@ class LabTestUpdateRequest(BaseModel):
     clinic_open_time: Optional[time] = None
     clinic_close_time: Optional[time] = None
 
+# --- Availability Schemas ---
+class AvailabilitySchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    day_of_week: int = Field(..., ge=0, le=6, description="0=Monday, 6=Sunday")
+    start_time: time
+    end_time: time
+
+class SetLabTestAvailabilityRequest(BaseModel):
+    schedule: List[AvailabilitySchema] = Field(..., description="List of time windows")
+
 # --- Nested Patient/User Schemas for Admin View ---
 class BookingPatientProfileSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     first_name: str
     last_name: str
     phone_number: Optional[str] = None
     
-
 class BookingUserSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     email: str
     patient_profile: Optional[BookingPatientProfileSchema] = None
 
@@ -88,11 +95,11 @@ class LabTestBookingSchema(BaseModel):
     patient_user_id: UUID
     lab_test_id: UUID
     status: LabTestBookingStatus
-    scheduled_date: date
+    scheduled_at: datetime
     created_at: datetime
     lab_test: Optional[LabTestSchema] = None
     patient_user: Optional[BookingUserSchema] = None 
 
 class BookLabTestRequest(BaseModel):
     lab_test_id: UUID
-    scheduled_date: date
+    scheduled_at: datetime
