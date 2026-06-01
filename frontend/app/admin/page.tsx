@@ -103,6 +103,13 @@ interface PatientObject {
   created_at: string;
 }
 
+interface DayAvailability {
+  day_of_week: number;
+  active: boolean;
+  start_time: string;
+  end_time: string;
+}
+
 interface HealthPackage {
   id: string;
   title: string;
@@ -260,6 +267,15 @@ export default function AdminPortal() {
   const [editTestForm, setEditTestForm] = useState({ name: '', category_id: '', organization: '', results_in: '', price: '', discount_percentage: '', is_active: true, clinic_address: '', clinic_open_time: '', clinic_close_time: '' });
   const [editTestError, setEditTestError] = useState<string | null>(null);
   const [isSavingTest, setIsSavingTest] = useState(false);
+
+  // Lab Availability States
+  const [isLabAvailabilityOpen, setIsLabAvailabilityOpen] = useState(false);
+  const [selectedLabTestForAvailability, setSelectedLabTestForAvailability] = useState<LabTest | null>(null);
+  const [labAvailability, setLabAvailability] = useState<DayAvailability[]>(
+    Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, start_time: '09:00', end_time: '17:00' }))
+  );
+  const [isSavingLabAvailability, setIsSavingLabAvailability] = useState(false);
+  const [labAvailabilityMsg, setLabAvailabilityMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
 
   // Coupons States
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -766,6 +782,85 @@ export default function AdminPortal() {
       clinic_open_time: test.clinic_open_time || '',
       clinic_close_time: test.clinic_close_time || '',
     });
+  };
+
+  const handleLabAvailabilityClick = async (test: LabTest) => {
+    setSelectedLabTestForAvailability(test);
+    setIsLabAvailabilityOpen(true);
+    setLabAvailabilityMsg(null);
+    
+    setLabAvailability(
+      Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, start_time: '09:00', end_time: '17:00' }))
+    );
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/${test.id}/availability`, {
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && json.data.length > 0) {
+          setLabAvailability(prev => prev.map(day => {
+            const found = json.data.find((d: any) => d.day_of_week === day.day_of_week);
+            if (found) {
+              return {
+                ...day,
+                active: true,
+                start_time: found.start_time.slice(0, 5),
+                end_time: found.end_time.slice(0, 5)
+              };
+            }
+            return day;
+          }));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch lab availability", e);
+    }
+  };
+
+  const handleSaveLabAvailability = async () => {
+    if (!selectedLabTestForAvailability) return;
+    setIsSavingLabAvailability(true);
+    setLabAvailabilityMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const payload = {
+        schedule: labAvailability
+          .filter(d => d.active)
+          .map(d => ({
+            day_of_week: d.day_of_week,
+            start_time: `${d.start_time}:00`,
+            end_time: `${d.end_time}:00`
+          }))
+      };
+
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/${selectedLabTestForAvailability.id}/availability`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setLabAvailabilityMsg({ type: 'success', text: 'Schedule saved successfully!' });
+      } else {
+        const error = await res.json();
+        setLabAvailabilityMsg({ type: 'error', text: error.message || 'Failed to save schedule.' });
+      }
+    } catch (e) {
+      setLabAvailabilityMsg({ type: 'error', text: 'Network error occurred.' });
+    } finally {
+      setIsSavingLabAvailability(false);
+      setTimeout(() => setLabAvailabilityMsg(null), 3000);
+    }
   };
 
   const executeUpdateTest = async (e: React.FormEvent) => {
@@ -2059,6 +2154,9 @@ export default function AdminPortal() {
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-end gap-1">
+                                  <button onClick={() => handleLabAvailabilityClick(test)} className="p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-colors" title="Manage Availability">
+                                    <CalendarDays size={18} />
+                                  </button>
                                   <button onClick={() => handleEditTestClick(test)} className="p-2 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg transition-colors">
                                     <PenTool size={18} />
                                   </button>
@@ -2132,7 +2230,7 @@ export default function AdminPortal() {
                               <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
                             </td>
                             <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
-                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                            <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : (booking.scheduled_date ?? '—')}</td>
                             <td className="p-4">
                               <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
                                 {booking.status}
@@ -2350,6 +2448,80 @@ export default function AdminPortal() {
                   <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-md">Create Test</button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Lab Availability Modal */}
+      <AnimatePresence>
+        {isLabAvailabilityOpen && selectedLabTestForAvailability && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsLabAvailabilityOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+              <h2 className="text-xl font-bold text-slate-900 mb-1">Test Availability</h2>
+              <p className="text-sm text-slate-400 mb-6">{selectedLabTestForAvailability.name}</p>
+
+              {labAvailabilityMsg && (
+                <div className={`mb-4 p-3 rounded-xl flex items-center gap-2 text-sm font-medium ${labAvailabilityMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                  <AlertCircle size={16} /> {labAvailabilityMsg.text}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {labAvailability.map((day, index) => (
+                  <div key={day.day_of_week} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
+                    <label className="flex items-center gap-3 w-32 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={day.active}
+                        onChange={(e) => {
+                          const newAvail = [...labAvailability];
+                          newAvail[index].active = e.target.checked;
+                          setLabAvailability(newAvail);
+                        }}
+                        className="w-5 h-5 accent-emerald-600 rounded"
+                      />
+                      <span className={`font-semibold text-sm ${day.active ? 'text-slate-900' : 'text-slate-400'}`}>
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day.day_of_week]}
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="time"
+                        value={day.start_time}
+                        disabled={!day.active}
+                        onChange={(e) => {
+                          const newAvail = [...labAvailability];
+                          newAvail[index].start_time = e.target.value;
+                          setLabAvailability(newAvail);
+                        }}
+                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 outline-none focus:border-emerald-500 w-full"
+                      />
+                      <span className="text-slate-400 text-sm font-medium">to</span>
+                      <input
+                        type="time"
+                        value={day.end_time}
+                        disabled={!day.active}
+                        onChange={(e) => {
+                          const newAvail = [...labAvailability];
+                          newAvail[index].end_time = e.target.value;
+                          setLabAvailability(newAvail);
+                        }}
+                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 outline-none focus:border-emerald-500 w-full"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 pt-6">
+                <button type="button" onClick={() => setIsLabAvailabilityOpen(false)} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl">Close</button>
+                <button type="button" onClick={handleSaveLabAvailability} disabled={isSavingLabAvailability} className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-md flex justify-center items-center gap-2 disabled:opacity-50">
+                  {isSavingLabAvailability ? <Loader2 size={16} className="animate-spin" /> : 'Save Schedule'}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -2993,7 +3165,7 @@ export default function AdminPortal() {
                             <p className="font-bold text-slate-900 text-sm">{booking.lab_test?.name ?? '—'}</p>
                           </td>
                           <td className="p-4 text-sm text-slate-500">{booking.lab_test?.organization ?? '—'}</td>
-                          <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_date ?? '—'}</td>
+                          <td className="p-4 text-sm text-slate-600 font-medium">{booking.scheduled_at ? new Date(booking.scheduled_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : (booking.scheduled_date ?? '—')}</td>
                           <td className="p-4">
                             <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusColors[booking.status] ?? 'bg-slate-100 text-slate-600'}`}>
                               {booking.status}
@@ -3082,7 +3254,7 @@ export default function AdminPortal() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Scheduled Date</span>
-                        <span className="font-bold text-slate-900">{selectedBooking.scheduled_date ?? '—'}</span>
+                        <span className="font-bold text-slate-900">{selectedBooking.scheduled_at ? new Date(selectedBooking.scheduled_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Booked On</span>
@@ -3126,7 +3298,7 @@ export default function AdminPortal() {
                             className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${b.id === selectedBooking.id ? 'border-emerald-300 bg-emerald-50' : 'border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50'}`}>
                             <div>
                               <p className="text-sm font-bold text-slate-900">{b.lab_test?.name ?? '—'}</p>
-                              <p className="text-xs text-slate-400">{b.scheduled_date ?? '—'}</p>
+                              <p className="text-xs text-slate-400">{b.scheduled_at ? new Date(b.scheduled_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</p>
                             </div>
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${statusColors[b.status] ?? 'bg-slate-100 text-slate-600'}`}>{b.status}</span>
                           </div>
@@ -3334,6 +3506,8 @@ export default function AdminPortal() {
                           </div>
                         )}
                         {selectedPkgBooking.health_package?.clinic_open_time && selectedPkgBooking.health_package?.clinic_close_time && (
+                        
+
                           <div className="flex gap-2 text-slate-600">
                             <Clock size={14} className="text-slate-400 mt-0.5 shrink-0" />
                             {selectedPkgBooking.health_package.clinic_open_time.slice(0, 5)} – {selectedPkgBooking.health_package.clinic_close_time.slice(0, 5)}

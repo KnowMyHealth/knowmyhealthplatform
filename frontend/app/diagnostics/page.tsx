@@ -1,4 +1,5 @@
-﻿'use client';
+﻿// frontend/app/diagnostics/page.tsx
+'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -27,6 +28,11 @@ function loadRazorpayScript(): Promise<boolean> {
     script.onerror = () => resolve(false);
     document.head.appendChild(script);
   });
+}
+
+interface Slot {
+  time: string;
+  is_booked: boolean;
 }
 
 interface CartItem {
@@ -87,6 +93,9 @@ function DiagnosticsContent() {
     d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   });
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState<Slot[]>([]);
+  const [selectedTime, setSelectedTime] = useState<string>('');
 
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -127,6 +136,63 @@ function DiagnosticsContent() {
       router.replace('/diagnostics');
     }
   }, [searchParams, diagnostics, router]);
+
+  // Fetch common slots for all tests in cart
+  const cartItemIds = cart.map(c => c.testId).join(',');
+
+  useEffect(() => {
+    const fetchSlotsForCart = async () => {
+      if (cart.length === 0 || !scheduledDate || !isCartOpen) return;
+      
+      setLoadingSlots(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const tzOffset = new Date().getTimezoneOffset() * -1;
+      
+      try {
+        const slotPromises = cart.map(item => 
+          fetch(`${BACKEND_URL}/api/v1/lab-tests/${item.testId}/slots?date=${scheduledDate}&timezone_offset=${tzOffset}`, {
+            headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+          }).then(res => res.json())
+        );
+        
+        const results = await Promise.all(slotPromises);
+        
+        let commonSlots: string[] | null = null;
+        
+        results.forEach(res => {
+          if (res.success && Array.isArray(res.data)) {
+            const unbookedTimes = res.data.filter((s: any) => !s.is_booked).map((s: any) => s.time);
+            if (commonSlots === null) {
+              commonSlots = unbookedTimes;
+            } else {
+              commonSlots = commonSlots.filter(t => unbookedTimes.includes(t));
+            }
+          } else {
+            commonSlots = [];
+          }
+        });
+        
+        if (commonSlots) {
+          setAvailableSlots(commonSlots.map(time => ({ time, is_booked: false })));
+          if (!commonSlots.includes(selectedTime)) {
+            setSelectedTime('');
+          }
+        } else {
+          setAvailableSlots([]);
+          setSelectedTime('');
+        }
+        
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+    
+    fetchSlotsForCart();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartItemIds, scheduledDate, isCartOpen]);
 
   // Reset coupon if cart changes
   useEffect(() => {
@@ -220,6 +286,10 @@ function DiagnosticsContent() {
 
   const handleCheckout = async () => {
     if (cart.length === 0 || isCheckingOut || !scheduledDate) return;
+    if (!selectedTime) {
+      setCheckoutError('Please select a time slot.');
+      return;
+    }
     setIsCheckingOut(true);
     setCheckoutError(null);
 
@@ -243,7 +313,7 @@ function DiagnosticsContent() {
           },
           body: JSON.stringify({
             lab_test_id: item.testId,
-            scheduled_date: scheduledDate
+            scheduled_at: selectedTime
           })
         });
         const bookJson = await bookRes.json();
@@ -610,7 +680,7 @@ function DiagnosticsContent() {
                 {/* AI Recommender Ad/Widget */}
                 <motion.div 
                   whileHover={{ y: -5 }}
-                  className="bg-linear-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-emerald-900/20 relative overflow-hidden"
+                  className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-emerald-900/20 relative overflow-hidden"
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-3xl rounded-full" />
                   <div className="relative z-10">
@@ -639,7 +709,7 @@ function DiagnosticsContent() {
                 <div className="bg-white border-2 border-emerald-100 border-dashed rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center gap-8 group cursor-pointer hover:border-emerald-300 transition-colors">
                   <div className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-48 bg-emerald-50 rounded-3xl flex items-center justify-center border border-emerald-100 relative overflow-hidden shrink-0">
                     <Activity size={64} className="text-emerald-200 group-hover:scale-110 transition-transform" />
-                    <div className="absolute inset-0 bg-linear-to-tr from-emerald-200/50 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-tr from-emerald-200/50 to-transparent" />
                   </div>
                   <div className="text-center md:text-left flex-1">
                     <div className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-widest rounded-lg mb-3">
@@ -730,7 +800,7 @@ function DiagnosticsContent() {
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                 className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-[101] flex flex-col border-l border-emerald-100"
               >
-                <div className="p-6 border-b border-emerald-100 flex items-center justify-between bg-emerald-50/50">
+                <div className="p-6 border-b border-emerald-100 flex items-center justify-between bg-emerald-50/50 shrink-0">
                   <h2 className="text-2xl font-black text-emerald-950 flex items-center space-x-2">
                     <ShoppingCart size={24} className="text-emerald-600" />
                     <span>Your Cart</span>
@@ -743,183 +813,213 @@ function DiagnosticsContent() {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {isCheckoutSuccess ? (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="flex flex-col items-center justify-center h-full text-center space-y-4"
-                    >
-                      <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                        <CheckCircle2 size={48} />
+                <div className="flex-1 overflow-y-auto flex flex-col">
+                  <div className="p-6 space-y-6">
+                    {isCheckoutSuccess ? (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex flex-col items-center justify-center h-full text-center space-y-4"
+                      >
+                        <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                          <CheckCircle2 size={48} />
+                        </div>
+                        <h3 className="text-2xl font-bold text-emerald-950">Booking Confirmed!</h3>
+                        <p className="text-emerald-900/60 max-w-sm">Your diagnostic tests have been booked successfully. We will contact you shortly with the details.</p>
+                      </motion.div>
+                    ) : cart.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-50 py-20">
+                        <ShoppingCart size={64} className="text-emerald-900/20" />
+                        <p className="text-emerald-900/60 font-medium">Your cart is empty</p>
                       </div>
-                      <h3 className="text-2xl font-bold text-emerald-950">Booking Confirmed!</h3>
-                      <p className="text-emerald-900/60 max-w-sm">Your diagnostic tests have been booked successfully. We will contact you shortly with the details.</p>
-                    </motion.div>
-                  ) : cart.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-50">
-                      <ShoppingCart size={64} className="text-emerald-900/20" />
-                      <p className="text-emerald-900/60 font-medium">Your cart is empty</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {cart.map((item) => {
-                        const test = diagnostics.find(t => t.id === item.testId);
-                        if (!test) return null;
-                        return (
-                          <div key={item.testId} className="flex gap-4 p-5 bg-white border border-emerald-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex-1">
-                              <div className="flex justify-between items-start mb-2">
-                                <h4 className="font-bold text-emerald-950 text-lg leading-tight pr-4">{test.name}</h4>
-                                <button 
-                                  onClick={() => removeFromCart(item.testId)}
-                                  className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg shrink-0"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                              <p className="text-sm text-emerald-900/60 mb-4">{test.lab}</p>
-                              <div className="flex items-center gap-3">
-                                <span className="font-black text-emerald-950 text-xl">₹{test.discountPrice}</span>
-                                <span className="text-sm text-slate-400 line-through font-medium">₹{test.price}</span>
+                    ) : (
+                      <div className="space-y-4">
+                        {cart.map((item) => {
+                          const test = diagnostics.find(t => t.id === item.testId);
+                          if (!test) return null;
+                          return (
+                            <div key={item.testId} className="flex gap-4 p-5 bg-white border border-emerald-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex-1">
+                                <div className="flex justify-between items-start mb-2">
+                                  <h4 className="font-bold text-emerald-950 text-lg leading-tight pr-4">{test.name}</h4>
+                                  <button 
+                                    onClick={() => removeFromCart(item.testId)}
+                                    className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 px-3 py-1.5 rounded-lg shrink-0"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                                <p className="text-sm text-emerald-900/60 mb-4">{test.lab}</p>
+                                <div className="flex items-center gap-3">
+                                  <span className="font-black text-emerald-950 text-xl">₹{test.discountPrice}</span>
+                                  <span className="text-sm text-slate-400 line-through font-medium">₹{test.price}</span>
+                                </div>
                               </div>
                             </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {!isCheckoutSuccess && cart.length > 0 && (
+                    <div className="p-6 bg-emerald-50/50 border-t border-emerald-100 mt-auto">
+                      
+                      {/* Collection Date */}
+                      <div className="mb-4 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Sample Collection Date</label>
+                        <input
+                          type="date"
+                          value={scheduledDate}
+                          min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
+                          onChange={e => setScheduledDate(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-700 mb-3"
+                        />
+
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Time Slot</label>
+                        {loadingSlots ? (
+                          <div className="flex items-center gap-2 px-3 py-2.5 text-xs text-emerald-600 font-medium">
+                            <Loader2 size={14} className="animate-spin" /> Fetching available slots...
                           </div>
+                        ) : availableSlots.length > 0 ? (
+                          <select
+                            value={selectedTime}
+                            onChange={e => setSelectedTime(e.target.value)}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-700"
+                          >
+                            <option value="">Select a time slot</option>
+                            {availableSlots.map(slot => (
+                              <option key={slot.time} value={slot.time}>
+                                {new Date(slot.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="px-3 py-2.5 text-xs text-red-500 font-medium bg-red-50 rounded-xl border border-red-100">
+                            No common time slots available for the selected date. Try another date.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Promo Code Section */}
+                      <div className="mb-6 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <Ticket className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600/40" size={16} />
+                            <input 
+                              type="text" 
+                              placeholder="Promo Code" 
+                              value={couponCode}
+                              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                              disabled={!!appliedCoupon}
+                              className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 uppercase text-sm font-bold text-slate-700 disabled:opacity-60"
+                            />
+                          </div>
+                          {!appliedCoupon ? (
+                            <button 
+                              onClick={handleApplyCoupon}
+                              disabled={isApplyingCoupon || !couponCode.trim()}
+                              className="px-5 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm flex items-center justify-center min-w-[80px]"
+                            >
+                              {isApplyingCoupon ? <Loader2 size={16} className="animate-spin" /> : "Apply"}
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => { setAppliedCoupon(null); setCouponDiscount(0); setCouponCode(''); setCouponSuccess(null); }}
+                              className="px-5 py-2.5 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors text-sm"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        {couponError && <p className="text-[11px] text-red-500 font-bold mt-2 ml-1">{couponError}</p>}
+                        {couponSuccess && <p className="text-[11px] text-emerald-600 font-bold mt-2 ml-1">{couponSuccess}</p>}
+                      </div>
+
+                      <div className="space-y-3 mb-5">
+                        <div className="flex justify-between text-sm text-emerald-900/60 font-medium">
+                          <span>Total MRP</span>
+                          <span className="line-through">₹{cartOriginalTotal}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-emerald-600 font-bold">
+                          <span>Platform Discount</span>
+                          <span>- ₹{cartOriginalTotal - cartTotal}</span>
+                        </div>
+                        {appliedCoupon && (
+                          <div className="flex justify-between text-sm text-emerald-600 font-bold">
+                            <span>Coupon ({appliedCoupon})</span>
+                            <span>- ₹{couponDiscount.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm font-bold text-emerald-900/70 pt-3 border-t border-emerald-200/50">
+                          <span>Order Total</span>
+                          <span>₹{Math.max(0, cartTotal - couponDiscount).toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      {/* Payment mode toggle */}
+                      {(() => {
+                        const finalTotal = Math.max(0, cartTotal - couponDiscount);
+                        const payNow = paymentMode === 'ADVANCE' ? Math.round(finalTotal * 0.1) : finalTotal;
+                        const balance = finalTotal - payNow;
+                        return (
+                          <>
+                            <div className="mb-4">
+                              <p className="text-xs font-bold text-emerald-900/50 uppercase tracking-wider mb-2">Payment Option</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                {([
+                                  { mode: 'ADVANCE' as const, label: 'Advance 10%', sub: `₹${Math.round(finalTotal * 0.1)}`, badge: 'Save now' },
+                                  { mode: 'FULL' as const, label: 'Full Payment', sub: `₹${finalTotal.toFixed(0)}`, badge: '' },
+                                ]).map(opt => {
+                                  const active = paymentMode === opt.mode;
+                                  return (
+                                    <button
+                                      key={opt.mode}
+                                      type="button"
+                                      onClick={() => setPaymentMode(opt.mode)}
+                                      disabled={isCheckingOut}
+                                      className={`relative py-3.5 rounded-2xl text-center transition-all disabled:opacity-60 border-2 ${
+                                        active
+                                          ? 'bg-gradient-to-br from-emerald-500 to-teal-600 border-emerald-600 shadow-lg shadow-emerald-600/30 scale-[1.02]'
+                                          : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/70'
+                                      }`}
+                                    >
+                                      {opt.badge && (
+                                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide shadow-sm whitespace-nowrap">{opt.badge}</span>
+                                      )}
+                                      {active && <Check size={14} className="absolute top-2 right-2 text-white" strokeWidth={3} />}
+                                      <p className={`text-sm font-extrabold ${active ? 'text-white' : 'text-emerald-800'}`}>{opt.label}</p>
+                                      <p className={`text-base font-black ${active ? 'text-white' : 'text-emerald-600'}`}>{opt.sub}</p>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Pay-now summary */}
+                            <div className="p-4 rounded-2xl bg-emerald-950 text-white">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-bold text-emerald-200">Pay Now</span>
+                                <span className="text-2xl font-black">₹{payNow.toFixed(2)}</span>
+                              </div>
+                              {paymentMode === 'ADVANCE' && (
+                                <div className="flex items-start gap-2 mt-3 pt-3 border-t border-white/10">
+                                  <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-300" />
+                                  <p className="text-xs text-emerald-100/80 leading-relaxed">
+                                    Reserve your slot with just 10% now. Pay the remaining <strong className="text-white">₹{balance.toFixed(0)}</strong> at our clinic during your visit.
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </>
                         );
-                      })}
+                      })()}
                     </div>
                   )}
                 </div>
 
                 {!isCheckoutSuccess && cart.length > 0 && (
-                  <div className="p-6 bg-emerald-50/50 border-t border-emerald-100">
-                    
-                    {/* Collection Date */}
-                    <div className="mb-4 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Sample Collection Date</label>
-                      <input
-                        type="date"
-                        value={scheduledDate}
-                        min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                        onChange={e => setScheduledDate(e.target.value)}
-                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-700"
-                      />
-                    </div>
-
-                    {/* Promo Code Section */}
-                    <div className="mb-6 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Ticket className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600/40" size={16} />
-                          <input 
-                            type="text" 
-                            placeholder="Promo Code" 
-                            value={couponCode}
-                            onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                            disabled={!!appliedCoupon}
-                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 uppercase text-sm font-bold text-slate-700 disabled:opacity-60"
-                          />
-                        </div>
-                        {!appliedCoupon ? (
-                          <button 
-                            onClick={handleApplyCoupon}
-                            disabled={isApplyingCoupon || !couponCode.trim()}
-                            className="px-5 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm flex items-center justify-center min-w-[80px]"
-                          >
-                            {isApplyingCoupon ? <Loader2 size={16} className="animate-spin" /> : "Apply"}
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => { setAppliedCoupon(null); setCouponDiscount(0); setCouponCode(''); setCouponSuccess(null); }}
-                            className="px-5 py-2.5 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors text-sm"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                      {couponError && <p className="text-[11px] text-red-500 font-bold mt-2 ml-1">{couponError}</p>}
-                      {couponSuccess && <p className="text-[11px] text-emerald-600 font-bold mt-2 ml-1">{couponSuccess}</p>}
-                    </div>
-
-                    <div className="space-y-3 mb-5">
-                      <div className="flex justify-between text-sm text-emerald-900/60 font-medium">
-                        <span>Total MRP</span>
-                        <span className="line-through">₹{cartOriginalTotal}</span>
-                      </div>
-                      <div className="flex justify-between text-sm text-emerald-600 font-bold">
-                        <span>Platform Discount</span>
-                        <span>- ₹{cartOriginalTotal - cartTotal}</span>
-                      </div>
-                      {appliedCoupon && (
-                        <div className="flex justify-between text-sm text-emerald-600 font-bold">
-                          <span>Coupon ({appliedCoupon})</span>
-                          <span>- ₹{couponDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between text-sm font-bold text-emerald-900/70 pt-3 border-t border-emerald-200/50">
-                        <span>Order Total</span>
-                        <span>₹{Math.max(0, cartTotal - couponDiscount).toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    {/* Payment mode toggle */}
-                    {(() => {
-                      const finalTotal = Math.max(0, cartTotal - couponDiscount);
-                      const payNow = paymentMode === 'ADVANCE' ? Math.round(finalTotal * 0.1) : finalTotal;
-                      const balance = finalTotal - payNow;
-                      return (
-                        <>
-                          <div className="mb-4">
-                            <p className="text-xs font-bold text-emerald-900/50 uppercase tracking-wider mb-2">Payment Option</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              {([
-                                { mode: 'ADVANCE' as const, label: 'Advance 10%', sub: `₹${Math.round(finalTotal * 0.1)}`, badge: 'Save now' },
-                                { mode: 'FULL' as const, label: 'Full Payment', sub: `₹${finalTotal.toFixed(0)}`, badge: '' },
-                              ]).map(opt => {
-                                const active = paymentMode === opt.mode;
-                                return (
-                                  <button
-                                    key={opt.mode}
-                                    type="button"
-                                    onClick={() => setPaymentMode(opt.mode)}
-                                    disabled={isCheckingOut}
-                                    className={`relative py-3.5 rounded-2xl text-center transition-all disabled:opacity-60 border-2 ${
-                                      active
-                                        ? 'bg-gradient-to-br from-emerald-500 to-teal-600 border-emerald-600 shadow-lg shadow-emerald-600/30 scale-[1.02]'
-                                        : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100/70'
-                                    }`}
-                                  >
-                                    {opt.badge && (
-                                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-950 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide shadow-sm whitespace-nowrap">{opt.badge}</span>
-                                    )}
-                                    {active && <Check size={14} className="absolute top-2 right-2 text-white" strokeWidth={3} />}
-                                    <p className={`text-sm font-extrabold ${active ? 'text-white' : 'text-emerald-800'}`}>{opt.label}</p>
-                                    <p className={`text-base font-black ${active ? 'text-white' : 'text-emerald-600'}`}>{opt.sub}</p>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Pay-now summary */}
-                          <div className="mb-6 p-4 rounded-2xl bg-emerald-950 text-white">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm font-bold text-emerald-200">Pay Now</span>
-                              <span className="text-2xl font-black">₹{payNow.toFixed(2)}</span>
-                            </div>
-                            {paymentMode === 'ADVANCE' && (
-                              <div className="flex items-start gap-2 mt-3 pt-3 border-t border-white/10">
-                                <AlertCircle size={14} className="shrink-0 mt-0.5 text-amber-300" />
-                                <p className="text-xs text-emerald-100/80 leading-relaxed">
-                                  Reserve your slot with just 10% now. Pay the remaining <strong className="text-white">₹{balance.toFixed(0)}</strong> at our clinic during your visit.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </>
-                      );
-                    })()}
-
+                  <div className="p-6 bg-white border-t border-emerald-100 shrink-0">
                     {checkoutError && (
                       <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
                         className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium mb-4">
@@ -929,7 +1029,7 @@ function DiagnosticsContent() {
                     )}
                     <button
                       onClick={handleCheckout}
-                      disabled={isCheckingOut}
+                      disabled={isCheckingOut || !selectedTime}
                       className="w-full py-4 bg-emerald-950 text-white font-bold rounded-xl hover:bg-emerald-900 transition-colors flex items-center justify-center space-x-2 shadow-lg shadow-emerald-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {isCheckingOut
@@ -1097,9 +1197,10 @@ function DiagnosticsContent() {
     </ProtectedRoute>
   );
 }
+
 export default function DiagnosticsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-emerald-600" size={48} /></div>}>
       <DiagnosticsContent />
     </Suspense>
   );
