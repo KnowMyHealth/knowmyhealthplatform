@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search, Plus, ShoppingCart, Brain, Loader2, X,
   CheckCircle2, ArrowRight, Activity, ShieldCheck,
-  Clock, Check, Zap, Info, Ticket, AlertCircle
+  Clock, Check, Zap, Info, Ticket, AlertCircle,
+  ChevronLeft, ChevronRight, Calendar as CalendarIcon
 } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -88,11 +89,9 @@ function DiagnosticsContent() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<'FULL' | 'ADVANCE'>('ADVANCE');
-  const [scheduledDate, setScheduledDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-  });
+  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() });
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [availableSlots, setAvailableSlots] = useState<Slot[]>([]);
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -139,6 +138,19 @@ function DiagnosticsContent() {
 
   // Fetch common slots for all tests in cart
   const cartItemIds = cart.map(c => c.testId).join(',');
+
+  // Calendar helpers
+  const todayISO = (() => { const t = new Date(); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
+  const tomorrowISO = (() => { const t = new Date(); t.setDate(t.getDate() + 1); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
+  const calendarDays = (() => {
+    const { year, month } = calendarMonth;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const rawFirst = new Date(year, month, 1).getDay();
+    const firstDow = rawFirst === 0 ? 6 : rawFirst - 1;
+    const cells: (number | null)[] = Array(firstDow).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  })();
 
   useEffect(() => {
     const fetchSlotsForCart = async () => {
@@ -866,40 +878,139 @@ function DiagnosticsContent() {
                   {!isCheckoutSuccess && cart.length > 0 && (
                     <div className="p-6 bg-emerald-50/50 border-t border-emerald-100 mt-auto">
                       
-                      {/* Collection Date */}
-                      <div className="mb-4 bg-white p-3 rounded-2xl border border-emerald-100 shadow-sm">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Sample Collection Date</label>
-                        <input
-                          type="date"
-                          value={scheduledDate}
-                          min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                          onChange={e => setScheduledDate(e.target.value)}
-                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-700 mb-3"
-                        />
+                      {/* Book Timeslot & Date */}
+                      <div className="mb-4 bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setIsDatePickerOpen(v => !v)}
+                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-50/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <CalendarIcon size={16} className="text-emerald-600" />
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Book Timeslot & Date</span>
+                          </div>
+                          {scheduledDate && selectedTime ? (
+                            <span className="text-xs font-bold text-emerald-600">
+                              {new Date(scheduledDate + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {new Date(selectedTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          ) : scheduledDate ? (
+                            <span className="text-xs font-bold text-amber-500">Pick a time</span>
+                          ) : (
+                            <ChevronRight size={14} className={`text-slate-400 transition-transform ${isDatePickerOpen ? 'rotate-90' : ''}`} />
+                          )}
+                        </button>
 
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">Time Slot</label>
-                        {loadingSlots ? (
-                          <div className="flex items-center gap-2 px-3 py-2.5 text-xs text-emerald-600 font-medium">
-                            <Loader2 size={14} className="animate-spin" /> Fetching available slots...
-                          </div>
-                        ) : availableSlots.length > 0 ? (
-                          <select
-                            value={selectedTime}
-                            onChange={e => setSelectedTime(e.target.value)}
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-700"
-                          >
-                            <option value="">Select a time slot</option>
-                            {availableSlots.map(slot => (
-                              <option key={slot.time} value={slot.time}>
-                                {new Date(slot.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="px-3 py-2.5 text-xs text-red-500 font-medium bg-red-50 rounded-xl border border-red-100">
-                            No common time slots available for the selected date. Try another date.
-                          </div>
-                        )}
+                        <AnimatePresence>
+                          {isDatePickerOpen && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden border-t border-emerald-100"
+                            >
+                              <div className="p-4">
+                                {/* Month navigation */}
+                                <div className="flex items-center justify-between mb-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setCalendarMonth(prev => {
+                                      const d = new Date(prev.year, prev.month - 1);
+                                      return { year: d.getFullYear(), month: d.getMonth() };
+                                    })}
+                                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors"
+                                  >
+                                    <ChevronLeft size={14} />
+                                  </button>
+                                  <span className="font-extrabold text-slate-800 text-sm">
+                                    {new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCalendarMonth(prev => {
+                                      const d = new Date(prev.year, prev.month + 1);
+                                      return { year: d.getFullYear(), month: d.getMonth() };
+                                    })}
+                                    className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-slate-100 text-slate-500 transition-colors"
+                                  >
+                                    <ChevronRight size={14} />
+                                  </button>
+                                </div>
+
+                                {/* Day-of-week headers */}
+                                <div className="grid grid-cols-7 mb-1">
+                                  {['Mo','Tu','We','Th','Fr','Sa','Su'].map(d => (
+                                    <div key={d} className="text-center text-[10px] font-bold text-slate-400 py-1">{d}</div>
+                                  ))}
+                                </div>
+
+                                {/* Calendar grid */}
+                                <div className="grid grid-cols-7 gap-y-1 mb-4">
+                                  {calendarDays.map((day, idx) => {
+                                    if (day === null) return <div key={`e-${idx}`} />;
+                                    const iso = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                    const isPast = iso <= todayISO;
+                                    const isSelected = scheduledDate === iso;
+                                    const isToday = iso === todayISO;
+                                    return (
+                                      <button
+                                        key={iso}
+                                        type="button"
+                                        disabled={isPast}
+                                        onClick={() => { setScheduledDate(iso); setSelectedTime(''); }}
+                                        className={`h-8 w-full flex items-center justify-center rounded-full text-xs font-bold transition-all
+                                          ${isSelected ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30' :
+                                            isToday ? 'ring-2 ring-emerald-400 text-emerald-700' :
+                                            isPast ? 'text-slate-200 cursor-not-allowed' :
+                                            'text-slate-700 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                                      >
+                                        {day}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Time slots */}
+                                {scheduledDate && (
+                                  <div className="border-t border-slate-100 pt-3">
+                                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                      {new Date(scheduledDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                    </p>
+                                    {loadingSlots ? (
+                                      <div className="flex items-center gap-2 py-2 text-xs text-emerald-600 font-medium">
+                                        <Loader2 size={12} className="animate-spin" /> Fetching slots...
+                                      </div>
+                                    ) : availableSlots.length > 0 ? (
+                                      <div className="grid grid-cols-3 gap-1.5">
+                                        {availableSlots.map(slot => {
+                                          const isSlotSelected = selectedTime === slot.time;
+                                          return (
+                                            <button
+                                              key={slot.time}
+                                              type="button"
+                                              onClick={() => { setSelectedTime(slot.time); setIsDatePickerOpen(false); }}
+                                              className={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                                                isSlotSelected
+                                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                                  : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-400 hover:text-emerald-700'
+                                              }`}
+                                            >
+                                              {new Date(slot.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <div className="py-2 text-xs text-red-500 font-medium bg-red-50 rounded-xl px-3 border border-red-100">
+                                        No slots available. Try another date.
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
 
                       {/* Promo Code Section */}
