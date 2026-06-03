@@ -108,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (role === 'ADMIN') router.push('/admin');
     else if (role === 'PARTNER') router.push('/partner');
     else if (role === 'DOCTOR') router.push('/doctor');
+    // PATIENT: stay on current page — no redirect
   };
 
   const logout = async () => {

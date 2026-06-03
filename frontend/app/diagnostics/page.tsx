@@ -69,7 +69,10 @@ function DiagnosticsContent() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeCategory, setActiveCategory] = useState('All Tests');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(sessionStorage.getItem('diag_cart') || '[]'); } catch { return []; }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutSuccess, setIsCheckoutSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,6 +105,11 @@ function DiagnosticsContent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+
+  // Persist cart to sessionStorage so it survives login/remount
+  useEffect(() => {
+    sessionStorage.setItem('diag_cart', JSON.stringify(cart));
+  }, [cart]);
 
   useEffect(() => {
     fetchData();
@@ -413,7 +421,7 @@ function DiagnosticsContent() {
             if (verifyJson.success) {
               setIsCheckoutSuccess(true);
               setTimeout(() => {
-                setCart([]);
+                setCart([]); sessionStorage.removeItem('diag_cart');
                 setIsCheckoutSuccess(false);
                 setIsCartOpen(false);
                 setAppliedCoupon(null);

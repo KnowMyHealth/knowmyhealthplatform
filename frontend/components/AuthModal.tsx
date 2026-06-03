@@ -326,6 +326,10 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const handleGoogleAuth = async () => {
     setIsLoading(true);
     setAuthError(null);
+    // Remember current page so callback can return here after OAuth
+    if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+      sessionStorage.setItem('auth_return_to', window.location.pathname);
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
