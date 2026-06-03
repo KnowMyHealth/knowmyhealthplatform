@@ -310,7 +310,7 @@ function DiagnosticsContent() {
   };
 
   const handleCheckout = async () => {
-    if (!isLoggedIn) { openAuthModal(); return; }
+    if (!isLoggedIn) { setIsCartOpen(false); openAuthModal(); return; }
     if (cart.length === 0 || isCheckingOut || !scheduledDate) return;
     if (!selectedTime) {
       setCheckoutError('Please select a time slot.');
