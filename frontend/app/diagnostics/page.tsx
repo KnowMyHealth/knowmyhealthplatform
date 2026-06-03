@@ -73,7 +73,10 @@ function DiagnosticsContent() {
     if (typeof window === 'undefined') return [];
     try { return JSON.parse(sessionStorage.getItem('diag_cart') || '[]'); } catch { return []; }
   });
-  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('diag_cart_open') === 'true';
+  });
   const [isCheckoutSuccess, setIsCheckoutSuccess] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -94,22 +97,29 @@ function DiagnosticsContent() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [paymentMode, setPaymentMode] = useState<'FULL' | 'ADVANCE'>('ADVANCE');
-  const [scheduledDate, setScheduledDate] = useState<string>('');
+  const [scheduledDate, setScheduledDate] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return sessionStorage.getItem('diag_date') || '';
+  });
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState<{ year: number; month: number }>({ year: new Date().getFullYear(), month: new Date().getMonth() });
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [availableSlots, setAvailableSlots] = useState<Slot[]>([]);
-  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return sessionStorage.getItem('diag_time') || '';
+  });
 
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
-  // Persist cart to sessionStorage so it survives login/remount
-  useEffect(() => {
-    sessionStorage.setItem('diag_cart', JSON.stringify(cart));
-  }, [cart]);
+  // Persist cart/date/time/cart-open to sessionStorage so they survive login/remount
+  useEffect(() => { sessionStorage.setItem('diag_cart', JSON.stringify(cart)); }, [cart]);
+  useEffect(() => { sessionStorage.setItem('diag_cart_open', String(isCartOpen)); }, [isCartOpen]);
+  useEffect(() => { sessionStorage.setItem('diag_date', scheduledDate); }, [scheduledDate]);
+  useEffect(() => { sessionStorage.setItem('diag_time', selectedTime); }, [selectedTime]);
 
   useEffect(() => {
     fetchData();
@@ -421,7 +431,8 @@ function DiagnosticsContent() {
             if (verifyJson.success) {
               setIsCheckoutSuccess(true);
               setTimeout(() => {
-                setCart([]); sessionStorage.removeItem('diag_cart');
+                setCart([]); setIsCartOpen(false); setScheduledDate(''); setSelectedTime('');
+                ['diag_cart','diag_cart_open','diag_date','diag_time'].forEach(k => sessionStorage.removeItem(k));
                 setIsCheckoutSuccess(false);
                 setIsCartOpen(false);
                 setAppliedCoupon(null);
