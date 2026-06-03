@@ -11,8 +11,8 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon
 } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
-import ProtectedRoute from '@/components/ProtectedRoute';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -61,6 +61,7 @@ interface FetchedTest {
 function DiagnosticsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isLoggedIn, isLoading: authLoading, openAuthModal } = useAuth();
 
   const [categories, setCategories] = useState<string[]>(['All Tests']);
   const [diagnostics, setDiagnostics] = useState<FetchedTest[]>([]);
@@ -297,6 +298,7 @@ function DiagnosticsContent() {
   }, 0);
 
   const addToCart = (testId: string) => {
+    if (!isLoggedIn) { openAuthModal(); return; }
     setCart(prev => {
       const existing = prev.find(item => item.testId === testId);
       if (existing) return prev.map(item => item.testId === testId ? { ...item, quantity: item.quantity + 1 } : item);
@@ -542,7 +544,7 @@ function DiagnosticsContent() {
   };
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
+    <>
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -1340,7 +1342,7 @@ function DiagnosticsContent() {
           )}
         </AnimatePresence>
       </div>
-    </ProtectedRoute>
+    </>
   );
 }
 

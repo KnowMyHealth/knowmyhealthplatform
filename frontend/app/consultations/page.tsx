@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 function loadRazorpayScript(): Promise<boolean> {
@@ -273,6 +273,7 @@ const stableHash = (s: string) => {
 };
 
 export default function ConsultationsPage() {
+  const { isLoggedIn, openAuthModal } = useAuth();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [toastError, setToastError] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -426,6 +427,7 @@ export default function ConsultationsPage() {
   });
 
   const handleBookClick = (doctor: Doctor) => {
+    if (!isLoggedIn) { openAuthModal(); return; }
     setSelectedDoctor(doctor);
     setSelectedConsultationType('ONLINE');
     setPaymentMode('FULL');
@@ -695,8 +697,7 @@ export default function ConsultationsPage() {
 
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
-      <div className="min-h-screen bg-gray-50/50 pb-24">
+    <div className="min-h-screen bg-gray-50/50 pb-24">
         {/* Global error toast */}
         <AnimatePresence>
           {toastError && (
@@ -1283,7 +1284,6 @@ export default function ConsultationsPage() {
             </div>
           )}
         </AnimatePresence>
-      </div>
-    </ProtectedRoute>
+    </div>
   );
 }

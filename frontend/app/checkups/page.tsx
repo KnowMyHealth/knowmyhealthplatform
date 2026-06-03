@@ -7,7 +7,7 @@ import {
   Heart, Activity, Shield, Microscope, Users, Zap,
   HeartPulse, Phone, Mail, User, Loader2, Star, AlertCircle,
 } from 'lucide-react';
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 function loadRazorpayScript(): Promise<boolean> {
@@ -645,6 +645,7 @@ function FilterBar({ packages, active, onChange }: {
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
 export default function CheckupsPage() {
+  const { isLoggedIn, openAuthModal } = useAuth();
   const [packages, setPackages] = useState<HealthPackage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
@@ -676,8 +677,7 @@ export default function CheckupsPage() {
     : packages.filter(p => getCategory(p.title) === activeCategory);
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
-      <div className="flex flex-col w-full min-h-screen">
+    <div className="flex flex-col w-full min-h-screen">
 
         {/* ── Hero ─────────────────────────────────────────────────────── */}
         <section className="py-24 bg-emerald-950 relative overflow-hidden">
@@ -734,7 +734,7 @@ export default function CheckupsPage() {
                       exit={{ opacity: 0, scale: 0.96 }}
                       className="h-full"
                     >
-                      <PackageCard pkg={pkg} onEnquire={setEnquiringPkg} index={i} />
+                      <PackageCard pkg={pkg} onEnquire={(p) => { if (!isLoggedIn) { openAuthModal(); return; } setEnquiringPkg(p); }} index={i} />
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -781,7 +781,6 @@ export default function CheckupsPage() {
             <EnquireModal pkg={enquiringPkg} onClose={() => setEnquiringPkg(null)} />
           )}
         </AnimatePresence>
-      </div>
-    </ProtectedRoute>
+    </div>
   );
 }

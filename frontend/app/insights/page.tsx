@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import Markdown from 'react-markdown';
-import ProtectedRoute from '@/components/ProtectedRoute';
 
 // Basic interface for our parsed API data
 interface BlogPost {
@@ -119,11 +118,9 @@ export default function InsightsPage() {
 
   if (isLoading) {
     return (
-      <ProtectedRoute requiredRole="PATIENT">
-        <div className="w-full min-h-screen bg-[#fcfdfd] flex items-center justify-center">
-          <Loader2 className="animate-spin text-emerald-600" size={48} />
-        </div>
-      </ProtectedRoute>
+      <div className="w-full min-h-screen bg-[#fcfdfd] flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-600" size={48} />
+      </div>
     );
   }
 
@@ -496,14 +493,12 @@ export default function InsightsPage() {
   };
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
-      <div className="w-full min-h-screen bg-[#fcfdfd] py-12 px-4 sm:px-6">
-        <div className="max-w-[1400px] mx-auto">
-          <AnimatePresence mode="wait">
-            {viewState === 'hub' ? renderHub() : renderArticle()}
-          </AnimatePresence>
-        </div>
+    <div className="w-full min-h-screen bg-[#fcfdfd] py-12 px-4 sm:px-6">
+      <div className="max-w-[1400px] mx-auto">
+        <AnimatePresence mode="wait">
+          {viewState === 'hub' ? renderHub() : renderArticle()}
+        </AnimatePresence>
       </div>
-    </ProtectedRoute>
+    </div>
   );
 }
