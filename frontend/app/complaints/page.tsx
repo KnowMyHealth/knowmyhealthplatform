@@ -1,7 +1,8 @@
 ﻿// frontend/app/complaints/page.tsx
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -56,8 +57,9 @@ interface PastReportBrief {
 // Added 'past_report' to specifically handle viewing history without the chat interface
 type ChatState = 'idle' | 'chatting' | 'report' | 'past_report';
 
-export default function ComplaintsPage() {
+function ComplaintsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Idle UI States
   const [activeCategory, setActiveCategory] = useState('All');
@@ -87,6 +89,16 @@ export default function ComplaintsPage() {
     const matchesSearch = s.title.toLowerCase().includes(searchQuery.toLowerCase()) || s.desc.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCat && matchesSearch;
   });
+
+  // Auto-start analysis if symptoms are passed via ?q= (e.g. from diagnostics AI recommender)
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q && q.trim()) {
+      handleStartAnalysis(q.trim());
+      window.history.replaceState(null, '', '/complaints');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch past reports when returning to idle state
   useEffect(() => {
@@ -758,5 +770,13 @@ export default function ComplaintsPage() {
         </AnimatePresence>
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function ComplaintsPage() {
+  return (
+    <Suspense>
+      <ComplaintsContent />
+    </Suspense>
   );
 }   

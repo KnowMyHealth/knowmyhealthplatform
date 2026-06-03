@@ -64,6 +64,7 @@ function DiagnosticsContent() {
 
   const [categories, setCategories] = useState<string[]>(['All Tests']);
   const [diagnostics, setDiagnostics] = useState<FetchedTest[]>([]);
+  const [healthPackages, setHealthPackages] = useState<{ id: string; title: string; price: number; discount_percentage: number; included_tests: string[] }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeCategory, setActiveCategory] = useState('All Tests');
@@ -260,6 +261,16 @@ function DiagnosticsContent() {
           setDiagnostics(mappedTests);
         }
       }
+      // Also fetch health packages for the sidebar
+      try {
+        const pkgRes = await fetch(`${BACKEND_URL}/api/v1/health-packages?limit=3`, {
+          headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+        });
+        if (pkgRes.ok) {
+          const pkgJson = await pkgRes.json();
+          if (pkgJson.data) setHealthPackages(pkgJson.data.slice(0, 3));
+        }
+      } catch { /* non-critical */ }
     } catch (error) {
       console.error("Error fetching diagnostic tests", error);
     } finally {
@@ -718,39 +729,58 @@ function DiagnosticsContent() {
                   </div>
                 </motion.div>
 
-                {/* Wide Promotional Ad Slot 1 */}
-                <div className="bg-white border-2 border-emerald-100 border-dashed rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center gap-8 group cursor-pointer hover:border-emerald-300 transition-colors">
-                  <div className="w-full md:w-1/2 aspect-square md:aspect-auto md:h-48 bg-emerald-50 rounded-3xl flex items-center justify-center border border-emerald-100 relative overflow-hidden shrink-0">
-                    <Activity size={64} className="text-emerald-200 group-hover:scale-110 transition-transform" />
-                    <div className="absolute inset-0 bg-gradient-to-tr from-emerald-200/50 to-transparent" />
-                  </div>
-                  <div className="text-center md:text-left flex-1">
-                    <div className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-widest rounded-lg mb-3">
-                      Premium Package
+                {/* Health Packages — real data */}
+                {healthPackages.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="font-extrabold text-emerald-950 text-base">Health Packages</h3>
+                      <button onClick={() => router.push('/checkups')} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+                        View all <ArrowRight size={12} />
+                      </button>
                     </div>
-                    <h4 className="font-bold text-emerald-950 text-2xl mb-2">Full Body Wellness</h4>
-                    <p className="text-emerald-900/60 text-sm mb-4 leading-relaxed">Get 60+ parameters tested comfortably from home. Fast, accurate reports in 24 hours.</p>
-                    <div className="text-emerald-600 font-black text-2xl">₹999 <span className="text-sm font-medium text-slate-400 line-through ml-2">₹2499</span></div>
+                    {healthPackages.map(pkg => {
+                      const discountedPrice = Math.round(pkg.price - (pkg.price * (pkg.discount_percentage / 100)));
+                      return (
+                        <motion.div
+                          key={pkg.id}
+                          whileHover={{ y: -2 }}
+                          onClick={() => router.push('/checkups')}
+                          className="bg-white border border-emerald-100 rounded-[2rem] p-6 cursor-pointer hover:shadow-lg hover:shadow-emerald-900/5 transition-shadow group"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 pr-3">
+                              <div className="inline-block px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest rounded-lg mb-2 border border-emerald-100">
+                                Health Package
+                              </div>
+                              <h4 className="font-extrabold text-emerald-950 text-base leading-tight group-hover:text-emerald-700 transition-colors">{pkg.title}</h4>
+                            </div>
+                            <div className="text-right shrink-0">
+                              {pkg.discount_percentage > 0 && (
+                                <p className="text-[11px] text-slate-400 line-through">₹{pkg.price.toLocaleString('en-IN')}</p>
+                              )}
+                              <p className="text-lg font-black text-emerald-950">₹{discountedPrice.toLocaleString('en-IN')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-emerald-900/50 font-medium">{pkg.included_tests?.length || 0} tests included</p>
+                            {pkg.discount_percentage > 0 && (
+                              <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">{Math.round(pkg.discount_percentage)}% off</span>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </div>
-                </div>
-
-                {/* Promotional Ad Slot 2 */}
-                <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white relative overflow-hidden flex flex-col justify-center min-h-[160px]">
-                  <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-emerald-500/30 blur-3xl rounded-full" />
-                  <div className="relative z-10 flex items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="p-1.5 bg-emerald-500 rounded-lg"><Zap size={16} className="text-white" /></div>
-                        <span className="font-bold tracking-wider uppercase text-xs text-emerald-400">Limited Offer</span>
-                      </div>
-                      <h4 className="text-2xl font-bold mb-1">Flat 25% Off on MRIs</h4>
-                      <p className="text-white/70 text-sm">Use code <span className="text-white bg-white/10 px-2 py-0.5 rounded font-mono font-bold mx-1">HEALTH25</span> at checkout.</p>
-                    </div>
-                    <div className="hidden sm:flex w-16 h-16 rounded-full border border-white/20 items-center justify-center backdrop-blur-md">
-                      <ShieldCheck size={28} className="text-emerald-400" />
-                    </div>
+                ) : (
+                  <div className="bg-white border border-emerald-100 rounded-[2.5rem] p-8 text-center">
+                    <Activity size={40} className="text-emerald-200 mx-auto mb-3" />
+                    <h4 className="font-bold text-emerald-950 text-lg mb-1">Health Packages</h4>
+                    <p className="text-emerald-900/60 text-sm mb-4">Comprehensive test packages for your health needs.</p>
+                    <button onClick={() => router.push('/checkups')} className="px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl text-sm hover:bg-emerald-700 transition-colors">
+                      Browse Packages
+                    </button>
                   </div>
-                </div>
+                )}
 
                 {/* Support Info */}
                 <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100 flex items-start gap-4">
@@ -1209,12 +1239,16 @@ function DiagnosticsContent() {
                           className="w-full h-36 p-5 bg-white border border-emerald-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none shadow-inner font-medium text-emerald-950"
                         />
                       </div>
-                      <button 
-                        onClick={handleGetRecommendation}
+                      <button
+                        onClick={() => {
+                          if (!symptoms.trim()) return;
+                          setIsAIModalOpen(false);
+                          router.push(`/complaints?q=${encodeURIComponent(symptoms.trim())}`);
+                        }}
                         disabled={!symptoms.trim()}
                         className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/20"
                       >
-                        Find Relevant Tests
+                        Analyse Symptoms & Find Tests
                       </button>
                     </div>
                   ) : isAnalyzing ? (
