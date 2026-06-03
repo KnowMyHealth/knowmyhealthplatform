@@ -127,8 +127,16 @@ function DiagnosticsContent() {
     if (sessionStorage.getItem('diag_pending_checkout') !== 'true') return;
     sessionStorage.removeItem('diag_pending_checkout');
     setIsCartOpen(true);
-    // Small delay to let cart open animate before Razorpay fires
-    setTimeout(() => handleCheckout(), 600);
+    // Wait for supabase session to be fully persisted before firing checkout
+    const tryCheckout = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        handleCheckout();
+      } else {
+        setTimeout(() => handleCheckout(), 1500);
+      }
+    };
+    setTimeout(tryCheckout, 800);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
 
@@ -378,7 +386,8 @@ function DiagnosticsContent() {
         });
         const bookJson = await bookRes.json();
         if (!bookRes.ok || !bookJson.success) {
-          setCheckoutError(bookJson.message || 'Failed to create booking. Please try again.');
+          const detail = bookJson.detail ? (Array.isArray(bookJson.detail) ? bookJson.detail.map((e: any) => e.msg).join(', ') : bookJson.detail) : null;
+          setCheckoutError(detail || bookJson.message || 'Failed to create booking. Please try again.');
           setIsCheckingOut(false);
           return;
         }
