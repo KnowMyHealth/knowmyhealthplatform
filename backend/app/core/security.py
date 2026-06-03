@@ -19,6 +19,7 @@ class AuthenticatedUser:
         self.email = email
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 jwks_client = PyJWKClient(settings.SUPABASE_JWKS_URL, cache_keys=True, lifespan=300)
 
 def _get_signing_key(token: str):
@@ -64,6 +65,17 @@ def get_current_user(auth: HTTPAuthorizationCredentials = Depends(security)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed due to internal error",
         )
+
+def get_optional_user(auth: HTTPAuthorizationCredentials = Depends(optional_security)):
+    """Like get_current_user but returns None instead of 401 when no token is provided."""
+    if auth is None:
+        return None
+    try:
+        signing_key = _get_signing_key(auth.credentials)
+        payload = jwt.decode(auth.credentials, key=signing_key.key, algorithms=["ES256"], audience="authenticated")
+        return AuthenticatedUser(id=payload['sub'], email=payload.get('email'))
+    except Exception:
+        return None
 
 def get_user_id_for_rate_limiting(request: Request) -> str:
     ip = request.client.host if request.client else "127.0.0.1"

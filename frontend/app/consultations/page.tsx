@@ -370,9 +370,10 @@ export default function ConsultationsPage() {
         const { data: { session } } = await supabase.auth.getSession();
         const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
+        const token = session?.access_token;
         const res = await fetch(`${BACKEND_URL}/api/v1/doctors/approved?limit=50`, {
           headers: {
-            'Authorization': `Bearer ${session?.access_token ?? ''}`,
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
             'ngrok-skip-browser-warning': 'true'
           }
         });
@@ -469,9 +470,10 @@ export default function ConsultationsPage() {
         const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
         const tzOffset = new Date().getTimezoneOffset() * -1;
 
+        const slotToken = session?.access_token;
         const res = await fetch(`${BACKEND_URL}/api/v1/consultations/doctors/${selectedDoctor.id}/slots?date=${selectedDate}&timezone_offset=${tzOffset}`, {
           headers: {
-            'Authorization': `Bearer ${session?.access_token ?? ''}`,
+            ...(slotToken ? { 'Authorization': `Bearer ${slotToken}` } : {}),
             'ngrok-skip-browser-warning': 'true'
           }
         });

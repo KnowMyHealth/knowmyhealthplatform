@@ -659,7 +659,7 @@ export default function CheckupsPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(`${BACKEND_URL}/api/v1/health-packages?is_active=true&limit=100`, {
-          headers: { Authorization: `Bearer ${session?.access_token ?? ''}`, 'ngrok-skip-browser-warning': 'true' },
+          headers: { ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}), 'ngrok-skip-browser-warning': 'true' },
         });
         if (res.ok) {
           const json = await res.json();

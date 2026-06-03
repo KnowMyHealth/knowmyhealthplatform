@@ -12,7 +12,7 @@ from app.modules.doctor.models import Doctor
 from app.modules.user.schemas import Role
 from app.utils.api_error import BadRequestError
 from app.utils.api_response import ApiResponse
-from app.core.security import RequireRole, get_current_user
+from app.core.security import RequireRole, get_current_user, get_optional_user
 from app.core.rate_limiter import limiter
 from app.db.all_models import User
 
@@ -182,7 +182,7 @@ async def get_doctor_slots(
     doctor_id: UUID,
     date: date, 
     timezone_offset: int = Query(0, description="Timezone offset from UTC in minutes (e.g., 330 for India)"),
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: ConsultationService = Depends(get_consultation_service)
 ):

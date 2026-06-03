@@ -7,7 +7,7 @@ from loguru import logger
 from app.db.deps import get_db
 from app.db.all_models import User
 from app.utils.api_response import ApiResponse
-from app.core.security import RequireRole, get_current_user
+from app.core.security import RequireRole, get_current_user, get_optional_user
 from app.core.rate_limiter import limiter
 from app.utils.pagination import PaginationParams
 from app.modules.user.schemas import Role
@@ -75,7 +75,7 @@ async def list_packages(
     request: Request,
     params: PaginationParams = Depends(),
     is_active: bool | None = None,
-    current_user = Depends(get_current_user), 
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: HealthPackageService = Depends(get_health_package_service)
 ):
@@ -88,7 +88,7 @@ async def list_packages(
 async def get_package(
     request: Request,
     package_id: UUID,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: HealthPackageService = Depends(get_health_package_service)
 ):

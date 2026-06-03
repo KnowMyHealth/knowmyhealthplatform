@@ -8,7 +8,7 @@ from loguru import logger
 from app.db.deps import get_db
 from app.db.all_models import User
 from app.utils.api_response import ApiResponse
-from app.core.security import RequireRole, get_current_user
+from app.core.security import RequireRole, get_current_user, get_optional_user
 from app.core.rate_limiter import limiter
 from app.utils.pagination import PaginationParams
 from app.modules.user.schemas import Role
@@ -49,7 +49,7 @@ async def create_category(
 @limiter.limit("60/minute")
 async def list_categories(
     request: Request,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -91,7 +91,7 @@ async def list_lab_tests(
     params: PaginationParams = Depends(),
     category_id: UUID | None = None,
     is_active: bool | None = None,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -117,7 +117,7 @@ async def set_test_availability(
 async def get_test_availability(
     request: Request,
     test_id: UUID,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -131,7 +131,7 @@ async def get_test_slots(
     test_id: UUID,
     date: date, 
     timezone_offset: int = Query(0, description="Timezone offset from UTC in minutes (e.g., -330 for India)"),
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -143,7 +143,7 @@ async def get_test_slots(
 async def get_lab_test(
     request: Request,
     test_id: UUID,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):

@@ -160,13 +160,13 @@ function DiagnosticsContent() {
       
       setLoadingSlots(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const slotAuth = session?.access_token ? `Bearer ${session.access_token}` : '';
       const tzOffset = new Date().getTimezoneOffset() * -1;
-      
+
       try {
-        const slotPromises = cart.map(item => 
+        const slotPromises = cart.map(item =>
           fetch(`${BACKEND_URL}/api/v1/lab-tests/${item.testId}/slots?date=${scheduledDate}&timezone_offset=${tzOffset}`, {
-            headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+            headers: { ...(slotAuth ? { Authorization: slotAuth } : {}), 'ngrok-skip-browser-warning': 'true' }
           }).then(res => res.json())
         );
         
@@ -223,12 +223,12 @@ function DiagnosticsContent() {
   const fetchData = async () => {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const authHeader = session?.access_token ? `Bearer ${session.access_token}` : '';
 
     try {
       const catRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests/categories`, {
-        headers: { 
-          Authorization: `Bearer ${session.access_token}`,
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
           'ngrok-skip-browser-warning': 'true'
         }
       });
@@ -240,8 +240,8 @@ function DiagnosticsContent() {
       }
 
       const testRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100`, {
-        headers: { 
-          Authorization: `Bearer ${session.access_token}`,
+        headers: {
+          ...(authHeader ? { Authorization: authHeader } : {}),
           'ngrok-skip-browser-warning': 'true'
         }
       });
@@ -265,7 +265,7 @@ function DiagnosticsContent() {
       // Also fetch health packages for the sidebar
       try {
         const pkgRes = await fetch(`${BACKEND_URL}/api/v1/health-packages?limit=3`, {
-          headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' }
+          headers: { ...(authHeader ? { Authorization: authHeader } : {}), 'ngrok-skip-browser-warning': 'true' }
         });
         if (pkgRes.ok) {
           const pkgJson = await pkgRes.json();

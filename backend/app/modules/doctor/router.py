@@ -10,7 +10,7 @@ from app.db.all_models import User
 from app.modules.user.schemas import Role
 from app.utils.api_response import ApiResponse
 from app.utils.api_error import BadRequestError, ForbiddenError
-from app.core.security import RequireRole, get_current_user
+from app.core.security import RequireRole, get_current_user, get_optional_user
 from app.core.rate_limiter import limiter
 from app.db.deps import get_db 
 
@@ -115,7 +115,7 @@ async def apply_for_doctor(
 async def list_approved_doctors(
     request: Request,
     params: PaginationParams = Depends(),
-    current_user = Depends(get_current_user), 
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: DoctorsService = Depends(get_doctors_service)
 ):
@@ -198,11 +198,11 @@ async def list_doctor_applications(
 async def get_doctor_details(
     request: Request,
     doctor_id: UUID,
-    current_user = Depends(get_current_user), # Changed to allow patients to view a doctor's profile
+    current_user = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
     service: DoctorsService = Depends(get_doctors_service)
 ):
-    logger.debug(f"--> User {current_user.id} viewing details for doctor {doctor_id}")
+    logger.debug(f"--> User {getattr(current_user, 'id', 'guest')} viewing details for doctor {doctor_id}")
 
     doctor = await service.get_doctor_by_id(db, doctor_id)
     validated_data = DoctorSchema.model_validate(doctor)
