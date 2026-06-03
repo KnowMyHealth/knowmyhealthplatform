@@ -121,6 +121,17 @@ function DiagnosticsContent() {
   useEffect(() => { sessionStorage.setItem('diag_date', scheduledDate); }, [scheduledDate]);
   useEffect(() => { sessionStorage.setItem('diag_time', selectedTime); }, [selectedTime]);
 
+  // Auto-trigger checkout after login if user was trying to pay
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (sessionStorage.getItem('diag_pending_checkout') !== 'true') return;
+    sessionStorage.removeItem('diag_pending_checkout');
+    setIsCartOpen(true);
+    // Small delay to let cart open animate before Razorpay fires
+    setTimeout(() => handleCheckout(), 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn]);
+
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,7 +339,12 @@ function DiagnosticsContent() {
   };
 
   const handleCheckout = async () => {
-    if (!isLoggedIn) { setIsCartOpen(false); openAuthModal(); return; }
+    if (!isLoggedIn) {
+      sessionStorage.setItem('diag_pending_checkout', 'true');
+      setIsCartOpen(false);
+      openAuthModal();
+      return;
+    }
     if (cart.length === 0 || isCheckingOut || !scheduledDate) return;
     if (!selectedTime) {
       setCheckoutError('Please select a time slot.');
@@ -432,7 +448,7 @@ function DiagnosticsContent() {
               setIsCheckoutSuccess(true);
               setTimeout(() => {
                 setCart([]); setIsCartOpen(false); setScheduledDate(''); setSelectedTime('');
-                ['diag_cart','diag_cart_open','diag_date','diag_time'].forEach(k => sessionStorage.removeItem(k));
+                ['diag_cart','diag_cart_open','diag_date','diag_time','diag_pending_checkout'].forEach(k => sessionStorage.removeItem(k));
                 setIsCheckoutSuccess(false);
                 setIsCartOpen(false);
                 setAppliedCoupon(null);
