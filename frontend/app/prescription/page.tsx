@@ -9,7 +9,7 @@ import {
   Loader2, ShoppingCart, Microscope, ArrowRight,
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAuth } from '@/lib/AuthContext';
 import Markdown from 'react-markdown';
 import { supabase } from '@/lib/supabase';
 
@@ -48,6 +48,7 @@ const itemVariants = {
 
 export default function PrescriptionVaultPage() {
   const router = useRouter();
+  const { isLoggedIn, openAuthModal } = useAuth();
 
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -96,6 +97,7 @@ export default function PrescriptionVaultPage() {
 
   const handleAnalyze = async () => {
     if (!file) return;
+    if (!isLoggedIn) { openAuthModal(); return; }
     setIsAnalyzing(true);
     setError(null);
     try {
@@ -178,8 +180,7 @@ export default function PrescriptionVaultPage() {
   }));
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
-      <div className="flex flex-col w-full min-h-screen">
+    <div className="flex flex-col w-full min-h-screen">
 
         {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section className="relative bg-emerald-950 pt-20 pb-16 overflow-hidden">
@@ -583,7 +584,6 @@ export default function PrescriptionVaultPage() {
           )}
         </AnimatePresence>
 
-      </div>
-    </ProtectedRoute>
+    </div>
   );
 }

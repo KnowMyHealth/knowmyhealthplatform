@@ -12,7 +12,7 @@ import {
   History, Calendar, ChevronRight, Loader2, ChevronLeft
 } from 'lucide-react';
 import Markdown from 'react-markdown';
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 // --- MOCK CATEGORIES & QUICK START SYMPTOMS ---
@@ -60,6 +60,7 @@ type ChatState = 'idle' | 'chatting' | 'report' | 'past_report';
 function ComplaintsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isLoggedIn, openAuthModal } = useAuth();
 
   // Idle UI States
   const [activeCategory, setActiveCategory] = useState('All');
@@ -219,6 +220,7 @@ function ComplaintsContent() {
 
   const handleStartAnalysis = async (initialMessage: string) => {
     if (!initialMessage.trim()) return;
+    if (!isLoggedIn) { openAuthModal(); return; }
     
     setChatState('chatting');
     setHistory([{ role: 'user', content: initialMessage }]);
@@ -761,15 +763,13 @@ function ComplaintsContent() {
   );
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
-      <div className="w-full min-h-screen bg-[#f8fafc]">
-        <AnimatePresence mode="wait">
-          {chatState === 'idle' && renderIdleState()}
-          {(chatState === 'chatting' || chatState === 'report') && renderChatInterface()}
-          {chatState === 'past_report' && renderPastReport()}
-        </AnimatePresence>
-      </div>
-    </ProtectedRoute>
+    <div className="w-full min-h-screen bg-[#f8fafc]">
+      <AnimatePresence mode="wait">
+        {chatState === 'idle' && renderIdleState()}
+        {(chatState === 'chatting' || chatState === 'report') && renderChatInterface()}
+        {chatState === 'past_report' && renderPastReport()}
+      </AnimatePresence>
+    </div>
   );
 }
 

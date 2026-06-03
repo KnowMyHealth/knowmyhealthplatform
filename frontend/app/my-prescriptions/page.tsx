@@ -12,7 +12,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import Link from 'next/link';
-import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAuth } from '@/lib/AuthContext';
+
 import { supabase } from '@/lib/supabase';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
@@ -213,6 +214,7 @@ function EmptyState() {
 /* ─── Page ─────────────────────────────────────────────────────────────────── */
 
 export default function MyPrescriptionsPage() {
+  const { isLoggedIn, isLoading: authLoading, openAuthModal } = useAuth();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [doctorMap, setDoctorMap] = useState<DoctorMap>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -273,8 +275,7 @@ export default function MyPrescriptionsPage() {
   }, []);
 
   return (
-    <ProtectedRoute requiredRole="PATIENT">
-      <div className="flex flex-col w-full min-h-screen">
+    <div className="flex flex-col w-full min-h-screen">
 
         {/* ── Hero ───────────────────────────────────────────────────────────── */}
         <section className="py-24 bg-emerald-950 relative overflow-hidden">
@@ -371,7 +372,6 @@ export default function MyPrescriptionsPage() {
             )}
           </div>
         </section>
-      </div>
-    </ProtectedRoute>
+    </div>
   );
 }
