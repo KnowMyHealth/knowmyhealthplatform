@@ -413,8 +413,10 @@ function DiagnosticsContent() {
       });
 
       const orderJson = await orderRes.json();
+      console.error('Order response:', orderRes.status, JSON.stringify(orderJson));
       if (!orderRes.ok || !orderJson.razorpay_order_id) {
-        setCheckoutError(orderJson.message || 'Payment initiation failed. Please try again.');
+        const errDetail = orderJson.errors ? JSON.stringify(orderJson.errors) : (orderJson.detail || orderJson.message);
+        setCheckoutError(errDetail || 'Payment initiation failed. Please try again.');
         setIsCheckingOut(false);
         return;
       }
