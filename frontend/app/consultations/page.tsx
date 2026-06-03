@@ -427,7 +427,6 @@ export default function ConsultationsPage() {
   });
 
   const handleBookClick = (doctor: Doctor) => {
-    if (!isLoggedIn) { openAuthModal(); return; }
     setSelectedDoctor(doctor);
     setSelectedConsultationType('ONLINE');
     setPaymentMode('FULL');
@@ -498,6 +497,7 @@ export default function ConsultationsPage() {
   }, [selectedDate, selectedDoctor, isBookingModalOpen]);
 
   const handleConfirmBooking = async () => {
+    if (!isLoggedIn) { openAuthModal(); return; }
     if (!selectedDoctor || !selectedDate || !selectedTime) return;
     setIsBooking(true);
     setPaymentError(null);

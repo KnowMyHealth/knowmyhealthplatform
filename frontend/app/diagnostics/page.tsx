@@ -298,7 +298,6 @@ function DiagnosticsContent() {
   }, 0);
 
   const addToCart = (testId: string) => {
-    if (!isLoggedIn) { openAuthModal(); return; }
     setCart(prev => {
       const existing = prev.find(item => item.testId === testId);
       if (existing) return prev.map(item => item.testId === testId ? { ...item, quantity: item.quantity + 1 } : item);
@@ -311,6 +310,7 @@ function DiagnosticsContent() {
   };
 
   const handleCheckout = async () => {
+    if (!isLoggedIn) { openAuthModal(); return; }
     if (cart.length === 0 || isCheckingOut || !scheduledDate) return;
     if (!selectedTime) {
       setCheckoutError('Please select a time slot.');

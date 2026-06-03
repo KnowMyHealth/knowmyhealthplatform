@@ -332,6 +332,7 @@ function PackageCard({ pkg, onEnquire, index }: {
 /* ─── Enquire Modal ──────────────────────────────────────────────────────── */
 
 function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => void }) {
+  const { isLoggedIn, openAuthModal } = useAuth();
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
   const [isPaying, setIsPaying] = useState(false);
@@ -346,6 +347,7 @@ function EnquireModal({ pkg, onClose }: { pkg: HealthPackage; onClose: () => voi
   const Icon = meta.icon;
 
   const handlePayNow = async () => {
+    if (!isLoggedIn) { openAuthModal(); return; }
     if (!scheduledDate) { setPaymentError('Please select a scheduled date.'); return; }
     setIsPaying(true);
     setPaymentError(null);
@@ -734,7 +736,7 @@ export default function CheckupsPage() {
                       exit={{ opacity: 0, scale: 0.96 }}
                       className="h-full"
                     >
-                      <PackageCard pkg={pkg} onEnquire={(p) => { if (!isLoggedIn) { openAuthModal(); return; } setEnquiringPkg(p); }} index={i} />
+                      <PackageCard pkg={pkg} onEnquire={setEnquiringPkg} index={i} />
                     </motion.div>
                   ))}
                 </AnimatePresence>
