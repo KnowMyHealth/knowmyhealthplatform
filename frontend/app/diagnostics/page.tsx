@@ -121,24 +121,17 @@ function DiagnosticsContent() {
   useEffect(() => { sessionStorage.setItem('diag_date', scheduledDate); }, [scheduledDate]);
   useEffect(() => { sessionStorage.setItem('diag_time', selectedTime); }, [selectedTime]);
 
-  // Auto-trigger checkout after login if user was trying to pay
+  // Auto-trigger checkout after login if user was trying to pay.
+  // Wait for diagnostics data to load so cartTotal is non-zero.
   useEffect(() => {
     if (!isLoggedIn) return;
+    if (diagnostics.length === 0) return; // wait until test data is loaded
     if (sessionStorage.getItem('diag_pending_checkout') !== 'true') return;
     sessionStorage.removeItem('diag_pending_checkout');
     setIsCartOpen(true);
-    // Wait for supabase session to be fully persisted before firing checkout
-    const tryCheckout = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        handleCheckout();
-      } else {
-        setTimeout(() => handleCheckout(), 1500);
-      }
-    };
-    setTimeout(tryCheckout, 800);
+    setTimeout(() => handleCheckout(), 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn]);
+  }, [isLoggedIn, diagnostics]);
 
   useEffect(() => {
     fetchData();
@@ -413,10 +406,8 @@ function DiagnosticsContent() {
       });
 
       const orderJson = await orderRes.json();
-      console.error('Order response:', orderRes.status, JSON.stringify(orderJson));
       if (!orderRes.ok || !orderJson.razorpay_order_id) {
-        const errDetail = orderJson.errors ? JSON.stringify(orderJson.errors) : (orderJson.detail || orderJson.message);
-        setCheckoutError(errDetail || 'Payment initiation failed. Please try again.');
+        setCheckoutError(orderJson.message || 'Payment initiation failed. Please try again.');
         setIsCheckingOut(false);
         return;
       }
