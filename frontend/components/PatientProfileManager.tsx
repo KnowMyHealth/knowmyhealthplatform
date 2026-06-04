@@ -139,7 +139,7 @@ export default function PatientProfileManager() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-emerald-950/70 backdrop-blur-md"
-          onClick={() => mode === 'edit' && setIsOpen(false)} // Don't allow clicking outside if forcing creation
+          onClick={() => setIsOpen(false)}
         />
         
         <motion.div
@@ -178,14 +178,12 @@ export default function PatientProfileManager() {
 
           {/* Right Form Panel */}
           <div className="w-full md:w-[60%] p-8 sm:p-10 lg:p-12 relative max-h-[90vh] overflow-y-auto hide-scrollbar bg-slate-50/50">
-            {mode === 'edit' && (
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
-              >
-                <X size={24} />
-              </button>
-            )}
+            <button
+              onClick={() => setIsOpen(false)}
+              className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+            >
+              <X size={24} />
+            </button>
 
             <div className="mb-8">
               <h3 className="text-2xl font-extrabold text-slate-900 mb-2">

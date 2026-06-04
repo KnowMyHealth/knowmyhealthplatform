@@ -11,7 +11,8 @@ interface AuthContextType {
   login: (role: string) => void;
   logout: () => void;
   isAuthModalOpen: boolean;
-  openAuthModal: () => void;
+  authModalMode: 'signin' | 'signup';
+  openAuthModal: (mode?: 'signin' | 'signup') => void;
   closeAuthModal: () => void;
 }
 
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup'>('signup');
 
   const fetchUserProfile = async (token: string) => {
     try {
@@ -118,11 +120,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/');
   };
 
-  const openAuthModal = () => setIsAuthModalOpen(true);
+  const openAuthModal = (mode: 'signin' | 'signup' = 'signup') => { setAuthModalMode(mode); setIsAuthModalOpen(true); };
   const closeAuthModal = () => setIsAuthModalOpen(false);
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, userRole, isLoading, login, logout, isAuthModalOpen, openAuthModal, closeAuthModal }}>
+    <AuthContext.Provider value={{ isLoggedIn, userRole, isLoading, login, logout, isAuthModalOpen, authModalMode, openAuthModal, closeAuthModal }}>
       {children}
     </AuthContext.Provider>
   );
