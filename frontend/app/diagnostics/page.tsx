@@ -113,6 +113,9 @@ function DiagnosticsContent() {
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const TESTS_PER_PAGE = 50;
+  const [currentPage, setCurrentPage] = useState(1);
+
   const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
 
   // Persist cart/date/time/cart-open to sessionStorage so they survive login/remount
@@ -249,65 +252,68 @@ function DiagnosticsContent() {
     }
   }, [cart]);
 
+  const mapTests = (raw: any[]): FetchedTest[] => raw.map((t: any) => ({
+    id: t.id,
+    name: t.name,
+    category: t.category?.name || 'Uncategorized',
+    lab: t.organization,
+    price: t.price,
+    discountPrice: Math.round(t.price - (t.price * (t.discount_percentage / 100))),
+    discount: t.discount_percentage,
+    turnaround: t.results_in,
+    popular: t.discount_percentage >= 20
+  }));
+
   const fetchData = async () => {
     setIsLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     const authHeader = session?.access_token ? `Bearer ${session.access_token}` : '';
+    const headers = { ...(authHeader ? { Authorization: authHeader } : {}), 'ngrok-skip-browser-warning': 'true' };
 
     try {
-      const catRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests/categories`, {
-        headers: {
-          ...(authHeader ? { Authorization: authHeader } : {}),
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
+      // Fetch categories and first page of tests in parallel
+      const [catRes, firstPageRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/v1/lab-tests/categories`, { headers }),
+        fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=1`, { headers }),
+      ]);
+
       if (catRes.ok) {
         const catJson = await catRes.json();
-        if (catJson.data) {
-          setCategories(['All Tests', ...catJson.data.map((c: any) => c.name)]);
+        if (catJson.data) setCategories(['All Tests', ...catJson.data.map((c: any) => c.name)]);
+      }
+
+      if (!firstPageRes.ok) return;
+      const firstJson = await firstPageRes.json();
+      const firstItems = Array.isArray(firstJson.data) ? firstJson.data : (firstJson.data?.items || []);
+      setDiagnostics(mapTests(firstItems));
+      setIsLoading(false);
+
+      const totalPages = firstJson.meta?.total_pages ?? 1;
+
+      // Fetch remaining pages in the background
+      if (totalPages > 1) {
+        const remaining = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+        const results = await Promise.all(
+          remaining.map(p => fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=${p}`, { headers })
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null))
+        );
+        const extra: any[] = results.flatMap(json => {
+          if (!json) return [];
+          return Array.isArray(json.data) ? json.data : (json.data?.items || []);
+        });
+        if (extra.length > 0) {
+          setDiagnostics(prev => {
+            const seen = new Set(prev.map(t => t.id));
+            const newTests = mapTests(extra.filter(t => !seen.has(t.id)));
+            return [...prev, ...newTests];
+          });
         }
       }
 
-      // Fetch all tests across all pages (backend paginates at 100)
-      const allTests: any[] = [];
-      let page = 1;
-      let hasMore = true;
-      while (hasMore) {
-        const testRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=${page}`, {
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            'ngrok-skip-browser-warning': 'true'
-          }
-        });
-        if (!testRes.ok) break;
-        const testJson = await testRes.json();
-        const items = Array.isArray(testJson.data) ? testJson.data : (testJson.data?.items || []);
-        allTests.push(...items);
-        const meta = testJson.meta;
-        hasMore = meta ? page < meta.total_pages : false;
-        page++;
-      }
-      // Deduplicate by ID in case pages overlap
-      const uniqueTests = Array.from(new Map(allTests.map(t => [t.id, t])).values());
-      if (uniqueTests.length > 0) {
-        const mappedTests: FetchedTest[] = uniqueTests.map((t: any) => ({
-          id: t.id,
-          name: t.name,
-          category: t.category?.name || 'Uncategorized',
-          lab: t.organization,
-          price: t.price,
-          discountPrice: Math.round(t.price - (t.price * (t.discount_percentage / 100))),
-          discount: t.discount_percentage,
-          turnaround: t.results_in,
-          popular: t.discount_percentage >= 20
-        }));
-        setDiagnostics(mappedTests);
-      }
-      // Also fetch health packages for the sidebar
+      // Fetch health packages (non-critical)
       try {
-        const pkgRes = await fetch(`${BACKEND_URL}/api/v1/health-packages?limit=3`, {
-          headers: { ...(authHeader ? { Authorization: authHeader } : {}), 'ngrok-skip-browser-warning': 'true' }
-        });
+        const pkgRes = await fetch(`${BACKEND_URL}/api/v1/health-packages?limit=3`, { headers });
         if (pkgRes.ok) {
           const pkgJson = await pkgRes.json();
           if (pkgJson.data) setHealthPackages(pkgJson.data.slice(0, 3));
@@ -329,6 +335,9 @@ function DiagnosticsContent() {
       t.lab.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
+
+  const totalPages = Math.ceil(filteredTests.length / TESTS_PER_PAGE);
+  const paginatedTests = filteredTests.slice((currentPage - 1) * TESTS_PER_PAGE, currentPage * TESTS_PER_PAGE);
 
   const cartTotal = cart.reduce((total, item) => {
     const test = diagnostics.find(t => t.id === item.testId);
@@ -597,7 +606,7 @@ function DiagnosticsContent() {
                     type="text" 
                     placeholder="Search by test name (e.g. Blood Sugar, MRI...)" 
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                     className="w-full pl-14 pr-6 py-4 bg-emerald-50/30 border-2 border-transparent focus:border-emerald-100 rounded-2xl outline-none text-emerald-950 font-medium transition-all"
                   />
                 </div>
@@ -605,7 +614,7 @@ function DiagnosticsContent() {
                   {categories.map(cat => (
                     <button
                       key={cat}
-                      onClick={() => setActiveCategory(cat)}
+                      onClick={() => { setActiveCategory(cat); setCurrentPage(1); }}
                       className={`whitespace-nowrap px-5 py-2.5 rounded-xl font-bold transition-all text-sm ${
                         activeCategory === cat 
                           ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' 
@@ -627,7 +636,7 @@ function DiagnosticsContent() {
                 <>
                   {/* 2-Column Test Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredTests.map((test, idx) => {
+                    {paginatedTests.map((test, idx) => {
                       const inCart = cart.some(item => item.testId === test.id);
                       return (
                         <motion.div
@@ -699,6 +708,43 @@ function DiagnosticsContent() {
                       </div>
                       <h3 className="text-xl font-bold text-emerald-950 mb-2">No tests found</h3>
                       <p className="text-emerald-900/60">Try adjusting your search or category filter.</p>
+                    </div>
+                  )}
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between pt-2">
+                      <p className="text-sm text-emerald-900/50 font-medium">
+                        Showing {(currentPage - 1) * TESTS_PER_PAGE + 1}–{Math.min(currentPage * TESTS_PER_PAGE, filteredTests.length)} of {filteredTests.length} tests
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="h-10 w-10 flex items-center justify-center rounded-xl border border-emerald-100 text-emerald-600 hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-bold"
+                        >
+                          ‹
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPage(page)}
+                            className={`h-10 w-10 flex items-center justify-center rounded-xl text-sm font-bold transition-all ${
+                              page === currentPage
+                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                                : 'border border-emerald-100 text-emerald-900/60 hover:border-emerald-300'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="h-10 w-10 flex items-center justify-center rounded-xl border border-emerald-100 text-emerald-600 hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-bold"
+                        >
+                          ›
+                        </button>
+                      </div>
                     </div>
                   )}
                 </>
