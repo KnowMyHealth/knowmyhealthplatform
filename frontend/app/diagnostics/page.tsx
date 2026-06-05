@@ -577,7 +577,7 @@ function DiagnosticsContent() {
 
       <div className="w-full min-h-screen bg-[#fcfdfd] pb-32">
         {/* Header Section */}
-        <div className="bg-emerald-950 pt-28 pb-20 px-6 relative overflow-hidden">
+        <div className="bg-emerald-950 pt-24 sm:pt-28 pb-14 sm:pb-20 px-4 sm:px-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none" />
           <div className="max-w-[1500px] mx-auto relative z-10">
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -592,11 +592,11 @@ function DiagnosticsContent() {
         </div>
 
         {/* Main Layout Container */}
-        <div className="max-w-[1500px] mx-auto px-6 -mt-10 relative z-20">
+        <div className="max-w-[1500px] mx-auto px-3 sm:px-6 -mt-10 relative z-20">
           <div className="flex flex-col lg:flex-row gap-8">
-            
+
             {/* LHS: TESTS (55% width) */}
-            <div className="lg:w-[55%] space-y-8">
+            <div className="lg:w-[55%] space-y-6 sm:space-y-8">
               
               {/* Search & Filter Bar */}
               <div className="bg-white rounded-3xl p-4 shadow-xl shadow-emerald-900/5 border border-emerald-100/50 space-y-4">
@@ -635,7 +635,7 @@ function DiagnosticsContent() {
               ) : (
                 <>
                   {/* 2-Column Test Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                     {paginatedTests.map((test, idx) => {
                       const inCart = cart.some(item => item.testId === test.id);
                       return (
@@ -647,7 +647,7 @@ function DiagnosticsContent() {
                           transition={{ delay: idx * 0.05, duration: 0.35 }}
                           whileHover={{ y: -4 }}
                           whileTap={{ scale: 0.99 }}
-                          className="bg-white border border-emerald-100/80 rounded-[2.5rem] p-7 shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-shadow group flex flex-col relative overflow-hidden"
+                          className="bg-white border border-emerald-100/80 rounded-[2rem] sm:rounded-[2.5rem] p-5 sm:p-7 shadow-sm hover:shadow-xl hover:shadow-emerald-900/5 transition-shadow group flex flex-col relative overflow-hidden"
                         >
                           {test.popular && (
                             <div className="absolute top-0 right-10 bg-amber-400 text-amber-950 text-[10px] font-black uppercase px-3 py-1.5 rounded-b-xl flex items-center gap-1 shadow-sm">
@@ -712,35 +712,46 @@ function DiagnosticsContent() {
                   )}
 
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between pt-2">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
                       <p className="text-sm text-emerald-900/50 font-medium">
                         Showing {(currentPage - 1) * TESTS_PER_PAGE + 1}–{Math.min(currentPage * TESTS_PER_PAGE, filteredTests.length)} of {filteredTests.length} tests
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap justify-center">
                         <button
                           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                           disabled={currentPage === 1}
-                          className="h-10 w-10 flex items-center justify-center rounded-xl border border-emerald-100 text-emerald-600 hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-bold"
+                          className="h-9 w-9 flex items-center justify-center rounded-xl border border-emerald-100 text-emerald-600 hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-bold text-lg"
                         >
                           ‹
                         </button>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            className={`h-10 w-10 flex items-center justify-center rounded-xl text-sm font-bold transition-all ${
-                              page === currentPage
-                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
-                                : 'border border-emerald-100 text-emerald-900/60 hover:border-emerald-300'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                          .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+                          .reduce<(number | '...')[]>((acc, page, i, arr) => {
+                            if (i > 0 && typeof arr[i - 1] === 'number' && (page as number) - (arr[i - 1] as number) > 1) acc.push('...');
+                            acc.push(page);
+                            return acc;
+                          }, [])
+                          .map((page, i) =>
+                            page === '...' ? (
+                              <span key={`ellipsis-${i}`} className="h-9 w-6 flex items-center justify-center text-emerald-900/40 text-sm font-bold">…</span>
+                            ) : (
+                              <button
+                                key={page}
+                                onClick={() => setCurrentPage(page as number)}
+                                className={`h-9 w-9 flex items-center justify-center rounded-xl text-sm font-bold transition-all ${
+                                  page === currentPage
+                                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                                    : 'border border-emerald-100 text-emerald-900/60 hover:border-emerald-300'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            )
+                          )}
                         <button
                           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                           disabled={currentPage === totalPages}
-                          className="h-10 w-10 flex items-center justify-center rounded-xl border border-emerald-100 text-emerald-600 hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-bold"
+                          className="h-9 w-9 flex items-center justify-center rounded-xl border border-emerald-100 text-emerald-600 hover:bg-emerald-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all font-bold text-lg"
                         >
                           ›
                         </button>
