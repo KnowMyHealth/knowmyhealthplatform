@@ -269,28 +269,38 @@ function DiagnosticsContent() {
         }
       }
 
-      const testRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100`, {
-        headers: {
-          ...(authHeader ? { Authorization: authHeader } : {}),
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
-      if (testRes.ok) {
+      // Fetch all tests across all pages (backend paginates at 100)
+      const allTests: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const testRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=${page}`, {
+          headers: {
+            ...(authHeader ? { Authorization: authHeader } : {}),
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+        if (!testRes.ok) break;
         const testJson = await testRes.json();
-        if (testJson.data) {
-          const mappedTests: FetchedTest[] = testJson.data.map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            category: t.category?.name || 'Uncategorized',
-            lab: t.organization,
-            price: t.price,
-            discountPrice: Math.round(t.price - (t.price * (t.discount_percentage / 100))),
-            discount: t.discount_percentage,
-            turnaround: t.results_in,
-            popular: t.discount_percentage >= 20 
-          }));
-          setDiagnostics(mappedTests);
-        }
+        const items = Array.isArray(testJson.data) ? testJson.data : (testJson.data?.items || []);
+        allTests.push(...items);
+        const meta = testJson.meta;
+        hasMore = meta ? page < meta.total_pages : false;
+        page++;
+      }
+      if (allTests.length > 0) {
+        const mappedTests: FetchedTest[] = allTests.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          category: t.category?.name || 'Uncategorized',
+          lab: t.organization,
+          price: t.price,
+          discountPrice: Math.round(t.price - (t.price * (t.discount_percentage / 100))),
+          discount: t.discount_percentage,
+          turnaround: t.results_in,
+          popular: t.discount_percentage >= 20
+        }));
+        setDiagnostics(mappedTests);
       }
       // Also fetch health packages for the sidebar
       try {
