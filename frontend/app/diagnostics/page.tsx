@@ -61,7 +61,7 @@ interface FetchedTest {
 function DiagnosticsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isLoggedIn, isLoading: authLoading, openAuthModal } = useAuth();
+  const { isLoggedIn, openAuthModal } = useAuth();
 
   const [categories, setCategories] = useState<string[]>(['All Tests']);
   const [diagnostics, setDiagnostics] = useState<FetchedTest[]>([]);
@@ -173,7 +173,6 @@ function DiagnosticsContent() {
 
   // Calendar helpers
   const todayISO = (() => { const t = new Date(); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
-  const tomorrowISO = (() => { const t = new Date(); t.setDate(t.getDate() + 1); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
   const calendarDays = (() => {
     const { year, month } = calendarMonth;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -269,28 +268,40 @@ function DiagnosticsContent() {
         }
       }
 
-      const testRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100`, {
-        headers: {
-          ...(authHeader ? { Authorization: authHeader } : {}),
-          'ngrok-skip-browser-warning': 'true'
-        }
-      });
-      if (testRes.ok) {
+      // Fetch all tests across all pages (backend paginates at 100)
+      const allTests: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      while (hasMore) {
+        const testRes = await fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=${page}`, {
+          headers: {
+            ...(authHeader ? { Authorization: authHeader } : {}),
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+        if (!testRes.ok) break;
         const testJson = await testRes.json();
-        if (testJson.data) {
-          const mappedTests: FetchedTest[] = testJson.data.map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            category: t.category?.name || 'Uncategorized',
-            lab: t.organization,
-            price: t.price,
-            discountPrice: Math.round(t.price - (t.price * (t.discount_percentage / 100))),
-            discount: t.discount_percentage,
-            turnaround: t.results_in,
-            popular: t.discount_percentage >= 20 
-          }));
-          setDiagnostics(mappedTests);
-        }
+        const items = Array.isArray(testJson.data) ? testJson.data : (testJson.data?.items || []);
+        allTests.push(...items);
+        const meta = testJson.meta;
+        hasMore = meta ? page < meta.total_pages : false;
+        page++;
+      }
+      // Deduplicate by ID in case pages overlap
+      const uniqueTests = Array.from(new Map(allTests.map(t => [t.id, t])).values());
+      if (uniqueTests.length > 0) {
+        const mappedTests: FetchedTest[] = uniqueTests.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          category: t.category?.name || 'Uncategorized',
+          lab: t.organization,
+          price: t.price,
+          discountPrice: Math.round(t.price - (t.price * (t.discount_percentage / 100))),
+          discount: t.discount_percentage,
+          turnaround: t.results_in,
+          popular: t.discount_percentage >= 20
+        }));
+        setDiagnostics(mappedTests);
       }
       // Also fetch health packages for the sidebar
       try {
@@ -310,8 +321,12 @@ function DiagnosticsContent() {
   };
 
   const filteredTests = diagnostics.filter(t => {
-    const matchesCategory = activeCategory === 'All Tests' || t.category === activeCategory;
-    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = activeCategory === 'All Tests' || t.category.toLowerCase() === activeCategory.toLowerCase();
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q ||
+      t.name.toLowerCase().includes(q) ||
+      t.category.toLowerCase().includes(q) ||
+      t.lab.toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 
@@ -533,52 +548,6 @@ function DiagnosticsContent() {
     setIsApplyingCoupon(false);
   };
 
-  const handleGetRecommendation = async () => {
-    if (!symptoms.trim() || diagnostics.length === 0) return;
-    setIsAnalyzing(true);
-    setAiRecommendations(null);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-      const availableTestsList = diagnostics.map(t => `{ id: "${t.id}", name: "${t.name}", category: "${t.category}" }`).join('\n');
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: `A patient is experiencing the following symptoms: "${symptoms}". 
-        Based on these symptoms, recommend the most relevant diagnostic tests ONLY from the following available list:
-        ${availableTestsList}
-        
-        Do not provide medical advice or diagnoses. Only return the recommended tests from the provided list.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              recommendations: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    testId: { type: Type.STRING, description: "The exact string ID of the recommended test from the provided list" },
-                    reason: { type: Type.STRING, description: "A short, 1-sentence reason why this test is recommended based on the symptoms" }
-                  },
-                  required: ["testId", "reason"]
-                }
-              }
-            },
-            required: ["recommendations"]
-          }
-        }
-      });
-      
-      const jsonResponse = JSON.parse(response.text || '{}');
-      setAiRecommendations(jsonResponse.recommendations || []);
-    } catch (error) {
-      console.error(error);
-      setAiRecommendations([]);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   return (
     <>
@@ -1262,22 +1231,49 @@ function DiagnosticsContent() {
                 
                 <div className="p-6 sm:p-8 overflow-y-auto hide-scrollbar flex-1 bg-slate-50/50">
                   {!aiRecommendations && !isAnalyzing ? (
-                    <div className="space-y-6">
-                      <div className="bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
-                        <h3 className="font-bold text-emerald-950 mb-2">How it works</h3>
-                        <p className="text-sm text-emerald-900/70 leading-relaxed">
-                          Describe your symptoms in detail. Our AI will analyze them and suggest the most relevant diagnostic tests <strong>available in our catalog</strong>.
-                        </p>
+                    <div className="space-y-5">
+                      {/* Quick-start chips */}
+                      <div>
+                        <p className="text-xs font-bold text-emerald-900/50 uppercase tracking-wider mb-3">Quick start</p>
+                        <div className="flex flex-wrap gap-2">
+                          {['Fever & chills', 'Chest pain', 'Fatigue & weakness', 'Stomach ache', 'Headache', 'Joint pain', 'Skin rash', 'Shortness of breath'].map(chip => (
+                            <button
+                              key={chip}
+                              type="button"
+                              onClick={() => setSymptoms(chip)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                                symptoms === chip
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-white text-emerald-800 border-emerald-200 hover:border-emerald-500 hover:text-emerald-600'
+                              }`}
+                            >
+                              {chip}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className="space-y-3">
-                        <label className="text-sm font-bold text-emerald-950 ml-1">Your Symptoms</label>
-                        <textarea 
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-emerald-950 ml-1">Describe your symptoms</label>
+                        <textarea
                           value={symptoms}
                           onChange={(e) => setSymptoms(e.target.value)}
-                          placeholder="e.g., I've been having a persistent headache for 3 days, feeling slightly dizzy, and have a mild fever..."
-                          className="w-full h-36 p-5 bg-white border border-emerald-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none shadow-inner font-medium text-emerald-950"
+                          placeholder="e.g., I've had a persistent headache for 3 days with mild fever and dizziness..."
+                          className="w-full h-32 p-4 bg-white border border-emerald-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none font-medium text-emerald-950 text-sm"
                         />
                       </div>
+
+                      {/* What happens next */}
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 flex items-start gap-3">
+                        <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                          <Brain size={16} className="text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-emerald-950 mb-0.5">What happens next?</p>
+                          <p className="text-xs text-emerald-900/60 leading-relaxed">Our Clinical AI will ask follow-up questions, assess your symptoms, and recommend the right diagnostic tests and specialist.</p>
+                        </div>
+                      </div>
+
                       <button
                         onClick={() => {
                           if (!symptoms.trim()) return;
@@ -1285,9 +1281,9 @@ function DiagnosticsContent() {
                           router.push(`/complaints?q=${encodeURIComponent(symptoms.trim())}`);
                         }}
                         disabled={!symptoms.trim()}
-                        className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/20"
+                        className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2"
                       >
-                        Analyse Symptoms & Find Tests
+                        <Brain size={18} /> Start AI Analysis
                       </button>
                     </div>
                   ) : isAnalyzing ? (

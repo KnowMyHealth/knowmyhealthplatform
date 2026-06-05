@@ -26,7 +26,7 @@ export default function Navbar() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
-  const { isLoggedIn, userRole, logout, isAuthModalOpen, openAuthModal, closeAuthModal } = useAuth();
+  const { isLoggedIn, userRole, logout, isAuthModalOpen, authModalMode, openAuthModal, closeAuthModal } = useAuth();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -157,12 +157,20 @@ export default function Navbar() {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={openAuthModal}
-                    className="px-6 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md hover:shadow-lg flex items-center space-x-2"
-                  >
-                    <span>Sign Up</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openAuthModal('signin')}
+                      className="px-5 py-2.5 text-sm font-medium text-emerald-800 border border-emerald-200 rounded-full hover:bg-emerald-50 transition-colors"
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      onClick={() => openAuthModal('signup')}
+                      className="px-5 py-2.5 text-sm font-medium text-white bg-emerald-700 rounded-full hover:bg-emerald-800 transition-colors shadow-md"
+                    >
+                      Sign Up
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -251,12 +259,20 @@ export default function Navbar() {
                         </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => { openAuthModal(); setIsOpen(false); }}
-                        className="w-full px-6 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center"
-                      >
-                        Sign Up
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { openAuthModal('signin'); setIsOpen(false); }}
+                          className="flex-1 px-4 py-3 text-sm font-medium text-emerald-800 border border-emerald-200 rounded-xl hover:bg-emerald-50 transition-colors text-center"
+                        >
+                          Sign In
+                        </button>
+                        <button
+                          onClick={() => { openAuthModal('signup'); setIsOpen(false); }}
+                          className="flex-1 px-4 py-3 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors text-center"
+                        >
+                          Sign Up
+                        </button>
+                      </div>
                     )}
                   </div>
                 </nav>
@@ -266,7 +282,7 @@ export default function Navbar() {
         </div>
       </header>
 
-      <AuthModal isOpen={isAuthModalOpen} onClose={closeAuthModal} />
+      <AuthModal isOpen={isAuthModalOpen} onClose={closeAuthModal} defaultMode={authModalMode} />
     </>
   );
 }

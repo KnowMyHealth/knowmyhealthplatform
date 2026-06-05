@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultMode?: 'signin' | 'signup';
 }
 
 type ViewState = 'auth' | 'forgot-password' | 'doctor-apply' | 'doctor-success';
@@ -28,7 +29,7 @@ const slideVariants = {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^\+?[\d\s-]{10,15}$/;
 
-export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
+export default function AuthModal({ isOpen, onClose, defaultMode }: AuthModalProps) {
   const { login } = useAuth();
 
   // Navigation States
@@ -37,7 +38,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [direction, setDirection] = useState(1); // 1 for forward, -1 for backward
 
   // Standard Auth States
-  const [isSignIn, setIsSignIn] = useState(false);
+  const [isSignIn, setIsSignIn] = useState(defaultMode === 'signin');
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
@@ -64,7 +65,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   useEffect(() => {
     if (isOpen) {
       setView('auth');
-      setIsSignIn(false);
+      setIsSignIn(defaultMode === 'signin');
       setDocStep(1);
       setDirection(1);
       setDocFile(null);

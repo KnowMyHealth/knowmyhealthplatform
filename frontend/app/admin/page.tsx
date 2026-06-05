@@ -103,11 +103,14 @@ interface PatientObject {
   created_at: string;
 }
 
+interface TimeShift {
+  start_time: string;
+  end_time: string;
+}
 interface DayAvailability {
   day_of_week: number;
   active: boolean;
-  start_time: string;
-  end_time: string;
+  shifts: TimeShift[];
 }
 
 interface HealthPackage {
@@ -272,7 +275,7 @@ export default function AdminPortal() {
   const [isLabAvailabilityOpen, setIsLabAvailabilityOpen] = useState(false);
   const [selectedLabTestForAvailability, setSelectedLabTestForAvailability] = useState<LabTest | null>(null);
   const [labAvailability, setLabAvailability] = useState<DayAvailability[]>(
-    Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, start_time: '09:00', end_time: '17:00' }))
+    Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, shifts: [{ start_time: '09:00', end_time: '17:00' }] }))
   );
   const [isSavingLabAvailability, setIsSavingLabAvailability] = useState(false);
   const [labAvailabilityMsg, setLabAvailabilityMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
@@ -790,7 +793,7 @@ export default function AdminPortal() {
     setLabAvailabilityMsg(null);
     
     setLabAvailability(
-      Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, start_time: '09:00', end_time: '17:00' }))
+      Array.from({length: 7}).map((_, i) => ({ day_of_week: i, active: false, shifts: [{ start_time: '09:00', end_time: '17:00' }] }))
     );
     
     try {
@@ -803,13 +806,15 @@ export default function AdminPortal() {
         const json = await res.json();
         if (json.data && json.data.length > 0) {
           setLabAvailability(prev => prev.map(day => {
-            const found = json.data.find((d: any) => d.day_of_week === day.day_of_week);
-            if (found) {
+            const dayShifts = json.data.filter((d: any) => d.day_of_week === day.day_of_week);
+            if (dayShifts.length > 0) {
               return {
                 ...day,
                 active: true,
-                start_time: found.start_time.slice(0, 5),
-                end_time: found.end_time.slice(0, 5)
+                shifts: dayShifts.map((d: any) => ({
+                  start_time: d.start_time.slice(0, 5),
+                  end_time: d.end_time.slice(0, 5)
+                }))
               };
             }
             return day;
@@ -832,11 +837,11 @@ export default function AdminPortal() {
       const payload = {
         schedule: labAvailability
           .filter(d => d.active)
-          .map(d => ({
+          .flatMap(d => d.shifts.map(s => ({
             day_of_week: d.day_of_week,
-            start_time: `${d.start_time}:00`,
-            end_time: `${d.end_time}:00`
-          }))
+            start_time: `${s.start_time}:00`,
+            end_time: `${s.end_time}:00`
+          })))
       };
 
       const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/${selectedLabTestForAvailability.id}/availability`, {
@@ -2469,49 +2474,78 @@ export default function AdminPortal() {
               )}
 
               <div className="space-y-4">
-                {labAvailability.map((day, index) => (
-                  <div key={day.day_of_week} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
-                    <label className="flex items-center gap-3 w-32 cursor-pointer">
+                {labAvailability.map((day, dayIdx) => (
+                  <div key={day.day_of_week} className="py-3 border-b border-slate-100 last:border-0">
+                    {/* Day toggle */}
+                    <label className="flex items-center gap-3 cursor-pointer mb-3">
                       <input
                         type="checkbox"
                         checked={day.active}
                         onChange={(e) => {
-                          const newAvail = [...labAvailability];
-                          newAvail[index].active = e.target.checked;
-                          setLabAvailability(newAvail);
+                          const n = [...labAvailability];
+                          n[dayIdx] = { ...n[dayIdx], active: e.target.checked };
+                          setLabAvailability(n);
                         }}
                         className="w-5 h-5 accent-emerald-600 rounded"
                       />
-                      <span className={`font-semibold text-sm ${day.active ? 'text-slate-900' : 'text-slate-400'}`}>
-                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day.day_of_week]}
+                      <span className={`font-bold text-sm ${day.active ? 'text-slate-900' : 'text-slate-400'}`}>
+                        {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][day.day_of_week]}
                       </span>
                     </label>
 
-                    <div className="flex items-center gap-2 flex-1">
-                      <input
-                        type="time"
-                        value={day.start_time}
-                        disabled={!day.active}
-                        onChange={(e) => {
-                          const newAvail = [...labAvailability];
-                          newAvail[index].start_time = e.target.value;
-                          setLabAvailability(newAvail);
-                        }}
-                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 outline-none focus:border-emerald-500 w-full"
-                      />
-                      <span className="text-slate-400 text-sm font-medium">to</span>
-                      <input
-                        type="time"
-                        value={day.end_time}
-                        disabled={!day.active}
-                        onChange={(e) => {
-                          const newAvail = [...labAvailability];
-                          newAvail[index].end_time = e.target.value;
-                          setLabAvailability(newAvail);
-                        }}
-                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm disabled:opacity-50 outline-none focus:border-emerald-500 w-full"
-                      />
-                    </div>
+                    {day.active && (
+                      <div className="pl-8 space-y-2">
+                        {day.shifts.map((shift, shiftIdx) => (
+                          <div key={shiftIdx} className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={shift.start_time}
+                              onChange={(e) => {
+                                const n = [...labAvailability];
+                                n[dayIdx].shifts[shiftIdx] = { ...shift, start_time: e.target.value };
+                                setLabAvailability(n);
+                              }}
+                              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-emerald-500 flex-1"
+                            />
+                            <span className="text-slate-400 text-xs font-medium">to</span>
+                            <input
+                              type="time"
+                              value={shift.end_time}
+                              onChange={(e) => {
+                                const n = [...labAvailability];
+                                n[dayIdx].shifts[shiftIdx] = { ...shift, end_time: e.target.value };
+                                setLabAvailability(n);
+                              }}
+                              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-emerald-500 flex-1"
+                            />
+                            {day.shifts.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const n = [...labAvailability];
+                                  n[dayIdx].shifts = n[dayIdx].shifts.filter((_, i) => i !== shiftIdx);
+                                  setLabAvailability(n);
+                                }}
+                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const n = [...labAvailability];
+                            n[dayIdx].shifts = [...n[dayIdx].shifts, { start_time: '14:00', end_time: '18:00' }];
+                            setLabAvailability(n);
+                          }}
+                          className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 mt-1"
+                        >
+                          <Plus size={13} /> Add shift
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
