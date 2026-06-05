@@ -232,6 +232,13 @@ export default function AdminPortal() {
   
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
+
+  // Bulk upload state
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ total_rows: number; success_count: number; failure_count: number; successful: any[]; failed: any[] } | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
   
@@ -866,6 +873,47 @@ export default function AdminPortal() {
       setIsSavingLabAvailability(false);
       setTimeout(() => setLabAvailabilityMsg(null), 3000);
     }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!bulkFile) return;
+    setIsBulkUploading(true);
+    setBulkError(null);
+    setBulkResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const formData = new FormData();
+      formData.append('file', bulkFile);
+      const res = await fetch(`${BACKEND_URL}/api/v1/lab-tests/bulk`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+        body: formData,
+      });
+      const json = await res.json();
+      if (res.status === 422 && json.errors) {
+        setBulkResult({ total_rows: json.errors.length, success_count: 0, failure_count: json.errors.length, successful: [], failed: json.errors });
+      } else if (!res.ok) {
+        setBulkError(json.message || json.detail || 'Upload failed.');
+      } else {
+        setBulkResult(json.data);
+        fetchLabTests();
+      }
+    } catch {
+      setBulkError('Network error. Please try again.');
+    } finally {
+      setIsBulkUploading(false);
+    }
+  };
+
+  const downloadCsvTemplate = () => {
+    const headers = 'test_name,category_name,organization,price,discount_percentage,turnaround_hours,clinic_address,open_time,close_time,break_start_time,break_end_time,sunday_open_time,sunday_close_time';
+    const example = 'MRI Brain,Radiology,Apex Labs,7250,10,24,123 Main St,07:00,22:00,11:00,16:00,09:00,14:00';
+    const blob = new Blob([headers + '\n' + example], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'lab_tests_template.csv'; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const executeUpdateTest = async (e: React.FormEvent) => {
@@ -2107,12 +2155,20 @@ export default function AdminPortal() {
                   ))}
                 </div>
               </div>
-              <button 
-                onClick={() => setIsAddTestOpen(true)}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm text-sm shrink-0 w-full sm:w-auto justify-center"
-              >
-                <Plus size={18} /> Add Test
-              </button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => { setIsBulkUploadOpen(true); setBulkFile(null); setBulkResult(null); setBulkError(null); }}
+                  className="flex-1 sm:flex-none bg-slate-100 text-slate-700 px-4 py-2 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center gap-2 text-sm justify-center"
+                >
+                  <UploadCloud size={16} /> Bulk Upload
+                </button>
+                <button
+                  onClick={() => setIsAddTestOpen(true)}
+                  className="flex-1 sm:flex-none bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm text-sm justify-center"
+                >
+                  <Plus size={18} /> Add Test
+                </button>
+              </div>
             </div>
 
             {isLoadingLabTests ? (
@@ -2556,6 +2612,117 @@ export default function AdminPortal() {
                   {isSavingLabAvailability ? <Loader2 size={16} className="animate-spin" /> : 'Save Schedule'}
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Upload Modal */}
+      <AnimatePresence>
+        {isBulkUploadOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isBulkUploading && setIsBulkUploadOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-xl bg-white rounded-[2rem] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Bulk Upload Lab Tests</h2>
+                  <p className="text-sm text-slate-400 mt-1">Upload a CSV file to import multiple tests at once.</p>
+                </div>
+                {!isBulkUploading && <button onClick={() => setIsBulkUploadOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full"><X size={20} /></button>}
+              </div>
+
+              {!bulkResult ? (
+                <div className="space-y-5">
+                  {/* Template download */}
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-emerald-950">Download CSV Template</p>
+                      <p className="text-xs text-emerald-700/70 mt-0.5">Get the required column headers and an example row.</p>
+                    </div>
+                    <button onClick={downloadCsvTemplate} className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-white border border-emerald-200 text-emerald-700 font-bold text-xs rounded-xl hover:bg-emerald-50 transition-colors">
+                      <UploadCloud size={14} /> Template
+                    </button>
+                  </div>
+
+                  {/* File drop */}
+                  <label className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${bulkFile ? 'border-emerald-400 bg-emerald-50/40' : 'border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-emerald-50/30'}`}>
+                    <div className="flex flex-col items-center justify-center text-center px-4">
+                      {bulkFile ? (
+                        <>
+                          <FileText size={28} className="text-emerald-600 mb-2" />
+                          <p className="text-sm font-bold text-emerald-950">{bulkFile.name}</p>
+                          <p className="text-xs text-emerald-600 mt-1">{(bulkFile.size / 1024).toFixed(1)} KB · Click to replace</p>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud size={28} className="text-slate-400 mb-2" />
+                          <p className="text-sm font-medium text-slate-600"><span className="text-emerald-600 font-bold">Click to upload</span> or drag & drop</p>
+                          <p className="text-xs text-slate-400 mt-1">CSV only · Max 50MB</p>
+                        </>
+                      )}
+                    </div>
+                    <input type="file" accept=".csv,text/csv" className="hidden" onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) { setBulkFile(f); setBulkError(null); }
+                    }} />
+                  </label>
+
+                  {bulkError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-600 text-sm font-medium">
+                      <AlertCircle size={16} /> {bulkError}
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setIsBulkUploadOpen(false)} disabled={isBulkUploading} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl">Cancel</button>
+                    <button type="button" onClick={handleBulkUpload} disabled={!bulkFile || isBulkUploading} className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 flex justify-center items-center gap-2 disabled:opacity-50">
+                      {isBulkUploading ? <><Loader2 size={16} className="animate-spin" /> Uploading...</> : <><UploadCloud size={16} /> Upload</>}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {/* Summary */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Total Rows', value: bulkResult.total_rows, color: 'bg-slate-50 text-slate-800' },
+                      { label: 'Imported', value: bulkResult.success_count, color: 'bg-emerald-50 text-emerald-700' },
+                      { label: 'Failed', value: bulkResult.failure_count, color: bulkResult.failure_count > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-400' },
+                    ].map(s => (
+                      <div key={s.label} className={`p-4 rounded-2xl text-center ${s.color}`}>
+                        <p className="text-2xl font-black">{s.value}</p>
+                        <p className="text-[11px] font-bold uppercase tracking-wide mt-0.5 opacity-70">{s.label}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Failed rows */}
+                  {bulkResult.failed.length > 0 && (
+                    <div>
+                      <p className="text-sm font-bold text-red-600 mb-2">{bulkResult.failed.length} Failed Row{bulkResult.failed.length !== 1 ? 's' : ''}</p>
+                      <div className="max-h-48 overflow-y-auto space-y-2">
+                        {bulkResult.failed.map((row: any, i: number) => (
+                          <div key={i} className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs">
+                            <span className="font-bold text-red-700">Row {row.row} · {row.test_name || 'Unknown'}</span>
+                            <p className="text-red-500 mt-0.5">{row.error}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {bulkResult.success_count > 0 && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2 text-emerald-700 text-sm font-medium">
+                      <CheckCircle2 size={16} /> Successfully imported {bulkResult.success_count} test{bulkResult.success_count !== 1 ? 's' : ''}.
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button onClick={() => { setBulkResult(null); setBulkFile(null); }} className="flex-1 py-3 font-bold text-slate-500 hover:bg-slate-50 rounded-xl">Upload Another</button>
+                    <button onClick={() => setIsBulkUploadOpen(false)} className="flex-1 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700">Done</button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
