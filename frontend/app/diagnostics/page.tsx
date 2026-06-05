@@ -61,7 +61,7 @@ interface FetchedTest {
 function DiagnosticsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isLoggedIn, isLoading: authLoading, openAuthModal } = useAuth();
+  const { isLoggedIn, openAuthModal } = useAuth();
 
   const [categories, setCategories] = useState<string[]>(['All Tests']);
   const [diagnostics, setDiagnostics] = useState<FetchedTest[]>([]);
@@ -173,7 +173,6 @@ function DiagnosticsContent() {
 
   // Calendar helpers
   const todayISO = (() => { const t = new Date(); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
-  const tomorrowISO = (() => { const t = new Date(); t.setDate(t.getDate() + 1); const tz = t.getTimezoneOffset() * 60000; return new Date(t.getTime() - tz).toISOString().split('T')[0]; })();
   const calendarDays = (() => {
     const { year, month } = calendarMonth;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -288,8 +287,10 @@ function DiagnosticsContent() {
         hasMore = meta ? page < meta.total_pages : false;
         page++;
       }
-      if (allTests.length > 0) {
-        const mappedTests: FetchedTest[] = allTests.map((t: any) => ({
+      // Deduplicate by ID in case pages overlap
+      const uniqueTests = Array.from(new Map(allTests.map(t => [t.id, t])).values());
+      if (uniqueTests.length > 0) {
+        const mappedTests: FetchedTest[] = uniqueTests.map((t: any) => ({
           id: t.id,
           name: t.name,
           category: t.category?.name || 'Uncategorized',
@@ -543,52 +544,6 @@ function DiagnosticsContent() {
     setIsApplyingCoupon(false);
   };
 
-  const handleGetRecommendation = async () => {
-    if (!symptoms.trim() || diagnostics.length === 0) return;
-    setIsAnalyzing(true);
-    setAiRecommendations(null);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-      const availableTestsList = diagnostics.map(t => `{ id: "${t.id}", name: "${t.name}", category: "${t.category}" }`).join('\n');
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: `A patient is experiencing the following symptoms: "${symptoms}". 
-        Based on these symptoms, recommend the most relevant diagnostic tests ONLY from the following available list:
-        ${availableTestsList}
-        
-        Do not provide medical advice or diagnoses. Only return the recommended tests from the provided list.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              recommendations: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    testId: { type: Type.STRING, description: "The exact string ID of the recommended test from the provided list" },
-                    reason: { type: Type.STRING, description: "A short, 1-sentence reason why this test is recommended based on the symptoms" }
-                  },
-                  required: ["testId", "reason"]
-                }
-              }
-            },
-            required: ["recommendations"]
-          }
-        }
-      });
-      
-      const jsonResponse = JSON.parse(response.text || '{}');
-      setAiRecommendations(jsonResponse.recommendations || []);
-    } catch (error) {
-      console.error(error);
-      setAiRecommendations([]);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   return (
     <>
