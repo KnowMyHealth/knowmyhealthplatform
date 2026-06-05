@@ -1,14 +1,15 @@
 # app/modules/labtest/router.py
 from uuid import UUID
 from datetime import date
-from fastapi import APIRouter, Depends, status, Request, Body, Query
+from fastapi import APIRouter, Depends, status, Request, Body, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from app.db.deps import get_db
 from app.db.all_models import User
 from app.utils.api_response import ApiResponse
-from app.core.security import RequireRole, get_current_user, get_optional_user
+from app.utils.api_error import BadRequestError
+from app.core.security import RequireRole, get_current_user
 from app.core.rate_limiter import limiter
 from app.utils.pagination import PaginationParams
 from app.modules.user.schemas import Role
@@ -30,6 +31,9 @@ from app.modules.labtest.dependencies import get_labtest_service
 
 router = APIRouter(prefix="/lab-tests", tags=["Lab Tests"])
 
+# 50 MB limit for CSV uploads
+MAX_CSV_SIZE = 52428800 
+
 # -------------------------------------------------------------------------
 # CATEGORIES
 # -------------------------------------------------------------------------
@@ -49,7 +53,7 @@ async def create_category(
 @limiter.limit("60/minute")
 async def list_categories(
     request: Request,
-    current_user = Depends(get_optional_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -68,6 +72,7 @@ async def delete_category(
     await service.delete_category(db, category_id)
     return ApiResponse.no_content()
 
+
 # -------------------------------------------------------------------------
 # LAB TESTS
 # -------------------------------------------------------------------------
@@ -84,6 +89,41 @@ async def create_lab_test(
     test_with_relations = await service.get_test_by_id(db, test.id)
     return ApiResponse.created(data=LabTestSchema.model_validate(test_with_relations))
 
+# --- NEW: BULK UPLOAD ENDPOINT ---
+@router.post("/bulk", summary="Bulk Upload Lab Tests via CSV (Admin)")
+@limiter.limit("5/minute")
+async def bulk_upload_lab_tests(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: LabTestService = Depends(get_labtest_service)
+):
+    if not file.filename.endswith(".csv"):
+        raise BadRequestError("Only CSV files are allowed.")
+        
+    if file.size and file.size > MAX_CSV_SIZE:
+        raise BadRequestError("CSV file size exceeds the 50MB limit.")
+
+    csv_bytes = await file.read()
+    
+    if len(csv_bytes) > MAX_CSV_SIZE:
+        raise BadRequestError("CSV file size exceeds the 50MB limit.")
+
+    summary = await service.bulk_upload_tests(db, csv_bytes)
+    
+    if summary["success_count"] == 0 and summary["failure_count"] > 0:
+        return ApiResponse.error(
+            message="Bulk upload failed. No tests were successfully imported.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            errors=summary["failed"]
+        )
+    
+    return ApiResponse.success(
+        data=summary,
+        message=f"Bulk upload complete. Successfully imported {summary['success_count']} tests."
+    )
+
 @router.get("", summary="List Lab Tests")
 @limiter.limit("60/minute")
 async def list_lab_tests(
@@ -91,7 +131,7 @@ async def list_lab_tests(
     params: PaginationParams = Depends(),
     category_id: UUID | None = None,
     is_active: bool | None = None,
-    current_user = Depends(get_optional_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -117,7 +157,7 @@ async def set_test_availability(
 async def get_test_availability(
     request: Request,
     test_id: UUID,
-    current_user = Depends(get_optional_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -131,7 +171,7 @@ async def get_test_slots(
     test_id: UUID,
     date: date, 
     timezone_offset: int = Query(0, description="Timezone offset from UTC in minutes (e.g., -330 for India)"),
-    current_user = Depends(get_optional_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
@@ -143,7 +183,7 @@ async def get_test_slots(
 async def get_lab_test(
     request: Request,
     test_id: UUID,
-    current_user = Depends(get_optional_user),
+    current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: LabTestService = Depends(get_labtest_service)
 ):
