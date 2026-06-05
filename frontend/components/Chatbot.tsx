@@ -2,11 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, X, Send, Bot, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, Loader2, LogIn } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function Chatbot() {
+  const { isLoggedIn, openAuthModal } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user'|'model', text: string}[]>([
     { role: 'model', text: 'Hello! I am your Know My Health AI assistant. How can I help you today?' }
@@ -25,6 +27,7 @@ export default function Chatbot() {
 
   const handleSend = async () => {
     if (!input.trim()) return;
+    if (!isLoggedIn) { openAuthModal(); return; }
     
     const userMessage = input.trim();
     setInput('');
@@ -99,56 +102,76 @@ export default function Chatbot() {
               </button>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.map((msg, idx) => (
-                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] rounded-2xl p-3 ${
-                    msg.role === 'user' 
-                      ? 'bg-emerald-600 text-white rounded-tr-sm' 
-                      : 'bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-tl-sm'
-                  }`}>
-                    {msg.role === 'model' ? (
-                      <div className="prose prose-sm prose-emerald max-w-none">
-                        <Markdown>{msg.text}</Markdown>
-                      </div>
-                    ) : (
-                      <p className="text-sm">{msg.text}</p>
-                    )}
-                  </div>
+            {/* Messages / Auth gate */}
+            {!isLoggedIn ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-5">
+                <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-600">
+                  <Bot size={32} />
                 </div>
-              ))}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-2xl rounded-tl-sm p-3 flex items-center space-x-2">
-                    <Loader2 size={16} className="animate-spin text-emerald-600" />
-                    <span className="text-sm text-emerald-600/70">Thinking...</span>
-                  </div>
+                <div>
+                  <p className="font-semibold text-emerald-950 text-base mb-1">Sign in to chat</p>
+                  <p className="text-sm text-emerald-900/50">You need to be signed in to use the AI Health Assistant.</p>
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="p-4 bg-white border-t border-emerald-100">
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Ask about your health..."
-                  className="w-full pl-4 pr-12 py-3 bg-emerald-50/50 border border-emerald-200 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
-                />
-                <button 
-                  onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
-                  className="absolute right-2 p-2 text-emerald-600 hover:bg-emerald-100 rounded-full transition-colors disabled:opacity-50"
+                <button
+                  onClick={() => { setIsOpen(false); openAuthModal(); }}
+                  className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-full font-semibold text-sm hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
                 >
-                  <Send size={18} />
+                  <LogIn size={16} />
+                  Sign In
                 </button>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[80%] rounded-2xl p-3 ${
+                        msg.role === 'user'
+                          ? 'bg-emerald-600 text-white rounded-tr-sm'
+                          : 'bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-tl-sm'
+                      }`}>
+                        {msg.role === 'model' ? (
+                          <div className="prose prose-sm prose-emerald max-w-none">
+                            <Markdown>{msg.text}</Markdown>
+                          </div>
+                        ) : (
+                          <p className="text-sm">{msg.text}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-emerald-50 text-emerald-950 border border-emerald-100 rounded-2xl rounded-tl-sm p-3 flex items-center space-x-2">
+                        <Loader2 size={16} className="animate-spin text-emerald-600" />
+                        <span className="text-sm text-emerald-600/70">Thinking...</span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                <div className="p-4 bg-white border-t border-emerald-100">
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                      placeholder="Ask about your health..."
+                      className="w-full pl-4 pr-12 py-3 bg-emerald-50/50 border border-emerald-200 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50 text-sm"
+                    />
+                    <button
+                      onClick={handleSend}
+                      disabled={!input.trim() || isLoading}
+                      className="absolute right-2 p-2 text-emerald-600 hover:bg-emerald-100 rounded-full transition-colors disabled:opacity-50"
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
