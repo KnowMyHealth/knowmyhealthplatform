@@ -285,7 +285,16 @@ function DiagnosticsContent() {
       if (!firstPageRes.ok) return;
       const firstJson = await firstPageRes.json();
       const firstItems = Array.isArray(firstJson.data) ? firstJson.data : (firstJson.data?.items || []);
-      setDiagnostics(mapTests(firstItems));
+      const dedupeByNameLab = (tests: FetchedTest[]) => {
+        const seen = new Set<string>();
+        return tests.filter(t => {
+          const key = `${t.name}||${t.lab}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      };
+      setDiagnostics(dedupeByNameLab(mapTests(firstItems)));
       setIsLoading(false);
 
       const totalPages = firstJson.meta?.total_pages ?? 1;
@@ -304,8 +313,14 @@ function DiagnosticsContent() {
         });
         if (extra.length > 0) {
           setDiagnostics(prev => {
-            const seen = new Set(prev.map(t => t.id));
-            const newTests = mapTests(extra.filter(t => !seen.has(t.id)));
+            const seenIds = new Set(prev.map(t => t.id));
+            const seenKeys = new Set(prev.map(t => `${t.name}||${t.lab}`));
+            const newTests = mapTests(extra.filter(t => !seenIds.has(t.id))).filter(t => {
+              const key = `${t.name}||${t.lab}`;
+              if (seenKeys.has(key)) return false;
+              seenKeys.add(key);
+              return true;
+            });
             return [...prev, ...newTests];
           });
         }
