@@ -9,7 +9,7 @@ from app.db.deps import get_db
 from app.db.all_models import User
 from app.utils.api_response import ApiResponse
 from app.utils.api_error import BadRequestError
-from app.core.security import RequireRole, get_current_user
+from app.core.security import RequireRole, get_current_user, get_optional_user
 from app.core.rate_limiter import limiter
 from app.utils.pagination import PaginationParams
 from app.modules.user.schemas import Role
