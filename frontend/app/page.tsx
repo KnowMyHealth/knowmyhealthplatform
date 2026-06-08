@@ -358,12 +358,11 @@ export default function Home() {
             <motion.div variants={itemVariants}
               className="md:col-span-1 lg:col-span-2 row-span-1 p-7 bg-gradient-to-br from-slate-50 to-white border border-slate-100 rounded-[2.5rem] flex items-center gap-6 relative overflow-hidden group"
             >
-              <div className="absolute top-5 right-6 px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider rounded-full border border-amber-200">Coming Soon</div>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent to-amber-50/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent to-emerald-50/40 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               <div className="w-14 h-14 shrink-0 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 relative z-10">
                 <HeartPulse size={28} className="animate-pulse" style={{ animationDuration: '2s' }} />
               </div>
-              <div className="relative z-10 opacity-80">
+              <div className="relative z-10">
                 <h3 className="text-xl font-extrabold text-slate-900 mb-1">Health Packages</h3>
                 <p className="text-slate-500 text-sm">Curated test bundles for full-body checkups at discounted rates.</p>
               </div>
