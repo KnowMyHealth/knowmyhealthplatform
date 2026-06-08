@@ -16,23 +16,23 @@ import { supabase } from '@/lib/supabase';
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const faqs = [
-  { q: 'How does the AI prescription analysis work?', a: 'Our AI scans your uploaded prescription, extracts key information like medicines, dosage, and doctor notes, and provides an easy-to-understand summary and insights.' },
-  { q: 'Are my medical records secure?', a: 'Yes, we use enterprise-grade encryption to ensure your health data is completely private and secure.' },
-  { q: 'Can I book a home sample collection?', a: 'Absolutely. We offer home sample collection for most of our diagnostic tests and full body checkups.' },
-  { q: 'How quickly do I get my test reports?', a: 'Most standard test reports are delivered digitally within 24-48 hours.' },
-  { q: 'Do you offer online doctor consultations?', a: 'Yes, you can consult with our expert doctors via video or audio calls directly through the platform.' },
-  { q: 'Is the AI symptom checker a substitute for a doctor?', a: 'No, the AI symptom checker is for informational purposes and test recommendations. It does not replace professional medical advice.' },
-  { q: 'Can I track my health progress over time?', a: 'Yes, our dashboard allows you to track your test results and vital signs over time with easy-to-read charts.' },
-  { q: 'What payment methods do you accept?', a: 'We accept all major credit/debit cards, UPI, net banking, and popular digital wallets.' },
+  { q: 'How do I book a diagnostic test?', a: 'Browse our catalog, add tests to your cart, pick a date and time slot, and confirm. Walk into the diagnostic center at your chosen time — no waiting in queues.' },
+  { q: 'Which labs are available on the platform?', a: 'We partner with NABL-accredited diagnostic centers including Isha Diagnostics and more. All centers meet strict quality and hygiene standards.' },
+  { q: 'Do I need to visit the lab myself?', a: 'Yes — you book your slot online and visit the diagnostic center at your chosen time. Online booking means no queues and no waiting.' },
+  { q: 'How quickly do I get my test reports?', a: 'Most standard test reports are delivered digitally within 24–48 hours of your lab visit.' },
+  { q: 'Can I book multiple tests together?', a: 'Absolutely. Add as many tests as you need to your cart and book them all in a single appointment at the lab.' },
+  { q: 'What is the advance payment option?', a: 'You can pay just 10% upfront to confirm your slot and pay the remaining amount at the center or online before your visit.' },
+  { q: 'Are the test prices fixed?', a: 'Prices are transparent with no hidden fees. Discounts are applied automatically — what you see is what you pay.' },
+  { q: 'What payment methods do you accept?', a: 'We accept all major credit/debit cards, UPI, net banking, and popular digital wallets via Razorpay.' },
 ];
 
 const testimonials = [
-  { name: 'Sarah Jenkins', role: 'Patient', text: 'The AI prescription vault is a game-changer. I finally understand what my doctor prescribed without having to google every single medicine.', rating: 5 },
-  { name: 'David Chen', role: 'Patient', text: 'Booked a full body checkup. The process was seamless, and the home collection was right on time. Highly recommend Know My Health.', rating: 5 },
-  { name: 'Priya Sharma', role: 'Patient', text: 'The symptom checker accurately recommended the tests I needed. Saved me a lot of time and anxiety.', rating: 4 },
-  { name: 'Arun Mehta', role: 'Patient', text: 'Finally a platform that takes my health seriously. The doctor was thorough and the video consultation was crystal clear.', rating: 5 },
-  { name: 'Lisa Park', role: 'Patient', text: 'My prescription was analyzed in seconds. The AI highlighted a potential drug interaction my pharmacist missed. Absolutely brilliant.', rating: 5 },
-  { name: 'Ravi Nair', role: 'Patient', text: 'Easy booking, on-time collection, and detailed report. Everything about Know My Health is world-class.', rating: 4 },
+  { name: 'Priya Sharma', role: 'Patient', text: 'Booked a blood panel for my mother at 10 PM, walked in at 8 AM, and had the reports the same evening. No queues, no hassle.', rating: 5 },
+  { name: 'David Chen', role: 'Patient', text: 'Compared prices across three labs in seconds and saved ₹800 on my lipid profile. Booking took less than two minutes.', rating: 5 },
+  { name: 'Arun Mehta', role: 'Patient', text: 'Finally a platform that shows real prices upfront. No hidden charges, no haggling. Booked my thyroid panel and walked in at my slot.', rating: 5 },
+  { name: 'Sarah Jenkins', role: 'Patient', text: 'The 10% advance option is brilliant — I confirmed my slot without paying the full amount upfront. Very patient-friendly.', rating: 4 },
+  { name: 'Ravi Nair', role: 'Patient', text: 'Booked online, walked in, gave my sample, and got a detailed digital report within 24 hours. Everything about Know My Health is world-class.', rating: 5 },
+  { name: 'Ananya Iyer', role: 'Patient', text: 'Booked five tests at once for a full health check. The slot booking was seamless and the lab was ready for me when I arrived.', rating: 4 },
 ];
 
 const PARTNER_TYPES = ['PHARMACY', 'LABORATORY', 'HOSPITAL', 'CLINIC', 'OTHER'] as const;
@@ -222,14 +222,14 @@ export default function Home() {
             className="space-y-8"
           >
             <div className="inline-block px-4 py-1.5 rounded-full bg-teal-100/50 border border-teal-200/50 backdrop-blur-md">
-              <span className="text-sm font-bold tracking-wider text-teal-700 uppercase">Compassionate Care Through Holistic Approach</span>
+              <span className="text-sm font-bold tracking-wider text-teal-700 uppercase">NABL Accredited Labs · Online Booking</span>
             </div>
             <h1 className="text-5xl lg:text-7xl font-extrabold text-emerald-950 tracking-tight leading-[1.1]">
-              Your Health, Our <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-500">Evidence Based</span> Medicine.
+              Book Lab Tests <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-500">Online, Instantly</span>
             </h1>
             <p className="text-lg text-emerald-900/70 max-w-xl leading-relaxed">
-              Experience the future of healthcare with AI-powered diagnostics, secure record management, and expert consultations all in one premium platform.
+              Compare prices across top diagnostic centers, book your slot online, and walk in at your chosen time. No queues, no calls.
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <button
@@ -342,13 +342,13 @@ export default function Home() {
                   <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-emerald-300 border border-white/10">
                     <Activity size={28} />
                   </div>
-                  <span className="px-3 py-1 bg-emerald-400/15 border border-emerald-300/20 rounded-full text-[11px] font-bold text-emerald-300 uppercase tracking-widest">AI Powered</span>
+                  <span className="px-3 py-1 bg-emerald-400/15 border border-emerald-300/20 rounded-full text-[11px] font-bold text-emerald-300 uppercase tracking-widest">700+ Tests</span>
                 </div>
                 <div>
-                  <h3 className="text-4xl font-extrabold text-white mb-3 leading-tight">AI Diagnostics</h3>
-                  <p className="text-emerald-100/70 text-base leading-relaxed max-w-sm">Smart test recommendations based on your unique symptoms. Let our advanced AI guide you to the right diagnostic path instantly.</p>
-                  <button className="mt-6 flex items-center gap-2 text-emerald-300 font-bold hover:text-white transition-colors group/btn text-sm">
-                    Explore Diagnostics <ArrowRight size={15} className="group-hover/btn:translate-x-1 transition-transform" />
+                  <h3 className="text-4xl font-extrabold text-white mb-3 leading-tight">Diagnostic Tests</h3>
+                  <p className="text-emerald-100/70 text-base leading-relaxed max-w-sm">Browse 700+ tests from NABL-accredited diagnostic centers. Compare prices, book your slot online, and walk in at your chosen time.</p>
+                  <button onClick={() => router.push('/diagnostics')} className="mt-6 flex items-center gap-2 text-emerald-300 font-bold hover:text-white transition-colors group/btn text-sm">
+                    Browse Tests <ArrowRight size={15} className="group-hover/btn:translate-x-1 transition-transform" />
                   </button>
                 </div>
               </div>
@@ -364,8 +364,8 @@ export default function Home() {
                 <HeartPulse size={28} className="animate-pulse" style={{ animationDuration: '2s' }} />
               </div>
               <div className="relative z-10 opacity-80">
-                <h3 className="text-xl font-extrabold text-slate-900 mb-1">Full Body Checkups</h3>
-                <p className="text-slate-500 text-sm">Comprehensive health packages for all ages.</p>
+                <h3 className="text-xl font-extrabold text-slate-900 mb-1">Health Packages</h3>
+                <p className="text-slate-500 text-sm">Curated test bundles for full-body checkups at discounted rates.</p>
               </div>
             </motion.div>
 
@@ -378,8 +378,8 @@ export default function Home() {
                 <FileText size={22} />
               </div>
               <div className="relative z-10">
-                <h3 className="text-lg font-extrabold text-slate-900 mb-1">Prescription Vault</h3>
-                <p className="text-slate-500 text-sm">Securely store and analyze your records.</p>
+                <h3 className="text-lg font-extrabold text-slate-900 mb-1">Digital Reports</h3>
+                <p className="text-slate-500 text-sm">Reports delivered to your account within 24 hours of collection.</p>
               </div>
             </motion.div>
 
@@ -394,8 +394,8 @@ export default function Home() {
                 <span className="absolute inset-0 rounded-xl ring-2 ring-teal-300 animate-ping opacity-30" style={{ animationDuration: '2.5s' }} />
               </div>
               <div className="relative z-10">
-                <h3 className="text-lg font-extrabold text-slate-900 mb-1">Expert Consults</h3>
-                <p className="text-slate-500 text-sm">Connect with top-tier professionals.</p>
+                <h3 className="text-lg font-extrabold text-slate-900 mb-1">Slot Booking</h3>
+                <p className="text-slate-500 text-sm">Pick your preferred date and time slot. Walk in — no waiting in queues.</p>
               </div>
             </motion.div>
 
@@ -408,8 +408,8 @@ export default function Home() {
                 <Pill size={28} />
               </div>
               <div className="relative z-10">
-                <h3 className="text-xl font-extrabold text-emerald-950 mb-1">Pharmacy Integration</h3>
-                <p className="text-slate-500 text-sm">Order medicines directly from your prescriptions.</p>
+                <h3 className="text-xl font-extrabold text-emerald-950 mb-1">Price Comparison</h3>
+                <p className="text-slate-500 text-sm">Compare the same test across multiple labs and pick the best price.</p>
               </div>
             </motion.div>
 
@@ -422,8 +422,8 @@ export default function Home() {
                 <div className="w-12 h-12 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-900/50 mb-4">
                   <Brain size={22} />
                 </div>
-                <h3 className="text-xl font-extrabold text-white mb-1">Mental Wellness</h3>
-                <p className="text-emerald-200/60 text-sm">Holistic approach to your mental health.</p>
+                <h3 className="text-xl font-extrabold text-white mb-1">AI Test Recommender</h3>
+                <p className="text-emerald-200/60 text-sm">Describe your symptoms and let AI match you with the right tests instantly.</p>
               </div>
               <div className="relative hidden sm:flex items-center justify-center w-28 h-28 shrink-0">
                 <div className="absolute inset-0 rounded-full border-2 border-emerald-500/20 animate-spin" style={{ animationDuration: '8s' }} />
@@ -452,7 +452,7 @@ export default function Home() {
           >
             <span className="inline-block px-4 py-1.5 rounded-full bg-emerald-400/10 border border-emerald-400/20 text-emerald-300 text-xs font-bold uppercase tracking-[0.15em] mb-5">Our Promise</span>
             <h2 className="text-4xl lg:text-5xl font-extrabold text-white leading-tight">
-              Built on Trust, <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-emerald-400">Powered by Science</span>
+              Why Patients <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-emerald-400">Choose Us</span>
             </h2>
           </motion.div>
 
@@ -464,10 +464,10 @@ export default function Home() {
             className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5"
           >
             {[
-              { num: '01', icon: Shield, title: 'Evidence-Based', desc: 'All AI models and medical advice backed by rigorous scientific research and clinical validation.', color: 'from-emerald-500/20 to-transparent' },
-              { num: '02', icon: Lock, title: 'Data Privacy', desc: 'Your health data is encrypted with enterprise-grade security. You own your data — always.', color: 'from-teal-500/20 to-transparent' },
-              { num: '03', icon: Zap, title: 'Holistic Approach', desc: 'We look at the complete picture of your health, not just isolated symptoms or data points.', color: 'from-cyan-500/20 to-transparent' },
-              { num: '04', icon: Activity, title: '24/7 Support', desc: 'Our AI assistant and medical team are always available when you need them most.', color: 'from-emerald-400/20 to-transparent' },
+              { num: '01', icon: Shield, title: 'NABL Accredited Labs', desc: 'Every diagnostic center on our platform is NABL accredited and follows strict quality protocols.', color: 'from-emerald-500/20 to-transparent' },
+              { num: '02', icon: Zap, title: 'Book in 60 Seconds', desc: 'Search, compare, add to cart, pick a slot, and confirm — no phone calls, no paperwork.', color: 'from-teal-500/20 to-transparent' },
+              { num: '03', icon: Lock, title: 'Transparent Pricing', desc: 'No hidden fees. Compare prices across centers and see your exact total before you pay.', color: 'from-cyan-500/20 to-transparent' },
+              { num: '04', icon: Activity, title: 'Reports in 24 Hours', desc: 'Digital reports delivered straight to your account after your lab visit — no follow-up calls needed.', color: 'from-emerald-400/20 to-transparent' },
             ].map(({ num, icon: Icon, title, desc, color }, i) => (
               <motion.div key={i} variants={itemVariants}
                 whileHover={{ y: -6, scale: 1.02 }}
