@@ -233,9 +233,9 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <button
-                onClick={() => isLoggedIn ? router.push('/complaints') : openAuthModal()}
+                onClick={() => router.push('/diagnostics')}
                 className="group flex items-center space-x-3 px-8 py-4 bg-emerald-900 text-white rounded-full font-semibold hover:bg-emerald-950 transition-all shadow-[0_10px_20px_-10px_rgba(2,44,34,0.5)] hover:shadow-[0_15px_30px_-10px_rgba(2,44,34,0.6)]">
-                <span>Provide your Symptoms Now</span>
+                <span>Book your test</span>
                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
