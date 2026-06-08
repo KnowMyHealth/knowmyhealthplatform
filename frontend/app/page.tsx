@@ -229,7 +229,7 @@ export default function Home() {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 to-teal-500">Online, Instantly</span>
             </h1>
             <p className="text-lg text-emerald-900/70 max-w-xl leading-relaxed">
-              Compare prices across top diagnostic centers, book your slot online, and walk in at your chosen time. No queues, no calls.
+              Book from over 700+ tests online. Use our AI Test Recommender to find the right tests, compare prices, and confirm your slot in seconds.
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <button
