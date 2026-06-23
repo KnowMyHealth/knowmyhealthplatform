@@ -3,7 +3,7 @@ import { Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
 
 export default function Footer() {
   return (
-    <footer className="relative bg-emerald-950 text-white pt-24 pb-12 overflow-hidden mt-20">
+    <footer className="relative bg-emerald-950 text-white pt-24 pb-12 overflow-hidden">
       {/* Massive soft glowing radial gradient at the top edge */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[400px] bg-teal-500/20 blur-[120px] rounded-[100%] pointer-events-none" />
       
