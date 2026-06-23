@@ -272,6 +272,26 @@ async def approve_doctor_application(
     )
 
 
+@router.delete(
+    "/{doctor_id}",
+    summary="Delete Doctor (Admin)",
+    description="Deletes a doctor profile or application. If the doctor was approved, their login account is also permanently removed."
+)
+@limiter.limit("10/minute")
+async def delete_doctor(
+    request: Request,
+    doctor_id: UUID,
+    current_user: User = Depends(RequireRole([Role.ADMIN])),
+    db: AsyncSession = Depends(get_db),
+    service: DoctorsService = Depends(get_doctors_service)
+):
+    logger.debug(f"--> Called DELETE /doctors/{doctor_id} by Admin {current_user.id}")
+    
+    await service.delete_doctor(db, doctor_id)
+    
+    return ApiResponse.no_content()
+
+
 @router.get(
     "/me/revenue-analytics",
     response_model=DoctorRevenueAnalyticsResponse,
