@@ -217,6 +217,8 @@ export default function AdminPortal() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isDeletingDoctor, setIsDeletingDoctor] = useState(false);
+  const [confirmDeleteDoctor, setConfirmDeleteDoctor] = useState(false);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [doctorActionError, setDoctorActionError] = useState<string | null>(null);
 
@@ -1160,6 +1162,38 @@ export default function AdminPortal() {
       setDoctorActionError(error.message || 'An unexpected error occurred');
     } finally {
       setIsRejecting(false);
+    }
+  };
+
+  const handleDeleteDoctor = async (id: string) => {
+    setIsDeletingDoctor(true);
+    setDoctorActionError(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setIsDeletingDoctor(false); return; }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/doctors/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+
+      if (res.status === 204 || res.ok) {
+        setAllDoctors(prev => prev.filter(d => d.id !== id));
+        setConfirmDeleteDoctor(false);
+        setSelectedDoctor(null);
+        setIsPanelOpen(false);
+        showToast('success', 'Doctor deleted successfully.');
+      } else {
+        const errorData = await res.json();
+        setDoctorActionError(errorData.message || 'Failed to delete doctor');
+      }
+    } catch (error: any) {
+      setDoctorActionError(error.message || 'An unexpected error occurred');
+    } finally {
+      setIsDeletingDoctor(false);
     }
   };
 
@@ -4972,7 +5006,7 @@ export default function AdminPortal() {
               <>
                 <motion.div 
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  onClick={() => setIsPanelOpen(false)}
+                  onClick={() => { setIsPanelOpen(false); setConfirmDeleteDoctor(false); }}
                   className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110]"
                 />
                 <motion.div 
@@ -4982,7 +5016,7 @@ export default function AdminPortal() {
                 >
                   <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
                     <h2 className="text-xl font-bold text-slate-900">Doctor Profile Review</h2>
-                    <button onClick={() => setIsPanelOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors">
+                    <button onClick={() => { setIsPanelOpen(false); setConfirmDeleteDoctor(false); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors">
                       <X size={20} />
                     </button>
                   </div>
@@ -5107,6 +5141,33 @@ export default function AdminPortal() {
                         {isApproving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                         Approve Doctor
                       </button>
+                    </div>
+                  )}
+
+                  {selectedDoctor && (
+                    <div className="p-6 border-t border-slate-100 bg-white shrink-0">
+                      {confirmDeleteDoctor ? (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl">
+                          <AlertCircle size={18} className="text-red-500 shrink-0" />
+                          <p className="text-sm font-medium text-red-700 flex-1">
+                            Permanently delete this doctor{selectedDoctor.status.toLowerCase() === 'approved' ? ' and their login account' : ''}? This cannot be undone.
+                          </p>
+                          <button onClick={() => handleDeleteDoctor(selectedDoctor.id)} disabled={isDeletingDoctor}
+                            className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center gap-1">
+                            {isDeletingDoctor ? <Loader2 size={12} className="animate-spin" /> : null}
+                            Delete
+                          </button>
+                          <button onClick={() => setConfirmDeleteDoctor(false)} disabled={isDeletingDoctor}
+                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60">
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setConfirmDeleteDoctor(true)}
+                          className="w-full py-2.5 flex items-center justify-center gap-2 text-sm font-bold text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors">
+                          <Trash2 size={15} /> Delete Doctor
+                        </button>
+                      )}
                     </div>
                   )}
                 </motion.div>
