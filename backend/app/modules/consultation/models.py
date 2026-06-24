@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
-from sqlalchemy import String, ForeignKey, Enum, func
+from sqlalchemy import String, ForeignKey, Enum, func, Text
 
 from app.db.base import Base
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.modules.doctor.models import Doctor
 
 class ConsultationStatus(str, enum.Enum):
-    PENDING = "PENDING"          # <-- ADDED
+    PENDING = "PENDING"
     SCHEDULED = "SCHEDULED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
@@ -35,7 +35,6 @@ class Consultation(Base):
     
     scheduled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     
-    # <-- UPDATED DEFAULT TO PENDING
     status: Mapped[ConsultationStatus] = mapped_column(Enum(ConsultationStatus), default=ConsultationStatus.PENDING, nullable=False)
     consultation_type: Mapped[ConsultationType] = mapped_column(Enum(ConsultationType), default=ConsultationType.ONLINE, nullable=False)
     
@@ -43,6 +42,9 @@ class Consultation(Base):
     channel_name: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
 
     prescription_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    
+    # NEW: Store the patient's note
+    patient_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

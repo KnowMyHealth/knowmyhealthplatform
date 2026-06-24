@@ -26,13 +26,14 @@ class ConsultationDetailResponse(BaseModel):
     consultation_type: ConsultationType
     channel_name: Optional[str] = None
     prescription_url: Optional[str] = None
+    patient_note: Optional[str] = None
     created_at: datetime
     
     # Full embedded profiles
     doctor: DoctorSchema
     patient: Optional[PatientSchema] = None
 
-# --- NEW: Nested details for Admin View ---
+# --- Nested details for Admin View ---
 class ConsultationPatientProfileSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -67,9 +68,10 @@ class ConsultationSchema(BaseModel):
     consultation_type: ConsultationType
     channel_name: Optional[str] = None
     prescription_url: Optional[str] = None
+    patient_note: Optional[str] = None
     created_at: datetime
     
-    # NEW: Optional nested data for Admin list views
+    # Optional nested data for Admin list views
     patient_user: Optional[ConsultationUserSchema] = None
     doctor: Optional[ConsultationDoctorSchema] = None
 
@@ -83,6 +85,7 @@ class BookConsultationRequest(BaseModel):
     doctor_id: UUID
     scheduled_at: datetime = Field(..., description="The time the patient wants to book")
     consultation_type: ConsultationType = Field(default=ConsultationType.ONLINE)
+    patient_note: Optional[str] = Field(None, max_length=500, description="Short note or reason for visit")
 
 class AgoraJoinResponse(BaseModel):
     token: str

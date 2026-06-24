@@ -79,7 +79,8 @@ class ConsultationService:
             scheduled_at=data.scheduled_at,
             consultation_type=data.consultation_type,
             channel_name=channel_name,
-            status=ConsultationStatus.PENDING
+            status=ConsultationStatus.PENDING,
+            patient_note=data.patient_note
         )
         db.add(consultation)
         await db.commit()
@@ -399,6 +400,7 @@ class ConsultationService:
             "consultation_type": consultation.consultation_type,
             "channel_name": consultation.channel_name,
             "prescription_url": consultation.prescription_url,
+            "patient_note": consultation.patient_note,
             "created_at": consultation.created_at,
             "doctor": consultation.doctor,
             "patient": consultation.patient_user.patient_profile if consultation.patient_user else None

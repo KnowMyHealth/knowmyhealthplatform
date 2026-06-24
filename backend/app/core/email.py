@@ -164,7 +164,7 @@ def send_labtest_booking_email(
     scheduled_date: str, 
     clinic_address: str, 
     clinic_timing: str,
-    payment_summary_html: str = "" # <-- NEW
+    payment_summary_html: str = "" 
 ) -> bool:
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
@@ -210,7 +210,7 @@ def send_health_package_booking_email(
     scheduled_date: str, 
     clinic_address: str, 
     clinic_timing: str,
-    payment_summary_html: str = "" # <-- NEW
+    payment_summary_html: str = "" 
 ) -> bool:
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
@@ -257,7 +257,7 @@ def send_consultation_booking_patient_email(
     scheduled_date: str, 
     consultation_type: str, 
     clinic_address: str | None,
-    payment_summary_html: str = "" # <-- NEW
+    payment_summary_html: str = "" 
 ) -> bool:
     """Sends a booking confirmation email to the Patient."""
     try:
@@ -307,12 +307,15 @@ def send_consultation_booking_doctor_email(
     patient_name: str, 
     scheduled_date: str, 
     consultation_type: str,
-    payment_summary_html: str = "" # <-- NEW
+    payment_summary_html: str = "",
+    patient_note: str | None = None
 ) -> bool:
     """Sends a new booking notification email to the Doctor."""
     try:
         resend.api_key = settings.RESEND_API_KEY.get_secret_value()
         from_email = "Know My Health <onboarding@hello.knowmyhealth.in>"
+
+        note_html = f"<p style='margin: 10px 0 0 0; border-top: 1px solid #c6f6d5; padding-top: 10px;'><strong>📝 Reason/Note:</strong> {patient_note}</p>" if patient_note else ""
 
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #2d3748;">
@@ -324,6 +327,7 @@ def send_consultation_booking_doctor_email(
                 <p style="margin: 0 0 10px 0; font-size: 1.1em;"><strong>Patient: {patient_name}</strong></p>
                 <p style="margin: 5px 0;"><strong>📅 Date & Time:</strong> {scheduled_date}</p>
                 <p style="margin: 5px 0;"><strong>🩺 Type:</strong> {consultation_type}</p>
+                {note_html}
                 {payment_summary_html}
             </div>
             

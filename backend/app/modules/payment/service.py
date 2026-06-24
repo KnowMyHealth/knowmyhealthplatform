@@ -195,12 +195,16 @@ class PaymentService:
                         patient_name=patient_name,
                         scheduled_date=formatted_date,
                         consultation_type=booking.consultation_type.value,
-                        payment_summary_html=payment_summary_html
+                        payment_summary_html=payment_summary_html,
+                        patient_note=booking.patient_note
                     )
                 )
 
                 # Trigger Admin Email
                 admin_details = f"Consultation with Dr. {doc_name} at {formatted_date} ({booking.consultation_type.value}) - {pay_mode_label}"
+                if booking.patient_note:
+                    admin_details += f" | Note: {booking.patient_note}"
+                    
                 asyncio.create_task(
                     asyncio.to_thread(
                         send_admin_new_booking_email,
