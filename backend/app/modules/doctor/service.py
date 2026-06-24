@@ -239,7 +239,7 @@ class DoctorsService:
         If the doctor is approved, it also deletes their Supabase Auth account.
         """
         doctor = await self.get_doctor_by_id(db, doctor_id)
-        
+
         try:
             if doctor.user_id:
                 # 1. Delete from Supabase Auth first
@@ -248,16 +248,16 @@ class DoctorsService:
                 except Exception as e:
                     logger.error(f"Failed to delete doctor from Supabase: {e}")
                     raise DoctorUpdateError("Failed to delete authentication account. Please try again.")
-                
+
                 # 2. Delete local User record (This will CASCADE and delete the Doctor profile)
                 await db.execute(delete(User).where(User.id == doctor.user_id))
             else:
                 # 3. If it's just a pending application with no user account yet
                 await db.execute(delete(Doctor).where(Doctor.id == doctor_id))
-                
+
             await db.commit()
             logger.info(f"Successfully deleted doctor {doctor_id}")
-            
+
         except SQLAlchemyError as e:
             await db.rollback()
             logger.error(f"Database error deleting doctor {doctor_id}: {e}")
