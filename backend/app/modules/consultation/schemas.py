@@ -54,6 +54,8 @@ class ConsultationDoctorSchema(BaseModel):
     first_name: str
     last_name: str
     specialization: str
+    clinic_address: Optional[str] = None
+    contact: Optional[str] = None
     
 # ------------------------------------------
 

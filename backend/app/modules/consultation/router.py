@@ -37,7 +37,7 @@ router = APIRouter(prefix="/consultations", tags=["Video Consultations"])
 async def book_consultation(
     request: Request, 
     payload: BookConsultationRequest = Body(...),
-    current_user = Depends(get_current_user),
+    current_user = Depends(RequireRole([Role.PATIENT])),
     db: AsyncSession = Depends(get_db),
     service: ConsultationService = Depends(get_consultation_service)
 ):
