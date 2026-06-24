@@ -43,8 +43,7 @@ class Consultation(Base):
 
     prescription_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     
-    # NEW: Store the patient's note
-    patient_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    patient_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

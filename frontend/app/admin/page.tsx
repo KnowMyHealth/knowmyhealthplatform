@@ -359,6 +359,8 @@ export default function AdminPortal() {
   const [callbackCurrentPage, setCallbackCurrentPage] = useState(1);
   const callbacksPerPage = 15;
   const [updatingCallbackId, setUpdatingCallbackId] = useState<string | null>(null);
+  const [deletingCallbackId, setDeletingCallbackId] = useState<string | null>(null);
+  const [confirmDeleteCallbackId, setConfirmDeleteCallbackId] = useState<string | null>(null);
   const [callbackNotes, setCallbackNotes] = useState<Record<string, string>>({});
   const [openNotesId, setOpenNotesId] = useState<string | null>(null);
 
@@ -1682,6 +1684,27 @@ export default function AdminPortal() {
       console.error('Failed to update callback', err);
     } finally {
       setUpdatingCallbackId(null);
+    }
+  };
+
+  const deleteCallback = async (id: string) => {
+    setDeletingCallbackId(id);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setDeletingCallbackId(null); return; }
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/callbacks/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'ngrok-skip-browser-warning': 'true' },
+      });
+      if (res.status === 204 || res.ok) {
+        setCallbacks(prev => prev.filter(c => c.id !== id));
+        setConfirmDeleteCallbackId(null);
+        showToast('success', 'Callback request deleted.');
+      }
+    } catch (err) {
+      console.error('Failed to delete callback', err);
+    } finally {
+      setDeletingCallbackId(null);
     }
   };
 
@@ -4511,31 +4534,51 @@ export default function AdminPortal() {
                           {cb.admin_notes || <span className="italic">—</span>}
                         </td>
                         <td className="px-6 py-4">
-                          {cb.status === 'PENDING' && (
-                            <div className="flex items-center gap-2 justify-end">
-                              <button
-                                onClick={() => setOpenNotesId(openNotesId === cb.id ? null : cb.id)}
-                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-lg transition-colors"
-                              >
-                                + Notes
+                          <div className="flex items-center gap-2 justify-end">
+                            {cb.status === 'PENDING' && (
+                              <>
+                                <button
+                                  onClick={() => setOpenNotesId(openNotesId === cb.id ? null : cb.id)}
+                                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-lg transition-colors"
+                                >
+                                  + Notes
+                                </button>
+                                <button
+                                  onClick={() => updateCallbackStatus(cb.id, 'RESOLVED')}
+                                  disabled={updatingCallbackId === cb.id}
+                                  className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-600 text-emerald-700 hover:text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {updatingCallbackId === cb.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                  Resolved
+                                </button>
+                                <button
+                                  onClick={() => updateCallbackStatus(cb.id, 'IGNORED')}
+                                  disabled={updatingCallbackId === cb.id}
+                                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  Ignore
+                                </button>
+                              </>
+                            )}
+                            {confirmDeleteCallbackId === cb.id ? (
+                              <>
+                                <button onClick={() => deleteCallback(cb.id)} disabled={deletingCallbackId === cb.id}
+                                  className="px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center gap-1">
+                                  {deletingCallbackId === cb.id ? <Loader2 size={12} className="animate-spin" /> : null}
+                                  Delete
+                                </button>
+                                <button onClick={() => setConfirmDeleteCallbackId(null)} disabled={deletingCallbackId === cb.id}
+                                  className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60">
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button onClick={() => setConfirmDeleteCallbackId(cb.id)}
+                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                <Trash2 size={14} />
                               </button>
-                              <button
-                                onClick={() => updateCallbackStatus(cb.id, 'RESOLVED')}
-                                disabled={updatingCallbackId === cb.id}
-                                className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-600 text-emerald-700 hover:text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {updatingCallbackId === cb.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                                Resolved
-                              </button>
-                              <button
-                                onClick={() => updateCallbackStatus(cb.id, 'IGNORED')}
-                                disabled={updatingCallbackId === cb.id}
-                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                Ignore
-                              </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </td>
                       </tr>
                       {/* Inline notes expander */}

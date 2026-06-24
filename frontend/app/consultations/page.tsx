@@ -303,6 +303,7 @@ export default function ConsultationsPage() {
   const [paymentMode, setPaymentMode] = useState<'FULL' | 'ADVANCE'>('FULL');
   const [isBooking, setIsBooking] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [patientNote, setPatientNote] = useState<string>('');
   const [isJoiningId, setIsJoiningId] = useState<string | null>(null);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [agoraInfo, setAgoraInfo] = useState<any>(null); 
@@ -441,6 +442,7 @@ export default function ConsultationsPage() {
     setIsBookingModalOpen(true);
     setBookingStep(1);
     setSelectedTime(null);
+    setPatientNote('');
     setCalendarMonth({ year: today.getFullYear(), month: today.getMonth() });
   };
 
@@ -520,7 +522,8 @@ export default function ConsultationsPage() {
         body: JSON.stringify({
           doctor_id: selectedDoctor.id,
           scheduled_at: selectedTime,
-          consultation_type: selectedConsultationType
+          consultation_type: selectedConsultationType,
+          patient_note: patientNote || null
         })
       });
 
@@ -1245,6 +1248,18 @@ export default function ConsultationsPage() {
                       {isBooking ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle2 size={20} />}
                       {isBooking ? 'Processing...' : `Pay ₹${paymentMode === 'ADVANCE' ? Math.round(selectedDoctor.consultation_fee * 0.1) : selectedDoctor.consultation_fee} & Confirm`}
                     </button>
+                    <div className="mb-4 text-left">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Note for doctor <span className="font-normal text-slate-400 normal-case">(optional)</span></label>
+                      <textarea
+                        rows={2}
+                        maxLength={500}
+                        placeholder="Briefly describe your symptoms or reason for visit..."
+                        value={patientNote}
+                        onChange={(e) => setPatientNote(e.target.value)}
+                        disabled={isBooking}
+                        className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none disabled:opacity-50"
+                      />
+                    </div>
                     <button onClick={() => { setBookingStep(1); setPaymentError(null); }} disabled={isBooking} className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors text-sm disabled:opacity-30">
                       ← Change date or time
                     </button>
