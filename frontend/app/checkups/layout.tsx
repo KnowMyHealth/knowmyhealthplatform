@@ -23,6 +23,7 @@ const checkupsSchema = {
   description:
     'Comprehensive health checkup packages including full body, cardiac, diabetes, and cancer screenings.',
   audience: { '@type': 'Patient' },
+  lastReviewed: '2026-06-01',
 }
 
 export default function CheckupsLayout({ children }: { children: React.ReactNode }) {
@@ -30,7 +31,7 @@ export default function CheckupsLayout({ children }: { children: React.ReactNode
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(checkupsSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(checkupsSchema).replace(/</g, '\\u003c') }}
       />
       {children}
     </>

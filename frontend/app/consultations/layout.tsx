@@ -24,6 +24,7 @@ const medicalWebPageSchema = {
     'Book video or in-clinic consultations with verified doctors on KnowMyHealth.',
   about: { '@type': 'MedicalCondition', name: 'General Healthcare Consultation' },
   audience: { '@type': 'Patient' },
+  lastReviewed: '2026-06-01',
 }
 
 export default function ConsultationsLayout({ children }: { children: React.ReactNode }) {
@@ -31,7 +32,7 @@ export default function ConsultationsLayout({ children }: { children: React.Reac
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(medicalWebPageSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(medicalWebPageSchema).replace(/</g, '\\u003c') }}
       />
       {children}
     </>

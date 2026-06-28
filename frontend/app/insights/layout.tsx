@@ -33,7 +33,7 @@ export default function InsightsLayout({ children }: { children: React.ReactNode
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(insightsSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(insightsSchema).replace(/</g, '\\u003c') }}
       />
       {children}
     </>

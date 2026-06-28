@@ -24,6 +24,7 @@ const diagnosticsSchema = {
     'Book diagnostic lab tests from NABL-accredited labs with price comparison and home collection.',
   about: { '@type': 'MedicalTest', name: 'Diagnostic Lab Tests' },
   audience: { '@type': 'Patient' },
+  lastReviewed: '2026-06-01',
 }
 
 export default function DiagnosticsLayout({ children }: { children: React.ReactNode }) {
@@ -31,7 +32,7 @@ export default function DiagnosticsLayout({ children }: { children: React.ReactN
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(diagnosticsSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(diagnosticsSchema).replace(/</g, '\\u003c') }}
       />
       {children}
     </>
