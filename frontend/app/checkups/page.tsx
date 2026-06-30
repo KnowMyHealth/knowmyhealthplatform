@@ -770,7 +770,7 @@ export default function CheckupsPage() {
                 <a href="tel:+917892934391"
                   className="group flex items-center justify-center gap-2 px-8 py-4 bg-white/10 border border-white/20 text-white rounded-full font-semibold hover:bg-white/15 transition-all">
                   <Phone size={16} />
-                  +91 78929 34391
+                  +91 80235 65005
                 </a>
               </div>
             </motion.div>

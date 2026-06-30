@@ -110,7 +110,7 @@ export default function StickyCallback() {
 
               <div className="mb-6">
                 <h3 className="text-[#00875a] font-semibold text-lg sm:text-xl mb-1">Call Us</h3>
-                <p className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">+91 78929 34391</p>
+                <p className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">+91 80235 65005</p>
               </div>
 
               <div className="flex items-center my-8">

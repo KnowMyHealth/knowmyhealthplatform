@@ -247,7 +247,7 @@ export default function Home() {
             >
               <div className="mb-6">
                 <h3 className="text-emerald-700 font-semibold mb-1">Call Us</h3>
-                <p className="text-3xl font-extrabold text-slate-900">+91 78929 34391</p>
+                <p className="text-3xl font-extrabold text-slate-900">+91 80235 65005</p>
               </div>
               <div className="relative flex items-center py-4 mb-6">
                 <div className="flex-grow border-t border-gray-300/60" />
