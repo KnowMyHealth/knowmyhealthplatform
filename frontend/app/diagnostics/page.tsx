@@ -143,17 +143,17 @@ function DiagnosticsContent() {
 
   // Handle URL Param routing (Auto Add to Cart)
   useEffect(() => {
-    const autoAddIds = searchParams.get('autoAdd');
-    if (autoAddIds && diagnostics.length > 0) {
-      const idsArray = autoAddIds.split(',');
+    const autoAddParam = searchParams.get('autoAdd');
+    if (autoAddParam && diagnostics.length > 0) {
+      const names = autoAddParam.split(',').map(n => decodeURIComponent(n).toLowerCase().trim());
       let itemsAdded = 0;
-      
+
       setCart(prev => {
         const newCart = [...prev];
-        idsArray.forEach(id => {
-          // Only add if it actually exists in the catalog and isn't already in the cart
-          if (diagnostics.some(t => t.id === id) && !newCart.find(item => item.testId === id)) {
-            newCart.push({ testId: id, quantity: 1 });
+        names.forEach(name => {
+          const match = diagnostics.find(t => t.name.toLowerCase().trim() === name);
+          if (match && !newCart.find(item => item.testId === match.id)) {
+            newCart.push({ testId: match.id, quantity: 1 });
             itemsAdded++;
           }
         });
@@ -162,11 +162,10 @@ function DiagnosticsContent() {
 
       if (itemsAdded > 0) {
         setToastMessage(`Successfully added ${itemsAdded} recommended test(s) to your cart!`);
-        setIsCartOpen(true); // Open the cart side bar
+        setIsCartOpen(true);
         setTimeout(() => setToastMessage(null), 5000);
       }
-      
-      // Clean up URL without reloading the page
+
       router.replace('/diagnostics');
     }
   }, [searchParams, diagnostics, router]);

@@ -292,8 +292,10 @@ function ComplaintsContent() {
 
   const handleBookTests = () => {
     if (!report || !report.recommended_tests || report.recommended_tests.length === 0) return;
-    const testIds = report.recommended_tests.map(t => t.id).join(',');
-    router.push(`/diagnostics?autoAdd=${testIds}`);
+    const testNames = report.recommended_tests
+      .map(t => encodeURIComponent(t.test_name))
+      .join(',');
+    router.push(`/diagnostics?autoAdd=${testNames}`);
   };
 
   // --- RENDERERS ---
