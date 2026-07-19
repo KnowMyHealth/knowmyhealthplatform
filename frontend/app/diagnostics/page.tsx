@@ -147,22 +147,31 @@ function DiagnosticsContent() {
     if (autoAddParam && diagnostics.length > 0) {
       const ids = autoAddParam.split(',').map(id => id.trim()).filter(Boolean);
       let itemsAdded = 0;
+      let matchedInCatalog = 0;
 
       setCart(prev => {
         const newCart = [...prev];
         ids.forEach(id => {
           const match = diagnostics.find(t => t.id === id);
-          if (match && !newCart.find(item => item.testId === match.id)) {
-            newCart.push({ testId: match.id, quantity: 1 });
-            itemsAdded++;
+          if (match) {
+            matchedInCatalog++;
+            if (!newCart.find(item => item.testId === match.id)) {
+              newCart.push({ testId: match.id, quantity: 1 });
+              itemsAdded++;
+            }
           }
         });
         return newCart;
       });
 
-      if (itemsAdded > 0) {
-        setToastMessage(`Successfully added ${itemsAdded} recommended test(s) to your cart!`);
+      // Always open the cart whenever the AI sent valid tests, even if they
+      // were already in the cart — so the user always sees their cart.
+      if (matchedInCatalog > 0) {
         setIsCartOpen(true);
+        const msg = itemsAdded > 0
+          ? `Successfully added ${itemsAdded} recommended test(s) to your cart!`
+          : `Your recommended test(s) are already in the cart.`;
+        setToastMessage(msg);
         setTimeout(() => setToastMessage(null), 5000);
       }
 

@@ -51,23 +51,41 @@ class SymptomCheckerService:
                 db.add(assessment)
                 await db.flush() # Flush to get the assessment.id
 
-                # Save the linked lab tests safely
+                # Build lookup maps of the REAL catalog (by id and by normalized name)
+                by_id = {str(t['id']): t for t in active_tests}
+                by_name = {t['name'].strip().lower(): t for t in active_tests}
+
+                # Reconcile every AI-recommended test back to a real catalog row.
+                # Match on UUID first; if the AI hallucinated the id but the name is
+                # real, fall back to name match. Dedup so the same test isn't added twice.
+                validated_tests = []
+                seen_ids = set()
                 for rec in response_data.recommended_tests:
-                    # Double check the AI didn't hallucinate a UUID
-                    if any(str(t['id']) == str(rec.id) for t in active_tests):
+                    real = by_id.get(str(rec.id)) or by_name.get((rec.test_name or "").strip().lower())
+                    if real and str(real['id']) not in seen_ids:
+                        seen_ids.add(str(real['id']))
+                        validated_tests.append(real)
                         db.add(SymptomAssessmentRecommendation(
                             assessment_id=assessment.id,
-                            lab_test_id=rec.id
+                            lab_test_id=real['id']
                         ))
-                
+
                 await db.commit()
                 logger.info(f"Saved symptom assessment {assessment.id} for user {user_id}")
-                
+
+                # Return the report with ONLY validated catalog tests so the frontend
+                # always receives correct UUIDs that exist in the diagnostics catalog.
+                report = response_data.model_dump()
+                report["recommended_tests"] = [
+                    {"id": str(t['id']), "test_name": t['name'], "organization": t['organization']}
+                    for t in validated_tests
+                ]
+
                 return {
                     "type": "report",
                     "ai_reply": "Here is your preliminary assessment based on our chat.",
                     "assessment_id": str(assessment.id), # Return the DB ID to the frontend
-                    "report": response_data.model_dump()
+                    "report": report
                 }
 
         except Exception as e:
