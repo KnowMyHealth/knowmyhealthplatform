@@ -145,25 +145,13 @@ function DiagnosticsContent() {
   useEffect(() => {
     const autoAddParam = searchParams.get('autoAdd');
     if (autoAddParam && diagnostics.length > 0) {
-      const names = autoAddParam.split(',').map(n => decodeURIComponent(n).toLowerCase().trim());
+      const ids = autoAddParam.split(',').map(id => id.trim()).filter(Boolean);
       let itemsAdded = 0;
-
-      const fuzzyMatch = (catalogName: string, aiName: string) => {
-        const c = catalogName.toLowerCase().trim();
-        const a = aiName.toLowerCase().trim();
-        // exact match
-        if (c === a) return true;
-        // one contains the other
-        if (c.includes(a) || a.includes(c)) return true;
-        // word overlap: if AI name words all appear in catalog name
-        const aiWords = a.split(/\s+/).filter(w => w.length > 2);
-        return aiWords.length > 0 && aiWords.every(w => c.includes(w));
-      };
 
       setCart(prev => {
         const newCart = [...prev];
-        names.forEach(name => {
-          const match = diagnostics.find(t => fuzzyMatch(t.name, name));
+        ids.forEach(id => {
+          const match = diagnostics.find(t => t.id === id);
           if (match && !newCart.find(item => item.testId === match.id)) {
             newCart.push({ testId: match.id, quantity: 1 });
             itemsAdded++;

@@ -292,10 +292,12 @@ function ComplaintsContent() {
 
   const handleBookTests = () => {
     if (!report || !report.recommended_tests || report.recommended_tests.length === 0) return;
-    const testNames = report.recommended_tests
-      .map(t => encodeURIComponent(t.test_name))
+    const testIds = report.recommended_tests
+      .map(t => t.id)
+      .filter(Boolean)
       .join(',');
-    router.push(`/diagnostics?autoAdd=${testNames}`);
+    if (!testIds) return;
+    router.push(`/diagnostics?autoAdd=${testIds}`);
   };
 
   // --- RENDERERS ---
