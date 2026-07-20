@@ -327,7 +327,7 @@ function DiagnosticsContent() {
       // Fetch categories and first page of tests in parallel
       const [catRes, firstPageRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/v1/lab-tests/categories`, { headers }),
-        fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=1`, { headers }),
+        fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=1&is_active=true`, { headers }),
       ]);
 
       if (catRes.ok) {
@@ -356,7 +356,7 @@ function DiagnosticsContent() {
       if (totalPages > 1) {
         const remaining = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
         const results = await Promise.all(
-          remaining.map(p => fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=${p}`, { headers })
+          remaining.map(p => fetch(`${BACKEND_URL}/api/v1/lab-tests?limit=100&page=${p}&is_active=true`, { headers })
             .then(r => r.ok ? r.json() : null)
             .catch(() => null))
         );
