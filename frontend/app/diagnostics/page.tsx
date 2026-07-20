@@ -1,7 +1,7 @@
 ﻿// frontend/app/diagnostics/page.tsx
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -113,6 +113,16 @@ function DiagnosticsContent() {
   // Success Toast for Auto-Adding to Cart
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // True once EVERY page of the catalog has finished loading. The catalog
+  // loads incrementally in the background, so auto-add must keep retrying
+  // until this is true (otherwise tests on later pages are silently dropped).
+  const [catalogFullyLoaded, setCatalogFullyLoaded] = useState(false);
+  // Pending auto-add request { id, name }[] parsed from the URL. Held in a ref
+  // so it survives the router.replace that strips the param, letting us keep
+  // matching as more catalog pages arrive.
+  const pendingAutoAdd = useRef<{ id: string; name: string }[] | null>(null);
+  const autoAddMatched = useRef<Set<string>>(new Set());
+
   const TESTS_PER_PAGE = 50;
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -141,55 +151,78 @@ function DiagnosticsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle URL Param routing (Auto Add to Cart)
+  // Step 1: Capture the autoAdd request from the URL exactly once, into a ref.
+  // The URL param is stripped immediately (clean URL), but the request lives
+  // in the ref so we can keep matching as the catalog finishes loading.
   useEffect(() => {
     const autoAddParam = searchParams.get('autoAdd');
-    if (autoAddParam && diagnostics.length > 0) {
-      // Each entry is `id~name`. Match by id first, then fall back to name
-      // (case-insensitive) — this survives catalog dedupe where the same test
-      // name maps to a different id than the AI/backend returned.
-      const entries = autoAddParam.split(',').map(pair => {
-        const [rawId, rawName] = pair.split('~');
-        return {
-          id: decodeURIComponent(rawId || '').trim(),
-          name: decodeURIComponent(rawName || '').trim().toLowerCase(),
-        };
-      }).filter(e => e.id || e.name);
+    if (!autoAddParam) return;
 
-      let itemsAdded = 0;
-      let matchedInCatalog = 0;
+    // Each entry is `id~name`. Match by id first, then fall back to name.
+    const entries = autoAddParam.split(',').map(pair => {
+      const [rawId, rawName] = pair.split('~');
+      return {
+        id: decodeURIComponent(rawId || '').trim(),
+        name: decodeURIComponent(rawName || '').trim().toLowerCase(),
+      };
+    }).filter(e => e.id || e.name);
 
-      setCart(prev => {
-        const newCart = [...prev];
-        entries.forEach(entry => {
-          const match =
-            (entry.id && diagnostics.find(t => t.id === entry.id)) ||
-            (entry.name && diagnostics.find(t => t.name.trim().toLowerCase() === entry.name));
-          if (match) {
-            matchedInCatalog++;
-            if (!newCart.find(item => item.testId === match.id)) {
-              newCart.push({ testId: match.id, quantity: 1 });
-              itemsAdded++;
-            }
-          }
-        });
-        return newCart;
-      });
-
-      // Always open the cart whenever the AI sent valid tests, even if they
-      // were already in the cart — so the user always sees their cart.
-      if (matchedInCatalog > 0) {
-        setIsCartOpen(true);
-        const msg = itemsAdded > 0
-          ? `Successfully added ${itemsAdded} recommended test(s) to your cart!`
-          : `Your recommended test(s) are already in the cart.`;
-        setToastMessage(msg);
-        setTimeout(() => setToastMessage(null), 5000);
-      }
-
-      router.replace('/diagnostics');
+    if (entries.length > 0) {
+      pendingAutoAdd.current = entries;
+      autoAddMatched.current = new Set();
+      setIsCartOpen(true); // open cart immediately so user sees it fill up
     }
-  }, [searchParams, diagnostics, router]);
+    // Strip the param right away for a clean URL. Matching continues via the ref.
+    router.replace('/diagnostics');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Step 2: Keep matching the pending request against the catalog on every
+  // catalog update. This runs repeatedly as background pages load, so tests on
+  // later pages are added the moment they arrive — nothing is dropped.
+  useEffect(() => {
+    const pending = pendingAutoAdd.current;
+    if (!pending || diagnostics.length === 0) return;
+
+    let newlyAdded = 0;
+
+    setCart(prev => {
+      const newCart = [...prev];
+      pending.forEach(entry => {
+        const key = entry.id || entry.name;
+        if (autoAddMatched.current.has(key)) return; // already handled this entry
+
+        const match =
+          (entry.id && diagnostics.find(t => t.id === entry.id)) ||
+          (entry.name && diagnostics.find(t => t.name.trim().toLowerCase() === entry.name));
+
+        if (match) {
+          autoAddMatched.current.add(key);
+          if (!newCart.find(item => item.testId === match.id)) {
+            newCart.push({ testId: match.id, quantity: 1 });
+            newlyAdded++;
+          }
+        }
+      });
+      return newCart;
+    });
+
+    if (newlyAdded > 0) {
+      setIsCartOpen(true);
+      setToastMessage(`Added ${autoAddMatched.current.size} recommended test(s) to your cart!`);
+      setTimeout(() => setToastMessage(null), 5000);
+    }
+
+    // Once the whole catalog is loaded, finalize: report anything that could
+    // not be matched, then clear the pending request.
+    if (catalogFullyLoaded) {
+      const unmatched = pending.filter(e => !autoAddMatched.current.has(e.id || e.name));
+      if (unmatched.length > 0) {
+        console.warn('AI recommended tests not found in catalog:', unmatched.map(u => u.name));
+      }
+      pendingAutoAdd.current = null;
+    }
+  }, [diagnostics, catalogFullyLoaded]);
 
   // Fetch common slots for all tests in cart
   const cartItemIds = cart.map(c => c.testId).join(',');
@@ -345,6 +378,9 @@ function DiagnosticsContent() {
           });
         }
       }
+
+      // Whole catalog is now loaded — unblocks any pending auto-add retry.
+      setCatalogFullyLoaded(true);
 
       // Fetch health packages (non-critical)
       try {
