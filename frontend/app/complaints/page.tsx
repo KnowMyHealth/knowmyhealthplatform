@@ -292,12 +292,15 @@ function ComplaintsContent() {
 
   const handleBookTests = () => {
     if (!report || !report.recommended_tests || report.recommended_tests.length === 0) return;
-    const testIds = report.recommended_tests
-      .map(t => t.id)
-      .filter(Boolean)
+    // Pass BOTH id and name as `id~name` pairs. The diagnostics page matches
+    // by id first, then falls back to name — this survives catalog dedupe
+    // where the same test name maps to a different id than the AI returned.
+    const params = report.recommended_tests
+      .filter(t => t.id || t.test_name)
+      .map(t => `${encodeURIComponent(t.id || '')}~${encodeURIComponent(t.test_name || '')}`)
       .join(',');
-    if (!testIds) return;
-    router.push(`/diagnostics?autoAdd=${testIds}`);
+    if (!params) return;
+    router.push(`/diagnostics?autoAdd=${params}`);
   };
 
   // --- RENDERERS ---

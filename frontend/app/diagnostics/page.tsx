@@ -145,14 +145,26 @@ function DiagnosticsContent() {
   useEffect(() => {
     const autoAddParam = searchParams.get('autoAdd');
     if (autoAddParam && diagnostics.length > 0) {
-      const ids = autoAddParam.split(',').map(id => id.trim()).filter(Boolean);
+      // Each entry is `id~name`. Match by id first, then fall back to name
+      // (case-insensitive) — this survives catalog dedupe where the same test
+      // name maps to a different id than the AI/backend returned.
+      const entries = autoAddParam.split(',').map(pair => {
+        const [rawId, rawName] = pair.split('~');
+        return {
+          id: decodeURIComponent(rawId || '').trim(),
+          name: decodeURIComponent(rawName || '').trim().toLowerCase(),
+        };
+      }).filter(e => e.id || e.name);
+
       let itemsAdded = 0;
       let matchedInCatalog = 0;
 
       setCart(prev => {
         const newCart = [...prev];
-        ids.forEach(id => {
-          const match = diagnostics.find(t => t.id === id);
+        entries.forEach(entry => {
+          const match =
+            (entry.id && diagnostics.find(t => t.id === entry.id)) ||
+            (entry.name && diagnostics.find(t => t.name.trim().toLowerCase() === entry.name));
           if (match) {
             matchedInCatalog++;
             if (!newCart.find(item => item.testId === match.id)) {
