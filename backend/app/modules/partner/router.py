@@ -31,6 +31,17 @@ router = APIRouter(prefix="/partners", tags=["Partners"])
 # 50 MB limit for CSV uploads (50 * 1024 * 1024 bytes)
 MAX_CSV_SIZE = 52428800 
 
+
+async def _partner_schemas(db: AsyncSession, service: PartnerService, partners: list) -> list[PartnerSchema]:
+    """Serialize partners for admin views, attaching each one's corporate coupon code."""
+    codes = await service.get_coupon_codes(db, [p.id for p in partners])
+    out = []
+    for p in partners:
+        schema = PartnerSchema.model_validate(p)
+        schema.coupon_code = codes.get(p.id)
+        out.append(schema)
+    return out
+
 # -------------------------------------------------------------------------
 # PUBLIC: SUBMIT APPLICATION
 # -------------------------------------------------------------------------
@@ -67,7 +78,7 @@ async def list_partners(
     service: PartnerService = Depends(get_partner_service)
 ):
     items, total = await service.list_partners(db, params, status)
-    validated_items = [PartnerSchema.model_validate(i) for i in items]
+    validated_items = await _partner_schemas(db, service, items)
     return ApiResponse.paginated(items=validated_items, total_items=total, params=params)
 
 
@@ -81,7 +92,7 @@ async def get_partner_details(
     service: PartnerService = Depends(get_partner_service)
 ):
     partner = await service.get_partner_by_id(db, partner_id)
-    return ApiResponse.success(data=PartnerSchema.model_validate(partner))
+    return ApiResponse.success(data=(await _partner_schemas(db, service, [partner]))[0])
 
 
 @router.patch("/{partner_id}/status", summary="Update Partner Status (Admin)")
@@ -95,7 +106,7 @@ async def update_partner_status(
     service: PartnerService = Depends(get_partner_service)
 ):
     updated_partner = await service.update_partner_status(db, partner_id, payload.status)
-    return ApiResponse.success(data=PartnerSchema.model_validate(updated_partner), message="Status updated.")
+    return ApiResponse.success(data=(await _partner_schemas(db, service, [updated_partner]))[0], message="Status updated.")
 
 
 @router.delete("/{partner_id}", summary="Delete Partner Application (Admin)")
@@ -126,7 +137,7 @@ async def approve_partner(
         partner_id=partner_id,
         discount_percentage=payload.discount_percentage 
     )
-    return ApiResponse.success(data=PartnerSchema.model_validate(approved_partner), message="Partner approved.")
+    return ApiResponse.success(data=(await _partner_schemas(db, service, [approved_partner]))[0], message="Partner approved.")
 
 
 @router.post(

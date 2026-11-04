@@ -303,6 +303,7 @@ export default function AdminPortal() {
 
   // Partner approval
   const [approveDiscountPct, setApproveDiscountPct] = useState('');
+  const [partnerActionError, setPartnerActionError] = useState<string | null>(null);
 
   // --- BLOGS STATES & LOGIC ---
   const [blogTab, setBlogTab] = useState<'list' | 'write' | 'ai'>('list');
@@ -1564,8 +1565,19 @@ export default function AdminPortal() {
     }
   };
 
+  const readApiError = async (res: Response, fallback: string): Promise<string> => {
+    try {
+      const body = await res.json();
+      const msg = body?.message || body?.detail || body?.error;
+      if (typeof msg === 'string' && msg.trim()) return msg;
+      if (Array.isArray(body?.detail) && body.detail[0]?.msg) return body.detail[0].msg;
+    } catch { /* non-JSON body */ }
+    return `${fallback} (HTTP ${res.status})`;
+  };
+
   const updatePartnerStatus = async (partnerId: string, newStatus: PartnerApplication['status']) => {
     setIsUpdatingPartnerStatus(true);
+    setPartnerActionError(null);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setIsUpdatingPartnerStatus(false); return; }
     try {
@@ -1579,15 +1591,23 @@ export default function AdminPortal() {
         const updated: PartnerApplication = json.data;
         setPartnerApplications(prev => prev.map(p => p.id === partnerId ? updated : p));
         setSelectedPartner(updated);
+      } else {
+        setPartnerActionError(await readApiError(res, 'Failed to update status'));
       }
     } catch (err) {
       console.error('Failed to update partner status', err);
+      setPartnerActionError('Network error while updating status. Please try again.');
     } finally {
       setIsUpdatingPartnerStatus(false);
     }
   };
 
   const approvePartner = async (partnerId: string, discountPct: number) => {
+    setPartnerActionError(null);
+    if (!Number.isFinite(discountPct) || discountPct <= 0 || discountPct > 100) {
+      setPartnerActionError('Enter a corporate discount between 1 and 100.');
+      return;
+    }
     setIsUpdatingPartnerStatus(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setIsUpdatingPartnerStatus(false); return; }
@@ -1607,9 +1627,12 @@ export default function AdminPortal() {
         setPartnerApplications(prev => prev.map(p => p.id === partnerId ? updated : p));
         setSelectedPartner(updated);
         setApproveDiscountPct('');
+      } else {
+        setPartnerActionError(await readApiError(res, 'Approval failed'));
       }
     } catch (err) {
       console.error('Failed to approve partner', err);
+      setPartnerActionError('Network error while approving. Please try again.');
     } finally {
       setIsUpdatingPartnerStatus(false);
     }
@@ -1629,9 +1652,12 @@ export default function AdminPortal() {
         setIsPartnerPanelOpen(false);
         setSelectedPartner(null);
         setConfirmDeletePartner(false);
+      } else {
+        setPartnerActionError(await readApiError(res, 'Delete failed'));
       }
     } catch (err) {
       console.error('Failed to delete partner application', err);
+      setPartnerActionError('Network error while deleting. Please try again.');
     } finally {
       setIsDeletingPartner(false);
     }
@@ -4255,7 +4281,7 @@ export default function AdminPortal() {
                     </span>
                   </td>
                   <td className="p-4 text-right pr-8">
-                    <button onClick={() => { setSelectedPartner(partner); setIsPartnerPanelOpen(true); }}
+                    <button onClick={() => { setSelectedPartner(partner); setPartnerActionError(null); setApproveDiscountPct(''); setIsPartnerPanelOpen(true); }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 transition-colors">
                       <Eye size={14} /> Review
                     </button>
@@ -4409,6 +4435,12 @@ export default function AdminPortal() {
                         Reject
                       </button>
                     </div>
+                    {partnerActionError && (
+                      <div role="alert" className="mt-3 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-700">
+                        <XCircle size={14} className="shrink-0 mt-0.5" />
+                        <span>{partnerActionError}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-slate-100">

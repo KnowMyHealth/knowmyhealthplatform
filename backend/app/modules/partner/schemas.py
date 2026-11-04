@@ -22,6 +22,7 @@ class PartnerSchema(BaseModel):
     website: Optional[str] = None
     status: PartnerStatus
     discount_percentage: Decimal
+    coupon_code: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

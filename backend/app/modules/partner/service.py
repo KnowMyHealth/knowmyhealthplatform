@@ -8,7 +8,7 @@ import string
 import secrets
 from uuid import UUID
 from loguru import logger
-from sqlalchemy import update, select, func, delete
+from sqlalchemy import update, select, func, delete, text
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -105,22 +105,50 @@ class PartnerService:
 
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
         temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
-        new_supabase_uid = None
+        new_supabase_uid = None        # set only when WE created the auth user (safe to delete on failure)
+        reused_uid = None              # set when an existing auth account is promoted to PARTNER
+        reused_prev_metadata = None
+
+        # 1. Resolve the login account for this partner.
+        # The partner's email may already exist in Supabase Auth (e.g. the contact signed up on
+        # the website, or an earlier approval left an orphaned account). Blindly calling
+        # create_user() then fails with "A user with this email address has already been
+        # registered" and the partner can never be approved — so reuse the account when safe.
+        existing_uid = await self._find_existing_account_id(db, partner.email)
+        if existing_uid:
+            await self._assert_account_reusable(db, existing_uid, partner.id)
 
         try:
-            # 1. Create Supabase Auth User
-            auth_response = supabase_admin.auth.admin.create_user({
-                "email": partner.email,
-                "password": temp_password, 
-                "email_confirm": True,       
-                "user_metadata": {"role": Role.PARTNER.value}
-            })
-            new_supabase_uid = uuid.UUID(auth_response.user.id)
+            if existing_uid:
+                existing_auth = supabase_admin.auth.admin.get_user_by_id(str(existing_uid))
+                reused_prev_metadata = dict(getattr(existing_auth.user, "user_metadata", None) or {})
+                supabase_admin.auth.admin.update_user_by_id(str(existing_uid), {
+                    "password": temp_password,
+                    "email_confirm": True,
+                    "user_metadata": {**reused_prev_metadata, "role": Role.PARTNER.value},
+                })
+                reused_uid = existing_uid
+                account_uid = existing_uid
+                logger.info(f"Reusing existing auth account {existing_uid} for partner {partner_id}")
+            else:
+                auth_response = supabase_admin.auth.admin.create_user({
+                    "email": partner.email,
+                    "password": temp_password,
+                    "email_confirm": True,
+                    "user_metadata": {"role": Role.PARTNER.value}
+                })
+                new_supabase_uid = uuid.UUID(auth_response.user.id)
+                account_uid = new_supabase_uid
 
-            # 2. Update local DB Role and SAVE the Admin's final discount rate
-            await db.execute(update(User).where(User.id == new_supabase_uid).values(role=Role.PARTNER.value))
+            # 2. Ensure the local users row exists with the PARTNER role, then link + save discount
+            user_row = await db.get(User, account_uid)
+            if user_row is None:
+                db.add(User(id=account_uid, email=partner.email, role=Role.PARTNER, is_active=True))
+                await db.flush()
+            else:
+                await db.execute(update(User).where(User.id == account_uid).values(role=Role.PARTNER.value))
 
-            partner.user_id = new_supabase_uid
+            partner.user_id = account_uid
             partner.status = PartnerStatus.APPROVED
             partner.discount_percentage = discount_percentage
 
@@ -166,9 +194,78 @@ class PartnerService:
             return partner
         except Exception as e:
             await db.rollback()
+            logger.exception(f"Partner approval failed for {partner_id}: {e}")
             if new_supabase_uid:
-                supabase_admin.auth.admin.delete_user(str(new_supabase_uid))
+                try:
+                    supabase_admin.auth.admin.delete_user(str(new_supabase_uid))
+                except Exception as cleanup_err:
+                    logger.error(f"Failed to roll back auth user {new_supabase_uid}: {cleanup_err}")
+            if reused_uid is not None and reused_prev_metadata is not None:
+                try:
+                    supabase_admin.auth.admin.update_user_by_id(
+                        str(reused_uid), {"user_metadata": reused_prev_metadata}
+                    )
+                except Exception as cleanup_err:
+                    logger.error(f"Failed to restore metadata for {reused_uid}: {cleanup_err}")
             raise PartnerUpdateError(f"Failed to approve partner: {e}")
+
+    async def get_coupon_codes(self, db: AsyncSession, partner_ids: list[UUID]) -> dict[UUID, str]:
+        """Map partner_id -> active corporate coupon code (for admin display)."""
+        if not partner_ids:
+            return {}
+        from app.modules.coupon.models import Coupon
+        rows = (await db.execute(
+            select(Coupon.partner_id, Coupon.code)
+            .where(Coupon.partner_id.in_(partner_ids), Coupon.is_active.is_(True))
+            .order_by(Coupon.created_at.asc())
+        )).all()
+        return {pid: code for pid, code in rows}
+
+    async def _find_existing_account_id(self, db: AsyncSession, email: str) -> UUID | None:
+        """Return the auth user id already registered with this email, if any."""
+        uid = (await db.execute(
+            select(User.id).where(func.lower(User.email) == email.strip().lower())
+        )).scalar_one_or_none()
+        if uid:
+            return uid
+        # Fallback: auth user exists but the public.users mirror row is missing
+        try:
+            uid = (await db.execute(
+                text("SELECT id FROM auth.users WHERE lower(email) = :email LIMIT 1"),
+                {"email": email.strip().lower()},
+            )).scalar_one_or_none()
+        except SQLAlchemyError as e:
+            await db.rollback()
+            logger.warning(f"Could not query auth.users for existing account: {e}")
+            return None
+        return uid
+
+    async def _assert_account_reusable(self, db: AsyncSession, user_id: UUID, partner_id: UUID) -> None:
+        """Refuse to hijack accounts that belong to someone else's role/data."""
+        user = await db.get(User, user_id)
+        if user is not None and user.role in (Role.ADMIN, Role.DOCTOR):
+            raise PartnerUpdateError(
+                f"This email is already registered as a {user.role.value.lower()} account. "
+                "Ask the partner to use a different email before approving."
+            )
+
+        other_partner = (await db.execute(
+            select(Partner.id).where(Partner.user_id == user_id, Partner.id != partner_id)
+        )).scalar_one_or_none()
+        if other_partner:
+            raise PartnerUpdateError("This email is already linked to another approved partner.")
+
+        from app.modules.doctor.models import Doctor
+        if (await db.execute(select(Doctor.id).where(Doctor.user_id == user_id))).first():
+            raise PartnerUpdateError(
+                "This email belongs to a doctor account. Ask the partner to use a different email."
+            )
+
+        if (await db.execute(select(Patient.id).where(Patient.user_id == user_id))).first():
+            raise PartnerUpdateError(
+                "This email already has a patient profile with health records. "
+                "Ask the partner to use a different (company) email before approving."
+            )
 
     async def bulk_add_patients_for_partner(self, db: AsyncSession, partner_user_id: UUID, csv_bytes: bytes) -> dict:
         try:
